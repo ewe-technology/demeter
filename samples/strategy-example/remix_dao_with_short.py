@@ -30,11 +30,12 @@ from remix_dao_utils import RemixDaoUtils, RemixDAOParams, WeeklyTrigger, perfor
 from export_file import export_file, ExportData, export_apr_results_with_short
 from chaos_lab_utils import standard_deviation_over_last, average_true_range
 from rm_types import RescaleFrequency, TestParams, GlobalParams, RangeStrategy, PriceActionLog, DcaTiming, DcaAddition, ShortInfo
+from math_const import *
 
 conservative_fluctuation = Decimal(0.03)
-ZERO = Decimal(0)
-ONE = Decimal(1)
-NEG_ONE = Decimal(-1)
+# ZERO = Decimal(0)
+# ONE = Decimal(1)
+# NEG_ONE = Decimal(-1)
 
 
 class RemixDaoDcaWeekStratStrategy(Strategy):
@@ -55,7 +56,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
         self.total_fee = ZERO
         self.final_total_net_value = ZERO
         self.final_lp_net_value = ZERO
-        # self.final_total_net_value_with_short = ZERO
+        # self.final_total_net_value_with_short = _ZERO
         self.total_base_swap_fee = ZERO
         self.total_quote_swap_fee = ZERO
         self.gp = _gp
@@ -81,8 +82,8 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
         # self.short_stop_loss_cnt: int = 0
         # self.prev_stop_loss: bool = False
         # self.consecutive_short_stop_loss_cnt: int = 0
-        # self.short_total_gain: Decimal = ZERO
-        # self.short_total_loss: Decimal = ZERO
+        # self.short_total_gain: Decimal = _ZERO
+        # self.short_total_loss: Decimal = _ZERO
 
     def initialize(self):
 
@@ -110,7 +111,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
         end_trigger = AtTimeTrigger(time=dt, do=self.calculate_final_result)
         self.triggers.append(end_trigger)
 
-        # if self.gp.dca_usdc_amount > ZERO:
+        # if self.gp.dca_usdc_amount > _ZERO:
         # self.triggers.append(WeeklyTrigger(day=0, do=self.check_and_add_dca))
 
         self.total_invested = self.broker.get_token_balance(self.broker.quote_token)
@@ -118,9 +119,9 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
 
     # def average_dca_price(self) -> Decimal:
     #     if len(self.dca_price_history) == 0:
-    #         return ZERO
-    #     price_sum = ZERO
-    #     factor_sum = ZERO
+    #         return _ZERO
+    #     price_sum = _ZERO
+    #     factor_sum = _ZERO
     #     for price_history in self.dca_price_history:
     #         factor = price_history[1]
     #         price_sum += price_history[0] * factor
@@ -156,7 +157,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
     #         base_fee, quote_spent, base_got = lp_market.buy(delta_base)
     #         # print(f"buy, base_fee: {base_fee}, quote_spent: {quote_spent}, base_got: {base_got}, base: {amount_base}, quote: {amount_quote}")
     #         f_base, f_quote, b_fee, q_fee = amount_base + base_got, amount_quote - quote_spent, base_fee, None
-    #         if f_base <= ZERO or f_quote <= ZERO:
+    #         if f_base <= _ZERO or f_quote <= _ZERO:
     #             print(
     #                 f"BAD buy, base_fee: {base_fee}, quote_spent: {quote_spent}, base_got: {base_got}, base: {amount_base}, quote: {amount_quote}, f_base: {f_base}, f_quote: {f_quote}")
     #         self.balance_data = {"amount_base": amount_base, "amount_quote": amount_quote, "base_fee": base_fee,
@@ -169,7 +170,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
     #         quote_fee, base_spent, quote_got = lp_market.sell(delta_quote)
     #         # print(f"sell, quote_fee: {quote_fee}, base_spent: {base_spent}, quote_got: {quote_got}, base: {amount_base}, quote: {amount_quote}")
     #         f_base, f_quote, b_fee, q_fee = amount_base - base_spent, amount_quote + quote_got, None, quote_fee
-    #         if f_base <= ZERO or f_quote <= ZERO:
+    #         if f_base <= _ZERO or f_quote <= _ZERO:
     #             print(
     #                 f"BAD sell, quote_fee: {quote_fee}, base_spent: {base_spent}, quote_got: {quote_got}, base: {amount_base}, quote: {amount_quote}, f_base: {f_base}, f_quote: {f_quote}")
     #         self.balance_data = {"amount_base": amount_base, "amount_quote": amount_quote, "quote_fee": quote_fee,
@@ -203,7 +204,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
 
     # short exit price, original short amount
     def resolve_short(self, current_price: Decimal, base: Decimal) -> tuple[Decimal | None, Decimal, Decimal, bool]:
-        # if self.short_price is not None and (self.short_stop_loss_hit or base == ZERO):  # stop loss 了 或是 LP 反轉了
+        # if self.short_price is not None and (self.short_stop_loss_hit or base == _ZERO):  # stop loss 了 或是 LP 反轉了
         if self.short_info.short_price is not None:
             stop_loss_hit = self.short_info.short_stop_loss_hit
             resolve_price = current_price
@@ -353,7 +354,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
                 if short_resolve_price is not None:  # a short was closed
                     lp_change, short_change = self.calculate_lp_short_balance(lp_balance, self.short_info.short_amount)
 
-                # if short_resolve_price is not None or (self.short_price is None and quote == ZERO):  # need rebalance
+                # if short_resolve_price is not None or (self.short_price is None and quote == _ZERO):  # need rebalance
                 if short_resolve_price is not None or quote == ZERO:  # need rebalance
                     self.rebalance_cnt += 1
                     if quote == ZERO:
@@ -803,7 +804,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     _dca_add_if_non_empty = False
     _dca_timing = DcaTiming.none
     _dca_addon_price_percent = ZERO  # Decimal(0.5)
-    _dca_addon_amount_percent = ZERO  # ONE
+    _dca_addon_amount_percent = ZERO  # _ONE
     _dca_addition = DcaAddition.none
 
     half_init_quote = init_quote / Decimal(2)

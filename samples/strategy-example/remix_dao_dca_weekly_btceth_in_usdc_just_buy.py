@@ -117,7 +117,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
         # end_trigger = AtTimeTrigger(time=dt, do=self.calculate_final_result)
         # self.triggers.append(end_trigger)
 
-        # if self.gp.dca_usdc_amount > ZERO:
+        # if self.gp.dca_usdc_amount > _ZERO:
         self.triggers.append(WeeklyTrigger(day=0, do=self.check_and_add_dca))
 
         self.total_invested = self.broker.get_token_balance(self.broker.quote_token)
@@ -125,9 +125,9 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
 
     # def average_dca_price(self) -> Decimal:
     #     if len(self.dca_price_history) == 0:
-    #         return ZERO
-    #     price_sum = ZERO
-    #     factor_sum = ZERO
+    #         return _ZERO
+    #     price_sum = _ZERO
+    #     factor_sum = _ZERO
     #     for price_history in self.dca_price_history:
     #         factor = price_history[1]
     #         price_sum += price_history[0] * factor
@@ -140,7 +140,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
     #     if row.timestamp.year == self.params.cal_start_datetime.year and row.timestamp.month == self.params.cal_start_datetime.month:
     #         return  # skip first month
     #
-    #     if self.gp.dca_add_if_non_empty or self.dca_quote_to_be_used == ZERO:
+    #     if self.gp.dca_add_if_non_empty or self.dca_quote_to_be_used == _ZERO:
     #         self.dca_quote_to_be_used += self.gp.dca_usdc_amount
 
     def flip_param(self, row_data: RowData):
@@ -190,7 +190,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
         # timing = self.gp.dca_add_timing
         # if timing == DcaTiming.none:
         #     return
-        # if self.dca_quote_to_be_used <= ZERO:
+        # if self.dca_quote_to_be_used <= _ZERO:
         #     return
 
         # lp_market: UniLpMarket = self.broker.markets[self.utils.market_key]
@@ -452,7 +452,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
     #         self.total_base_fee += base_fee
     #         self.total_quote_fee += quote_fee
     #
-    #         rebalance_base_fee, rebalance_quote_fee = ZERO, ZERO
+    #         rebalance_base_fee, rebalance_quote_fee = _ZERO, _ZERO
     #         try:
     #
     #             if self.params.to_swap:
@@ -489,7 +489,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
     #
     #         _, current_tick, _, _ = self.utils.get_tick_info(row_data)
     #
-    #         if base_used == ZERO and quote_used == ZERO:
+    #         if base_used == _ZERO and quote_used == _ZERO:
     #             print(
     #                 f"\nno position place: {self.utils.current_position_info}, old_position_info: {old_position_info}, "
     #                 f"current_tick: {current_tick}, new_tick_lower: {new_tick_lower}, new_tick_upper: {new_tick_upper}, "

@@ -8,37 +8,38 @@ from demeter.gmx import GmxV2Market
 from demeter.gmx._typing2 import GmxV2Pool
 
 import toml
+from math_const import *
 
 # To print all the columns of dataframe, we should set up display option.
 pd.options.display.max_columns = None
 pd.set_option("display.width", 5000)
 
-_HUNDRED = Decimal("100")
-ZERO = Decimal("0")
-ONE = Decimal("1")
+_HUNDRED = HUNDRED
+_ZERO = ZERO
+_ONE = ONE
 MARKET_KEY = MarketInfo("GMX_ETH", MarketTypeEnum.gmx_v2)
-OPEN_PERCENT = Decimal("0.02")
-STOP_LOSS_PERCENT = Decimal("0.02")
-CLOSE_PERCENT = Decimal("0.02")
+
+OPEN_PERCENT = Decimal("0.01")
+STOP_LOSS_PERCENT = Decimal("0.01")
+CLOSE_PERCENT = Decimal("0.01")
 start_date, end_date = date(2024, 10, 1), date(2024, 12, 31)
-INIT_USDC = Decimal("10000")
+INIT_USDC = Decimal("0")
 CHECK_INTERVAL_MIN = 5
 
 class GmxV2LpStrategy(Strategy):
 
     def __init__(self):
         super().__init__()
-        self.last_price: Decimal = ZERO
+        self.last_price: Decimal = _ZERO
         self.initial_usdc: Decimal = INIT_USDC
         self.current_usdc: Decimal = self.initial_usdc
         # self.short_position_opened: bool = False
         self.short_open_price: Decimal | None = None
-        self.short_stop_loss_price: Decimal = ZERO
-        self.total_gain: Decimal = ZERO
-        self.total_loss: Decimal = ZERO
+        self.short_stop_loss_price: Decimal = _ZERO
+        self.total_gain: Decimal = _ZERO
+        self.total_loss: Decimal = _ZERO
         self.total_gain_cnt: int = 0
         self.total_loss_cnt: int = 0
-
 
 
     def initialize(self):
@@ -71,13 +72,13 @@ class GmxV2LpStrategy(Strategy):
 
         diff = eth_price - self.last_price
         diff_percent = diff / self.last_price
-        abs_diff_percent = diff_percent * Decimal(-1) if diff_percent < ZERO else diff
+        abs_diff_percent = diff_percent * Decimal(-1) if diff_percent < _ZERO else diff
 
-        if self.short_open_price is None and diff_percent < ZERO and abs_diff_percent >= OPEN_PERCENT: # open short
+        if self.short_open_price is None and diff_percent < _ZERO and abs_diff_percent >= OPEN_PERCENT: # open short
             self.short_open_price = eth_price
-            self.short_stop_loss_price = eth_price * (ONE + STOP_LOSS_PERCENT)
+            self.short_stop_loss_price = eth_price * (_ONE + STOP_LOSS_PERCENT)
             print(
-                f"open short  => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {round(eth_price, 4)}, "
+                f"[open]  short => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {round(eth_price, 4)}, "
                 f"last_price: {round(self.last_price, 4)}, price change: {round(diff_percent * _HUNDRED, 2)}%, "
                 f"stop loss price: {round(self.short_stop_loss_price, 4)}")
             pass
@@ -86,14 +87,14 @@ class GmxV2LpStrategy(Strategy):
             short_return = diff / self.short_open_price
             amount_diff = self.current_usdc * short_return
             self.current_usdc += amount_diff
-            if amount_diff < ZERO:
+            if amount_diff < _ZERO:
                 self.total_loss -= amount_diff
                 self.total_loss_cnt += 1
             else:
                 self.total_gain += amount_diff
                 self.total_gain_cnt += 1
 
-            print(f"close short => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {round(eth_price, 4)}, "
+            print(f"[close] short => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {round(eth_price, 4)}, "
                   f"last_price: {round(self.last_price, 4)}, price change: {round(diff_percent * _HUNDRED, 2)}%, "
                   f"short_open_price: {round(self.short_open_price, 4)}, gain/loss: {round(amount_diff, 4)}")
             self.short_open_price = None
@@ -108,7 +109,7 @@ class GmxV2LpStrategy(Strategy):
         short_return = diff / self.short_open_price
         amount_diff = self.current_usdc * short_return
         self.current_usdc += amount_diff
-        if amount_diff < ZERO:
+        if amount_diff < _ZERO:
             self.total_loss -= amount_diff
             self.total_loss_cnt += 1
         else:
@@ -153,6 +154,6 @@ if __name__ == "__main__":
     actuator.set_price(market.get_price_from_data())  # set actuator price
     actuator.run(print_result=False)
 
-    return_rate = ((strat.current_usdc / strat.initial_usdc) - ONE) * _HUNDRED
+    return_rate = ((strat.current_usdc / strat.initial_usdc) - _ONE) * _HUNDRED
     print(f"final amount: {round(strat.current_usdc, 4)}, pnl: {round(strat.current_usdc - strat.initial_usdc, 4)}, return rate: {round(return_rate, 2)}%, gain({strat.total_gain_cnt}): {round(strat.total_gain, 4)}, loss({strat.total_loss_cnt}): {round(strat.total_loss, 4)}")
 

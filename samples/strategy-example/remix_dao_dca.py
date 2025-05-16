@@ -278,7 +278,7 @@ class RemixDaoDcaStratStrategy(Strategy):
             ed.new_tick_lower, ed.new_tick_upper = ed.tick_lower, ed.tick_upper
 
             ed.base_fee, ed.quote_fee = ZERO, ZERO
-            # ed.base_removed, ed.quote_removed = ZERO, ZERO
+            # ed.base_removed, ed.quote_removed = _ZERO, _ZERO
             ed.base_removed, ed.quote_removed = (amount0, amount1) if lp_market.token1 == lp_market.quote_token else (amount1, amount0)
             ed.base_added, ed.quote_added = base_used, quote_used
             ed.was_in_range = self.was_in_range

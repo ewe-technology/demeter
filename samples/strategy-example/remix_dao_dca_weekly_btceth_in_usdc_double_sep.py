@@ -112,7 +112,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
         end_trigger = AtTimeTrigger(time=dt, do=self.calculate_final_result)
         self.triggers.append(end_trigger)
 
-        # if self.gp.dca_usdc_amount > ZERO:
+        # if self.gp.dca_usdc_amount > _ZERO:
         self.triggers.append(WeeklyTrigger(day=0, do=self.check_and_add_dca))
         
         for flip_date in self.params.flip_param_dates:
@@ -138,7 +138,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
     #     if row.timestamp.year == self.params.cal_start_datetime.year and row.timestamp.month == self.params.cal_start_datetime.month:
     #         return  # skip first month
     #
-    #     if self.gp.dca_add_if_non_empty or self.dca_quote_to_be_used == ZERO:
+    #     if self.gp.dca_add_if_non_empty or self.dca_quote_to_be_used == _ZERO:
     #         self.dca_quote_to_be_used += self.gp.dca_usdc_amount
 
     def flip_param(self, row_data: RowData):
@@ -192,7 +192,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
         timing = self.gp.dca_add_timing
         if timing == DcaTiming.none:
             return
-        # if self.dca_quote_to_be_used <= ZERO:
+        # if self.dca_quote_to_be_used <= _ZERO:
         #     return
 
         if is_addition and self.dca_addition_amount <= ZERO:
@@ -236,7 +236,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
                     return
 
                 if self.gp.dca_addition == DcaAddition.on_base_only:
-                    factor = TWO # ONE + self.gp.dca_addon_amount_percent
+                    factor = TWO # _ONE + self.gp.dca_addon_amount_percent
                     dca_quote_to_be_used = dca_quote_to_be_used + quote_amount
 
                 if dca_quote_to_be_used <= ZERO:
@@ -263,7 +263,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
                     return
 
                 if self.gp.dca_addition == DcaAddition.on_quote_only:
-                    factor = TWO  # ONE + self.gp.dca_addon_amount_percent
+                    factor = TWO  # _ONE + self.gp.dca_addon_amount_percent
                     dca_quote_to_be_used = dca_quote_to_be_used + quote_amount
 
                 if dca_quote_to_be_used <= ZERO:
@@ -296,7 +296,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
                     return
 
                 if self.gp.dca_addition == DcaAddition.on_base_only:
-                    factor = TWO  # ONE + self.gp.dca_addon_amount_percent
+                    factor = TWO  # _ONE + self.gp.dca_addon_amount_percent
                     dca_quote_to_be_used = dca_quote_to_be_used + quote_amount
 
                 if dca_quote_to_be_used <= ZERO:
@@ -310,7 +310,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
 
                 # print(f"DCA swap => from_amount: {self.dca_quote_to_be_used}, to_amount: {to_amount}, to_token: {self.gp.token0}, fee: {fee}, old_bal: {old_bal}, new_bal: {new_bal}")
                 # self.dca_total_added += dca_quote_to_be_used
-                # self.dca_quote_to_be_used = ZERO
+                # self.dca_quote_to_be_used = _ZERO
                 # lower, upper = self.utils.current_position_info[0], self.utils.current_position_info[1]
                 created_position, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(current_tick_lower, current_tick_upper,
                                                                                              base_max_amount=to_amount,
@@ -324,7 +324,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
                     return
 
                 if self.gp.dca_addition == DcaAddition.on_quote_only:
-                    factor = TWO  # ONE + self.gp.dca_addon_amount_percent
+                    factor = TWO  # _ONE + self.gp.dca_addon_amount_percent
                     dca_quote_to_be_used = dca_quote_to_be_used + quote_amount
 
                 if dca_quote_to_be_used <= ZERO:
@@ -357,7 +357,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
             self.total_invested += dca_quote_to_be_used
             self.total_invested_usdc += self.gp.dca_usdc_amount * factor
             # self.dca_price_history.append((current_price, factor))
-            # self.dca_quote_to_be_used = ZERO
+            # self.dca_quote_to_be_used = _ZERO
             if not is_addition:
                 self.dca_count = self.dca_count + 1
             if is_addition or factor > ONE:
@@ -390,7 +390,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
             ed.new_tick_lower, ed.new_tick_upper = ed.tick_lower, ed.tick_upper
 
             ed.base_fee, ed.quote_fee = ZERO, ZERO
-            # ed.base_removed, ed.quote_removed = ZERO, ZERO
+            # ed.base_removed, ed.quote_removed = _ZERO, _ZERO
             ed.base_removed, ed.quote_removed = (amount0, amount1) if lp_market.token1 == lp_market.quote_token else (amount1, amount0)
             ed.base_added, ed.quote_added = base_used, quote_used
             ed.was_in_range = self.was_in_range

@@ -9,8 +9,7 @@ from demeter.result import MetricEnum
 # from demeter.metrics import MetricEnum
 from demeter.uniswap import SellAction, CollectFeeAction, AddLiquidityAction, RemoveLiquidityAction
 import csv
-
-ZERO = decimal.Decimal("0")
+from math_const import *
 
 
 class ExportData(object):
@@ -41,7 +40,7 @@ class ExportData(object):
         self.param_type: str = "bull"
         # self.open_short: bool = False
         self.short_amount: decimal.Decimal = ZERO
-        # self.short_amount_change: decimal.Decimal = ZERO
+        # self.short_amount_change: decimal.Decimal = _ZERO
         self.short_price: decimal.Decimal | None = None
         self.short_stop_loss: decimal.Decimal | None = None
         self.lp_change: decimal.Decimal = ZERO
@@ -153,7 +152,7 @@ def export_apr_results(file_path: str, metrics: List[Tuple[str, Dict[str, Decima
             d = m.get("early_end_date")
             formatted_time = ""
             if d is not None and not d == ZERO:
-                dt_object = datetime.fromtimestamp(d)
+                dt_object = datetime.fromtimestamp(float(d))
                 formatted_time = datetime.strftime(dt_object, '%Y-%m-%d %H:%M:%S')
 
             csvwriter.writerow(
