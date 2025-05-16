@@ -105,6 +105,10 @@ class GmxV2LpStrategy(Strategy):
     def finish_work(self, snapshot: Snapshot):
         eth_price = snapshot.prices["WETH"]
 
+        if self.short_open_price is None:
+            print(f"-==>> no short opened")
+            return
+
         diff = self.short_open_price - eth_price
         short_return = diff / self.short_open_price
         amount_diff = self.current_usdc * short_return
