@@ -149,3 +149,4 @@ demeter/*.pkl
 samples/real-data
 samples/real_data*
 samples/strategy-example/result
+samples/strategy-example/gmx_v2_short_eth.toml

@@ -78,7 +78,7 @@ class GmxV2LpStrategy(Strategy):
             self.short_open_price = eth_price
             self.short_stop_loss_price = eth_price * (_ONE + STOP_LOSS_PERCENT)
             print(
-                f"[open]  short => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {round(eth_price, 4)}, "
+                f"==>> [open]  short => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {round(eth_price, 4)}, "
                 f"last_price: {round(self.last_price, 4)}, price change: {round(diff_percent * _HUNDRED, 2)}%, "
                 f"stop loss price: {round(self.short_stop_loss_price, 4)}")
             pass
@@ -94,7 +94,7 @@ class GmxV2LpStrategy(Strategy):
                 self.total_gain += amount_diff
                 self.total_gain_cnt += 1
 
-            print(f"[close] short => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {round(eth_price, 4)}, "
+            print(f"==>> [close] short => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {round(eth_price, 4)}, "
                   f"last_price: {round(self.last_price, 4)}, price change: {round(diff_percent * _HUNDRED, 2)}%, "
                   f"short_open_price: {round(self.short_open_price, 4)}, gain/loss: {round(amount_diff, 4)}")
             self.short_open_price = None
@@ -116,7 +116,7 @@ class GmxV2LpStrategy(Strategy):
             self.total_gain += amount_diff
             self.total_gain_cnt += 1
 
-        print(f"final close short => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {round(eth_price, 4)}, "
+        print(f"==>> final close short => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {round(eth_price, 4)}, "
               f"last_price: {round(self.last_price, 4)}, "
               f"short_open_price: {round(self.short_open_price, 4)}, gain/loss: {round(amount_diff, 4)}")
         pass
@@ -138,7 +138,7 @@ if __name__ == "__main__":
     INIT_USDC = Decimal(config_file.get("initial_amount"))
     CHECK_INTERVAL_MIN = config_file.get("check_interval_min")
 
-    print(f"INIT_USDC: {INIT_USDC}, start_date: {start_date}, end_date: {end_date}")
+    print(f"==>> initial value: {INIT_USDC}, start_date: {start_date}, end_date: {end_date}, time interval (minute): {CHECK_INTERVAL_MIN}, take profit percent: {CLOSE_PERCENT}, stop loss percent: {STOP_LOSS_PERCENT}")
 
     market = GmxV2Market(MARKET_KEY, pool, data_path="../real-data/gmx_v2/arb_short_eth/")
     market.load_data(
@@ -155,5 +155,5 @@ if __name__ == "__main__":
     actuator.run(print_result=False)
 
     return_rate = ((strat.current_usdc / strat.initial_usdc) - _ONE) * _HUNDRED
-    print(f"final amount: {round(strat.current_usdc, 4)}, pnl: {round(strat.current_usdc - strat.initial_usdc, 4)}, return rate: {round(return_rate, 2)}%, gain({strat.total_gain_cnt}): {round(strat.total_gain, 4)}, loss({strat.total_loss_cnt}): {round(strat.total_loss, 4)}")
+    print(f"==>> final amount: {round(strat.current_usdc, 4)}, pnl: {round(strat.current_usdc - strat.initial_usdc, 4)}, return rate: {round(return_rate, 2)}%, gain({strat.total_gain_cnt}): {round(strat.total_gain, 4)}, loss({strat.total_loss_cnt}): {round(strat.total_loss, 4)}")
 
