@@ -355,7 +355,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
                     lp_change, short_change = self.calculate_lp_short_balance(lp_balance, self.short_info.short_amount)
 
                 # if short_resolve_price is not None or (self.short_price is None and quote == _ZERO):  # need rebalance
-                if short_resolve_price is not None or quote == ZERO:  # need rebalance
+                if self.gp.do_lp_rebalance and short_resolve_price is not None or quote == ZERO:  # need rebalance
                     self.rebalance_cnt += 1
                     if quote == ZERO:
                         quote_based_changed = lp_change

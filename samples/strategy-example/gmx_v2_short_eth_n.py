@@ -23,15 +23,14 @@ STOP_LOSS_PERCENT = Decimal("0.01")
 CLOSE_PERCENT = Decimal("0.01")
 start_date, end_date = date(2024, 10, 1), date(2024, 12, 31)
 INIT_USDC = Decimal("0")
-CHECK_INTERVAL_MIN = 1
-PRINT_PRICE = False
+CHECK_INTERVAL_MIN = 5
 
 class GmxV2LpStrategy(Strategy):
 
     def __init__(self):
         super().__init__()
         self.mark_price: Decimal = ZERO
-        # self.last_price: Decimal = ZERO
+        self.last_price: Decimal = ZERO
         self.initial_usdc: Decimal = INIT_USDC
         self.current_usdc: Decimal = self.initial_usdc
         # self.short_position_opened: bool = False
@@ -51,10 +50,7 @@ class GmxV2LpStrategy(Strategy):
         self.triggers.append(PeriodTrigger(time_delta=timedelta(minutes=CHECK_INTERVAL_MIN), do=self.on_price_check))
 
         self.triggers.append(AtTimeTrigger(time=datetime(end_date.year, end_date.month, end_date.day, 23,59,0,0), do=self.finish_work))
-
-        if PRINT_PRICE:
-            self.triggers.append(PeriodTrigger(time_delta=timedelta(hours=2), do=self.print_price))
-
+        self.triggers.append(PeriodTrigger(time_delta=timedelta(hours=2), do=self.print_price))
         pass
 
     def work(self, snapshot: Snapshot):
@@ -65,15 +61,12 @@ class GmxV2LpStrategy(Strategy):
         # print(f"long price: {series['longPrice']}, short price: {series['shortPrice']}, ethPrice: {snapshot.prices["WETH"]}, keys: {series.keys()}")
         self.last_price = self.mark_price = snapshot.prices["WETH"]
 
-
         pass
 
     def print_price(self, snapshot: Snapshot):
         series = snapshot.market_status[MARKET_KEY]
         print(
-                f"{snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")} => ethPrice: {self.format_price(snapshot.prices["WETH"])}")
-        # print(
-        #     f"{snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")} => long price: {self.format_price(series['longPrice'])}, short price: {self.format_price(series['shortPrice'])}, ethPrice: {self.format_price(snapshot.prices["WETH"])}")
+            f"{snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")} => long price: {self.format_price(series['longPrice'])}, short price: {self.format_price(series['shortPrice'])}, ethPrice: {self.format_price(snapshot.prices["WETH"])}")
 
     def on_price_check(self, snapshot: Snapshot):
         eth_price = snapshot.prices["WETH"]
@@ -116,7 +109,7 @@ class GmxV2LpStrategy(Strategy):
                     self.total_gain_cnt += 1
 
                 print(f"==>> [close] short => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {self.format_price(eth_price)}, "
-                      f"lowest_price: {self.format_price(self.short_lowest_price)}, price change from lowest: {round(diff_percent * HUNDRED, 2)}%, "
+                      f"lowest_price: {self.format_price(self.short_lowest_price)}, price change: {round(diff_percent * HUNDRED, 2)}%, "
                       f"short_open_price: {self.format_price(self.short_open_price)}, gain/loss: {self.format_price(amount_diff)}")
                 self.short_open_price = None
                 self.mark_price = eth_price
@@ -167,11 +160,10 @@ if __name__ == "__main__":
     end_date = date(ed.year, ed.month, ed.day)
     INIT_USDC = Decimal(config_file.get("initial_amount"))
     CHECK_INTERVAL_MIN = config_file.get("check_interval_min")
-    PRINT_PRICE = config_file.get("print_price")
 
     print(f"==>> initial value: {INIT_USDC}, start_date: {start_date}, end_date: {end_date}, time interval (minute): {CHECK_INTERVAL_MIN}, take profit percent: {CLOSE_PERCENT}, stop loss percent: {STOP_LOSS_PERCENT}")
 
-    market = GmxV2Market(MARKET_KEY, pool, data_path="../real-data/gmx_v2/")
+    market = GmxV2Market(MARKET_KEY, pool, data_path="../real-data/gmx_v2/arb_short_eth/")
     market.load_data(
         ChainType.arbitrum, "0x70d95587d40a2caf56bd97485ab3eec10bee6336", start_date, end_date
     )
