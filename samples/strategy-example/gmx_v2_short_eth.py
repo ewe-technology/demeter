@@ -53,7 +53,7 @@ class GmxV2LpStrategy(Strategy):
         self.triggers.append(AtTimeTrigger(time=datetime(end_date.year, end_date.month, end_date.day, 23,59,0,0), do=self.finish_work))
 
         if PRINT_PRICE:
-            self.triggers.append(PeriodTrigger(time_delta=timedelta(hours=2), do=self.print_price))
+            self.triggers.append(PeriodTrigger(time_delta=timedelta(minutes=1), do=self.print_price))
 
         pass
 
@@ -171,7 +171,7 @@ if __name__ == "__main__":
 
     print(f"==>> initial value: {INIT_USDC}, start_date: {start_date}, end_date: {end_date}, time interval (minute): {CHECK_INTERVAL_MIN}, take profit percent: {CLOSE_PERCENT}, stop loss percent: {STOP_LOSS_PERCENT}")
 
-    market = GmxV2Market(MARKET_KEY, pool, data_path="../real-data/gmx_v2/")
+    market = GmxV2Market(MARKET_KEY, pool, data_path="../real-data/gmx_v2/arb_short_eth/")
     market.load_data(
         ChainType.arbitrum, "0x70d95587d40a2caf56bd97485ab3eec10bee6336", start_date, end_date
     )
