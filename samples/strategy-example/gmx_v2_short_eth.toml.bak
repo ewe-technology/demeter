@@ -1,7 +1,15 @@
 open_change_rate = "0.02" # 0.02 = 2%
 stop_loss_rate = "0.05" # 0.05 = 5%
 trailing_stop_loss_rate = "0.05" # 0.05 = 5%
-start_date = "2024-08-01"
-end_date = "2024-12-31"
+start_date = "2024-4-10"
+end_date = "2024-5-30"
 initial_amount = "10000"
 check_interval_min = 5
+print_price = false
+short_open_strategy = "macd" # "standard" or "macd"
+
+[macd]
+fast_period = 12
+slow_period = 26
+signal_period = 9
+sample_period = "1h" # '30min', '1h', '4h', '8h', '1d'

@@ -17,4 +17,20 @@ def average_true_range(lows: pd.Series, highs: pd.Series, closes: pd.Series, min
     #
     # atr = tr.rolling(window=minutes, min_periods=1).mean()
     atr = talib.ATR(highs, lows, closes, timeperiod=minutes)
+
     return atr
+
+def macd(prices: pd.Series, fast_period: int = 12, slow_period: int = 26, signal_period: int = 9) -> tuple[pd.Series, pd.Series, pd.Series]:
+
+    macd_data, macd_signal, macd_hist = talib.MACD(prices, fastperiod=fast_period, slowperiod=slow_period, signalperiod=signal_period)
+
+    return macd_data, macd_signal, macd_hist
+
+def resample_data(prices: pd.Series, time_frame: str = '1h'):
+    """
+    time_frame:  '30min', '1h', '4h', '8h', '1d'
+
+    """
+    # return prices.resample('h').last()
+    # return prices.resample('30min').last()
+    return prices.resample(time_frame).last()

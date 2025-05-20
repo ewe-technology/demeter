@@ -4,8 +4,8 @@ from decimal import Decimal
 from enum import Enum
 
 from demeter import TokenInfo
+from math_const import *
 
-ZERO = Decimal(0)
 
 class RangeStrategy(str, Enum):
     remix_dao = "remix-dao"
