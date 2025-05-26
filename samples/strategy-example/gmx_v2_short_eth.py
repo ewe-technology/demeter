@@ -358,7 +358,7 @@ class GmxV2LpStrategy(Strategy):
         eth_price = snapshot.prices["WETH"]
 
         if self.position is None:
-            print(f"==>> finish with no short opened")
+            print(f"==>> finish with no position opened")
             return
 
         diff = self.position.open_price - eth_price if self.position.is_short else eth_price - self.position.open_price
