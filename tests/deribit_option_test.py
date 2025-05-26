@@ -37,7 +37,7 @@ class DeribitOptionTest(unittest.TestCase):
         market = DeribitOptionMarket(dp_market, DeribitOptionMarket.ETH)
         broker.add_market(market)
         data_csv = """
-instrument_name,time,actual_time,state,type,strike_price,t,expiry_time,vega,theta,rho,gamma,delta,underlying_price,settlement_price,min_price,max_price,mark_price,mark_iv,last_price,interest_rate,bid_iv,best_bid_price,best_bid_amount,ask_iv,best_ask_price,best_ask_amount,asks,bids
+instrument_name,time,actual_time,state,type,strike_price,t,expiry_time,vega,theta,rho,gamma,delta,underlying_price,settlement_price,min_price,max_price,open_short_mark_price,mark_iv,last_price,interest_rate,bid_iv,best_bid_price,best_bid_amount,ask_iv,best_ask_price,best_ask_amount,asks,bids
 ETH-22SEP23-1600-C,2023-09-01 06:00:00,2023-09-01 06:00:38.752,open,CALL,1600,21 days 02:00:00,2023-09-22 08:00:00,1.42317,-1.05567,0.60142,0.00289,0.67817,1651.94,,0.021,0.0795,0.0479,31.28,,0,27.93,0.045,70,33.75,0.05,145,"[[0.05, 145]]","[[0.045, 70], [0.0445, 75]]"
 ETH-22SEP23-1650-C,2023-09-01 06:00:00,2023-09-01 06:00:39.232,open,CALL,1650,21 days 02:00:00,2023-09-22 08:00:00,1.58174,-1.10083,0.46945,0.00342,0.52071,1651.94,,0.008,0.058,0.0287,29.35,0.0285,0,28.61,0.028,51,29.13,0.0285,5,"[[0.0285, 5], [0.029, 605], [0.0295, 197], [0.03, 40], [0.0305, 18]]","[[0.028, 51], [0.0275, 585], [0.027, 248], [0.0265, 24]]"
 ETH-22SEP23-1700-C,2023-09-01 06:00:00,2023-09-01 06:00:38.755,open,CALL,1700,21 days 02:00:00,2023-09-22 08:00:00,1.47652,-1.01999,0.32235,0.00322,0.35396,1651.94,,0.0012,0.042,0.0161,29.13,0.016,0,28.43,0.0155,446,29.55,0.0165,450,"[[0.0165, 450], [0.017, 780], [0.0175, 91], [0.018, 35], [0.025, 10700]]","[[0.0155, 446], [0.015, 879], [0.0145, 50]]"

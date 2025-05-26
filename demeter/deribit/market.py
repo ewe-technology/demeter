@@ -326,7 +326,7 @@ class DeribitOptionMarket(Market):
         :type price_in_token: float | Decimal | None = None,
         :param price_in_usd: price, based in usd,
         :type price_in_usd: float | Decimal | None = None,
-        :param max_mark_price_multiple: times to mark_price, if order price is greater than mark_price * max_allowed, will not buy at this price
+        :param max_mark_price_multiple: times to open_short_mark_price, if order price is greater than open_short_mark_price * max_allowed, will not buy at this price
 
 
         """
@@ -434,7 +434,7 @@ class DeribitOptionMarket(Market):
         :type price_in_token: float | Decimal | None = None,
         :param price_in_usd: price, based in usd,
         :type price_in_usd: float | Decimal | None = None,
-        :param max_mark_price_multiple: times to mark_price, if order price is greater than mark_price * max_allowed, will not sell at this price
+        :param max_mark_price_multiple: times to open_short_mark_price, if order price is greater than open_short_mark_price * max_allowed, will not sell at this price
 
         """
         amount, instrument, price_in_token = self.check_transaction(
@@ -527,7 +527,7 @@ class DeribitOptionMarket(Market):
         | - ensure there are enough amount
         | - ensure price is in asks/bids
 
-        :param max_mark_price_multiple: times to mark_price, if order price is greater than mark_price * max_allowed, will not buy beyond price
+        :param max_mark_price_multiple: times to open_short_mark_price, if order price is greater than open_short_mark_price * max_allowed, will not buy beyond price
         """
         if instrument_name not in self._market_status.data.index:
             raise DemeterError(f"{instrument_name} is not in current orderbook")
@@ -605,7 +605,7 @@ class DeribitOptionMarket(Market):
                 if position.instrument_name not in self.market_status.data.index:
                     continue
                 instr_status = self.market_status.data.loc[position.instrument_name]
-                instrument_premium = position.amount * round_decimal(instr_status.mark_price, self.decimal)
+                instrument_premium = position.amount * round_decimal(instr_status.open_short_mark_price, self.decimal)
                 total_premium += instrument_premium
                 delta += instrument_premium * round_decimal(instr_status.delta, self.decimal)
                 gamma += instrument_premium * round_decimal(instr_status.gamma, self.decimal)

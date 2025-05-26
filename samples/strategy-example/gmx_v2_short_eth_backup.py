@@ -74,7 +74,7 @@ class GmxV2LpStrategy(Strategy):
         if self.short_open_price is None:
             mark_diff = self.mark_price - eth_price
             mark_diff_percent = mark_diff / self.mark_price
-            # print(f"marked price: {self.mark_price} - {mark_diff_percent}%")
+            # print(f"marked price: {self.open_short_mark_price} - {mark_diff_percent}%")
             if mark_diff_percent >= OPEN_PERCENT: # open short
                 self.short_open_price = eth_price
                 self.short_stop_loss_price = eth_price * (ONE + STOP_LOSS_PERCENT)
@@ -147,15 +147,15 @@ if __name__ == "__main__":
     OPEN_PERCENT = Decimal(config_file.get("open_change_rate"))
     STOP_LOSS_PERCENT = Decimal(config_file.get("stop_loss_rate"))
     CLOSE_PERCENT = Decimal(config_file.get("trailing_stop_loss_rate"))
-    sd = datetime.strptime(config_file.get("start_date"), "%Y-%m-%d")
-    ed = datetime.strptime(config_file.get("end_date"), "%Y-%m-%d")
+    sd = datetime.strptime(config_file.get("_START_DATE"), "%Y-%m-%d")
+    ed = datetime.strptime(config_file.get("_END_DATE"), "%Y-%m-%d")
 
     start_date = date(sd.year, sd.month, sd.day)
     end_date = date(ed.year, ed.month, ed.day)
     INIT_USDC = Decimal(config_file.get("initial_amount"))
     CHECK_INTERVAL_MIN = config_file.get("check_interval_min")
 
-    print(f"==>> initial value: {INIT_USDC}, start_date: {start_date}, end_date: {end_date}, time interval (minute): {CHECK_INTERVAL_MIN}, take profit percent: {CLOSE_PERCENT}, stop loss percent: {STOP_LOSS_PERCENT}")
+    print(f"==>> initial value: {INIT_USDC}, _START_DATE: {start_date}, _END_DATE: {end_date}, time interval (minute): {CHECK_INTERVAL_MIN}, take profit percent: {CLOSE_PERCENT}, stop loss percent: {STOP_LOSS_PERCENT}")
 
     market = GmxV2Market(MARKET_KEY, pool, data_path="../real-data/gmx_v2/arb_short_eth/")
     market.load_data(

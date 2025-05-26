@@ -76,7 +76,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
         self.execute_after: int = 0
 
         # self.short_stop_loss_hit: bool = False
-        # self.short_stop_loss_price: Decimal | None = None
+        # self.position_stop_loss_price: Decimal | None = None
         # self.short_price: Decimal | None = None
         # self.short_amount: Decimal = _gp.init_short_amount
         # self.short_stop_loss_cnt: int = 0
@@ -621,9 +621,9 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
                 self.utils.current_position_info[1] >= lp_row_data.lowestTick)
         current_price = self.utils.get_current_price(row_data)
         self.check_stop_loss(current_price)
-        # if not self.short_stop_loss_hit and self.short_stop_loss_price is not None:
+        # if not self.short_stop_loss_hit and self.position_stop_loss_price is not None:
         #     current_price = row_data.prices[self.gp.base_token.name]
-        #     self.short_stop_loss_hit = current_price >= self.short_stop_loss_price
+        #     self.short_stop_loss_hit = current_price >= self.position_stop_loss_price
         pass
 
     def check_stop_loss(self, current_price: Decimal):

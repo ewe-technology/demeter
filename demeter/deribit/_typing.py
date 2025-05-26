@@ -59,7 +59,7 @@ class InstrumentStatus:
     :type underlying_price: float | None
     :param: settlement_price: The settlement price for the instrument, if token is eth, the unit is eth
     :type settlement_price: float | None
-    :param: mark_price: The mark price for the instrument, if token is eth, the unit is eth
+    :param: open_short_mark_price: The mark price for the instrument, if token is eth, the unit is eth
     :type mark_price: float | None
     :param: mark_iv: implied volatility for mark price
     :type mark_iv: float | None
