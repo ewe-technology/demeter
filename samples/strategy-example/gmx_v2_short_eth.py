@@ -198,14 +198,14 @@ class GmxV2LpStrategy(Strategy):
             print(
                 f"==>> [open]  short => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {self.format_price(eth_price)}, "
                 f"last MACD Delta: {self.format_price(self.last_macd_delta)}, current MADC Delta: {self.format_price(payload)}, "
-                f"stop loss price: {self.format_price(self.position.stop_loss_price)}")
+                f"stop loss price: {self.format_price(self.position.stop_loss_price)}, position amount: {self.format_price(self.current_usdc)}")
             pass
         else:
 
             print(
                 f"==>> [open]  short => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {self.format_price(eth_price)}, "
                 f"mark price: {self.format_price(self.open_short_mark_price)}, price difference: {round(payload * HUNDRED, 2)}%, "
-                f"stop loss price: {self.format_price(self.position.stop_loss_price)}")
+                f"stop loss price: {self.format_price(self.position.stop_loss_price)}, position amount: {self.format_price(self.current_usdc)}")
             pass
 
     def open_long(self, snapshot: Snapshot, eth_price: Decimal, payload: Decimal):
@@ -217,14 +217,14 @@ class GmxV2LpStrategy(Strategy):
             print(
                 f"==>> [open]  long => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {self.format_price(eth_price)}, "
                 f"last MACD Delta: {self.format_price(self.last_macd_delta)}, current MADC Delta: {self.format_price(payload)}, "
-                f"stop loss price: {self.format_price(self.position.stop_loss_price)}")
+                f"stop loss price: {self.format_price(self.position.stop_loss_price)}, position amount: {self.format_price(self.current_usdc)}")
             pass
         else:
 
             print(
                 f"==>> [open]  long => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {self.format_price(eth_price)}, "
                 f"mark price: {self.format_price(self.open_short_mark_price)}, price difference: {round(payload * HUNDRED, 2)}%, "
-                f"stop loss price: {self.format_price(self.position.stop_loss_price)}")
+                f"stop loss price: {self.format_price(self.position.stop_loss_price)}, position amount: {self.format_price(self.current_usdc)}")
             pass
 
     # def check_open_position(self, snapshot: Snapshot, eth_price: Decimal):
