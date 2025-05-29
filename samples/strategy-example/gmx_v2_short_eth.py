@@ -398,7 +398,7 @@ class GmxV2LpStrategy(Strategy):
                 reason = ", need to open short"
 
             print(
-                f"==>> [close  ] {"short" if is_short else "long"} => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {self.format_price(eth_price)}, "
+                f"==>> [close  ] {"short" if is_short else "long "} => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {self.format_price(eth_price)}, "
                 f"{"lowest" if is_short else "highest"}_price: {self.format_price(self.position.close_mark_price)}, price change from {"lowest" if is_short else "highest"}: {round(diff_percent * HUNDRED, 2)}%, "
                 f"{"short" if is_short else "long"}_open_price: {self.format_price(self.position.open_price)}, gain/loss: {self.format_price(amount_diff)}, "
                 f"fee: {self.format_price(fee)}{reason}")
