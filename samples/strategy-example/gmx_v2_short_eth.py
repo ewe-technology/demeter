@@ -34,6 +34,8 @@ CHECK_INTERVAL_MIN = 1
 # _OPEN_SHORT = True
 PRINT_PRICE = False
 POSITION_OPEN_STRATEGY = "standard"
+_FEE_PERCENT = ZERO
+_DELAY_ENTRY = False
 
 
 @dataclass
@@ -80,6 +82,9 @@ class GmxV2LpStrategy(Strategy):
         self.long_wl: WinLoss | None = WinLoss() if to_long else None
         self.short_wl: WinLoss | None = WinLoss() if to_short else None
         self.macd_config = macd_config
+        self.total_fee: Decimal = ZERO
+        self.entry_delayed: bool = False
+        self.is_entry_short: bool = False # False = long, True = short
 
 
     def initialize(self):
@@ -141,14 +146,22 @@ class GmxV2LpStrategy(Strategy):
         #
         # print(f"{snapshot.timestamp.strftime('%Y-%m-%d %H:%M:%S')} => hourly price: {self.format_price(series_hourly)}, is_nan: {math.isnan(series_hourly)}")
 
+    def cal_and_subtract_fee(self) -> Decimal:
+        position = self.current_usdc
+        fee = position * _FEE_PERCENT
+        self.total_fee += fee
+        self.current_usdc -= fee
+        return fee
 
-    def open_position(self, eth_price: Decimal, is_short: bool):
+    def open_position(self, eth_price: Decimal, is_short: bool) -> Decimal:
         self.position = Position(is_short)
         self.position.open_price = self.position.close_mark_price = eth_price
         if is_short:
             self.position.stop_loss_price = eth_price * (ONE + STOP_LOSS_PERCENT)
         else:
             self.position.stop_loss_price = eth_price * (ONE - STOP_LOSS_PERCENT)
+        fee = self.cal_and_subtract_fee()
+        return fee
 
     def check_open_short(self, snapshot: Snapshot, eth_price: Decimal) -> tuple[bool, Decimal]:
 
@@ -191,40 +204,45 @@ class GmxV2LpStrategy(Strategy):
 
     def open_short(self, snapshot: Snapshot, eth_price: Decimal, payload: Decimal):
 
-        self.open_position(eth_price, True)
+        fee = self.open_position(eth_price, True)
 
         if POSITION_OPEN_STRATEGY == _MACD:
 
             print(
-                f"==>> [open]  short => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {self.format_price(eth_price)}, "
+                f"==>> [open   ] short => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {self.format_price(eth_price)}, "
                 f"last MACD Delta: {self.format_price(self.last_macd_delta)}, current MADC Delta: {self.format_price(payload)}, "
-                f"stop loss price: {self.format_price(self.position.stop_loss_price)}, position amount: {self.format_price(self.current_usdc)}")
+                f"stop loss price: {self.format_price(self.position.stop_loss_price)}, position amount: {self.format_price(self.current_usdc)}, "
+                f"fee: {self.format_price(fee)}")
+
             pass
         else:
 
             print(
-                f"==>> [open]  short => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {self.format_price(eth_price)}, "
+                f"==>> [open   ] short => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {self.format_price(eth_price)}, "
                 f"mark price: {self.format_price(self.open_short_mark_price)}, price difference: {round(payload * HUNDRED, 2)}%, "
-                f"stop loss price: {self.format_price(self.position.stop_loss_price)}, position amount: {self.format_price(self.current_usdc)}")
+                f"stop loss price: {self.format_price(self.position.stop_loss_price)}, position amount: {self.format_price(self.current_usdc)}, "
+                f"fee: {self.format_price(fee)}")
             pass
 
     def open_long(self, snapshot: Snapshot, eth_price: Decimal, payload: Decimal):
 
-        self.open_position(eth_price, False)
+        fee = self.open_position(eth_price, False)
 
         if POSITION_OPEN_STRATEGY == _MACD:
 
             print(
-                f"==>> [open]  long => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {self.format_price(eth_price)}, "
+                f"==>> [open   ] long  => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {self.format_price(eth_price)}, "
                 f"last MACD Delta: {self.format_price(self.last_macd_delta)}, current MADC Delta: {self.format_price(payload)}, "
-                f"stop loss price: {self.format_price(self.position.stop_loss_price)}, position amount: {self.format_price(self.current_usdc)}")
+                f"stop loss price: {self.format_price(self.position.stop_loss_price)}, position amount: {self.format_price(self.current_usdc)}, "
+                f"fee: {self.format_price(fee)}")
             pass
         else:
 
             print(
-                f"==>> [open]  long => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {self.format_price(eth_price)}, "
+                f"==>> [open   ] long  => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {self.format_price(eth_price)}, "
                 f"mark price: {self.format_price(self.open_short_mark_price)}, price difference: {round(payload * HUNDRED, 2)}%, "
-                f"stop loss price: {self.format_price(self.position.stop_loss_price)}, position amount: {self.format_price(self.current_usdc)}")
+                f"stop loss price: {self.format_price(self.position.stop_loss_price)}, position amount: {self.format_price(self.current_usdc)}, "
+                f"fee: {self.format_price(fee)}")
             pass
 
     # def check_open_position(self, snapshot: Snapshot, eth_price: Decimal):
@@ -260,6 +278,10 @@ class GmxV2LpStrategy(Strategy):
     #     self.last_macd_delta = current_macd_delta
     #     pass
 
+    @staticmethod
+    def has_macd(macd: Decimal | None) -> bool:
+        return not (macd is None or math.isnan(macd))
+
     def on_price_check(self, snapshot: Snapshot):
 
         if snapshot.timestamp.date() < _START_DATE:
@@ -270,6 +292,29 @@ class GmxV2LpStrategy(Strategy):
         to_open_short = False
         to_open_long = False
         payload = ZERO
+
+        current_macd_delta: Decimal | None = None
+        if POSITION_OPEN_STRATEGY == _MACD:
+            series = snapshot.market_status[MARKET_KEY]
+            current_macd_delta = series.macd_delta
+
+            if self.entry_delayed: # entry_delayed will be true only if macd
+
+
+                if self.has_macd(current_macd_delta):
+                    if self.is_entry_short:
+                        self.check_and_close_position(snapshot, eth_price, False, True)
+                        self.open_short(snapshot, eth_price, current_macd_delta)
+                    else:
+                        self.check_and_close_position(snapshot, eth_price, True, False)
+                        self.open_long(snapshot, eth_price, current_macd_delta)
+                    self.entry_delayed = False
+                    self.last_macd_delta = current_macd_delta
+                    return
+                else:
+                    self.check_and_close_position(snapshot, eth_price, False, False)
+                    return  # delayed entry and still not time for entry
+
         if self.position is None or (self.position.is_short and self.long_wl is not None) or (not self.position.is_short and self.short_wl is not None):
 
             if  self.short_wl is not None and self.position is None or (self.position is not None and not self.position.is_short):
@@ -278,20 +323,30 @@ class GmxV2LpStrategy(Strategy):
             if  self.long_wl is not None and not to_open_short and self.position is None or (self.position is not None and self.position.is_short):
                 to_open_long, payload = self.check_open_long(snapshot, eth_price)
 
+        if _DELAY_ENTRY and (to_open_short or to_open_long):
 
-        self.check_and_close_position(snapshot, eth_price, to_open_long, to_open_short)
+            self.is_entry_short = to_open_short # if to_open_short is False to_open_long must be True
 
-        if to_open_short:
-            self.open_short(snapshot, eth_price, payload)
-        elif to_open_long:
-            self.open_long(snapshot, eth_price, payload)
+            self.check_and_close_position(snapshot, eth_price, False, False)
+            self.entry_delayed = True
+            print(
+                f"==>> [delayed] {"short" if self.is_entry_short else "long "} => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {self.format_price(eth_price)}, "
+                f"last MACD Delta: {self.format_price(self.last_macd_delta)}, current MADC Delta: {self.format_price(current_macd_delta)}")
+
+        else:
+            self.check_and_close_position(snapshot, eth_price, to_open_long, to_open_short)
+
+            if to_open_short:
+                self.open_short(snapshot, eth_price, payload)
+            elif to_open_long:
+                self.open_long(snapshot, eth_price, payload)
 
         if POSITION_OPEN_STRATEGY == _MACD:
-            series = snapshot.market_status[MARKET_KEY]
-            current = series.macd_delta
-            if not (current is None or math.isnan(current)):
+            # series = snapshot.market_status[MARKET_KEY]
+            # current = series.macd_delta
+            if self.has_macd(current_macd_delta):
                 #print(f"last macd: {self.last_macd_delta}, current macd: {current}")
-                self.last_macd_delta = series.macd_delta
+                self.last_macd_delta = current_macd_delta
         else:
             if eth_price > self.open_short_mark_price:
                 self.open_short_mark_price = eth_price
@@ -328,6 +383,7 @@ class GmxV2LpStrategy(Strategy):
         if wl is not None:
 
             self.current_usdc += amount_diff
+            fee = self.cal_and_subtract_fee()
             if amount_diff < ZERO:
                 wl.total_loss -= amount_diff
                 wl.loss_cnt += 1
@@ -340,16 +396,12 @@ class GmxV2LpStrategy(Strategy):
                 reason = ", need to open long"
             elif to_open_short:
                 reason = ", need to open short"
-            # elif diff_percent >= CLOSE_PERCENT:
-            #     reason = f"close short because price change from lowest: {round(diff_percent * HUNDRED, 2)}%"
-            # elif diff_percent <= -CLOSE_PERCENT:
-            #     reason = f"close long because price change from highest: {round(diff_percent * HUNDRED, 2)}%"
-            # else:
-            #     reason = f"close short because price change from lowest: {round(diff_percent * HUNDRED, 2)}% and stop loss price: {self.position.stop_loss_price}"
+
             print(
-                f"==>> [close] {"short" if is_short else "long"} => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {self.format_price(eth_price)}, "
+                f"==>> [close  ] {"short" if is_short else "long"} => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {self.format_price(eth_price)}, "
                 f"{"lowest" if is_short else "highest"}_price: {self.format_price(self.position.close_mark_price)}, price change from {"lowest" if is_short else "highest"}: {round(diff_percent * HUNDRED, 2)}%, "
-                f"{"short" if is_short else "long"}_open_price: {self.format_price(self.position.open_price)}, gain/loss: {self.format_price(amount_diff)}{reason}")
+                f"{"short" if is_short else "long"}_open_price: {self.format_price(self.position.open_price)}, gain/loss: {self.format_price(amount_diff)}, "
+                f"fee: {self.format_price(fee)}{reason}")
             self.position = None
             self.open_short_mark_price = self.open_long_mark_price = eth_price
 
@@ -365,6 +417,8 @@ class GmxV2LpStrategy(Strategy):
         short_return = diff / self.position.open_price
         amount_diff = self.current_usdc * short_return
         self.current_usdc += amount_diff
+        fee = self.cal_and_subtract_fee()
+
         wl = self.short_wl if self.position.is_short else self.long_wl
         if amount_diff < ZERO:
             wl.total_loss -= amount_diff
@@ -374,7 +428,8 @@ class GmxV2LpStrategy(Strategy):
             wl.win_cnt += 1
 
         print(f"==>> final close {"short" if self.position.is_short else "long"} => date: {snapshot.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, price: {self.format_price(eth_price)}, "
-              f"position_open_price: {self.format_price(self.position.open_price)}, gain/loss: {self.format_price(amount_diff)}")
+              f"position_open_price: {self.format_price(self.position.open_price)}, gain/loss: {self.format_price(amount_diff)}, "
+              f"fee: {self.format_price(fee)}")
         pass
 
     @staticmethod
@@ -406,6 +461,9 @@ if __name__ == "__main__":
         s = datetime.strptime(dsd, "%Y-%m-%d")
         DATA_START_DATE = date(s.year, s.month, s.day)
 
+    _FEE_PERCENT = Decimal(config_file.get("trading_fee_rate"))
+    _DELAY_ENTRY = config_file.get("delayed_entry")
+
     to_long = config_file.get("run_long")
     to_short = config_file.get("run_short")
 
@@ -436,7 +494,7 @@ if __name__ == "__main__":
     total_loss_cnt = 0
 
     return_rate = ((strat.current_usdc / strat.initial_usdc) - ONE) * HUNDRED
-    print(f"==>> final amount: {round(strat.current_usdc, 4)}, pnl: {round(strat.current_usdc - strat.initial_usdc, 4)}, return rate: {round(return_rate, 2)}% ")
+    print(f"==>> final amount: {round(strat.current_usdc, 4)}, pnl: {round(strat.current_usdc - strat.initial_usdc, 4)}, return rate: {round(return_rate, 2)}%, total fee: {round(strat.total_fee, 4)} ")
     if strat.long_wl is not None:
         print(f"==>> long win({strat.long_wl.win_cnt}): {round(strat.long_wl.total_gain, 4)}, loss({strat.long_wl.loss_cnt}): {round(strat.long_wl.total_loss, 4)}")
         total_gain += strat.long_wl.total_gain
@@ -454,3 +512,6 @@ if __name__ == "__main__":
     if to_long and to_short:
         print(f"==>> total gain({total_gain_cnt}): {round(total_gain, 4)}, loss({total_loss_cnt}): {round(total_loss, 4)}")
 
+
+
+###
