@@ -23,8 +23,9 @@ def average_true_range(lows: pd.Series, highs: pd.Series, closes: pd.Series, min
 def macd(prices: pd.Series, fast_period: int = 12, slow_period: int = 26, signal_period: int = 9) -> tuple[pd.Series, pd.Series, pd.Series]:
 
     macd_data, macd_signal, macd_hist = talib.MACD(prices, fastperiod=fast_period, slowperiod=slow_period, signalperiod=signal_period)
+    macd_delta = macd_hist
 
-    return macd_data, macd_signal, macd_hist
+    return macd_data, macd_signal, macd_delta
 
 def stochRSI(prices: pd.Series, time_period = 14, fastk_period = 5, fastd_period = 3, fastd_matype = 0) -> tuple[pd.Series, pd.Series, pd.Series]:
 
@@ -41,4 +42,3 @@ def resample_data(prices: pd.Series, time_frame: str = '1h'):
     # return prices.resample('h').last()
     # return prices.resample('30min').last()
     return prices.resample(time_frame).last()
-

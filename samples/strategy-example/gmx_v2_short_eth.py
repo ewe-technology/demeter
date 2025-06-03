@@ -7,7 +7,7 @@ from demeter.gmx import GmxV2Market
 from demeter.gmx._typing2 import GmxV2Pool
 import toml
 
-from chaos_lab_utils import macd, resample_data, stochRSI
+from chaos_lab_utils import macd as macd_function, resample_data, stochRSI
 from math_const import *
 from gmx_model import *
 
@@ -51,7 +51,7 @@ class GmxV2LpStrategy(Strategy):
             # print(resampled_prices)
             # self.add_column(MARKET_KEY, "resampled_price", resampled_prices)
 
-            macd_data, macd_signal, macd_delta = macd(resampled_prices, self.gmx_config.macd.fast_period, self.gmx_config.macd.slow_period, self.gmx_config.macd.signal_period)
+            macd_data, macd_signal, macd_delta = macd_function(resampled_prices, self.gmx_config.macd.fast_period, self.gmx_config.macd.slow_period, self.gmx_config.macd.signal_period)
             # print(f"{macd_data.keys()}")
             # print(f"{macd_signal.keys()}")
             # print(f"{macd_hist.keys()}")
