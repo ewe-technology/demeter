@@ -26,6 +26,13 @@ def macd(prices: pd.Series, fast_period: int = 12, slow_period: int = 26, signal
 
     return macd_data, macd_signal, macd_hist
 
+def stochRSI(prices: pd.Series, time_period = 14, fastk_period = 5, fastd_period = 3, fastd_matype = 0) -> tuple[pd.Series, pd.Series, pd.Series]:
+
+    fastk, fastd = talib.STOCHRSI(prices, timeperiod=time_period, fastk_period=fastk_period, fastd_period=fastd_period, fastd_matype=fastd_matype) #
+    diff = fastk - fastd
+    return fastk, fastd, diff
+
+
 def resample_data(prices: pd.Series, time_frame: str = '1h'):
     """
     time_frame:  '30min', '1h', '4h', '8h', '1d'
@@ -34,3 +41,4 @@ def resample_data(prices: pd.Series, time_frame: str = '1h'):
     # return prices.resample('h').last()
     # return prices.resample('30min').last()
     return prices.resample(time_frame).last()
+
