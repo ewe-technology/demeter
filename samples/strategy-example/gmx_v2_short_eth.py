@@ -7,7 +7,7 @@ from demeter.gmx import GmxV2Market
 from demeter.gmx._typing2 import GmxV2Pool
 import toml
 
-from chaos_lab_utils import macd as macd_function, resample_data, stochRSI
+from chaos_lab_utils import macd as macd_function, resample_data, stochRSI, stochRSI_self_implement
 from math_const import *
 from gmx_model import *
 
@@ -61,9 +61,13 @@ class GmxV2LpStrategy(Strategy):
         elif self.gmx_config.position_open_strategy == IndicatorType.RSI.value:
             resampled_prices = resample_data(market_data.longPrice, self.gmx_config.strategy_sample_period)
 
-            rsi_fastk, rsi_fastd, rsi_delta = stochRSI(resampled_prices, self.gmx_config.stock_rsi.time_period,
-                                                      self.gmx_config.stock_rsi.fastk_period,
-                                                      self.gmx_config.stock_rsi.fastd_period, self.gmx_config.stock_rsi.fastd_matype)
+            # rsi_fastk, rsi_fastd, rsi_delta = stochRSI(resampled_prices, self.gmx_config.stock_rsi.time_period,
+            #                                           self.gmx_config.stock_rsi.fastk_period,
+            #                                           self.gmx_config.stock_rsi.fastd_period, self.gmx_config.stock_rsi.fastd_matype)
+            rsi_fastk, rsi_fastd, rsi_delta = stochRSI_self_implement(resampled_prices, self.gmx_config.stock_rsi.time_period,
+                                                                      self.gmx_config.stock_rsi.fastk_period,
+                                                                      self.gmx_config.stock_rsi.fastd_period,
+                                                                      self.gmx_config.stock_rsi.fastd_matype)
             # print(f"{macd_data.keys()}")
             # print(f"{macd_signal.keys()}")
             # print(f"{macd_hist.keys()}")

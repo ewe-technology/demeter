@@ -1,5 +1,6 @@
 import pandas as pd
 import talib
+from sys import float_info as sflt
 
 
 def standard_deviation_over_last(prices: pd.Series, minutes: int) -> pd.Series:
@@ -27,11 +28,44 @@ def macd(prices: pd.Series, fast_period: int = 12, slow_period: int = 26, signal
 
     return macd_data, macd_signal, macd_delta
 
+
 def stochRSI(prices: pd.Series, time_period = 14, fastk_period = 5, fastd_period = 3, fastd_matype = 0) -> tuple[pd.Series, pd.Series, pd.Series]:
+
+    """
+     talib's stoch RSI is weird, dont use
+    """
 
     fastk, fastd = talib.STOCHRSI(prices, timeperiod=time_period, fastk_period=fastk_period, fastd_period=fastd_period, fastd_matype=fastd_matype) #
     diff = fastk - fastd
     return fastk, fastd, diff
+
+
+def stochRSI_self_implement(prices: pd.Series, time_period = 14, fastk_period = 5, fastd_period = 3, fastd_matype = 0) -> tuple[pd.Series, pd.Series, pd.Series]:
+
+    """
+    https://github.com/TA-Lib/ta-lib-python/issues/594#issuecomment-1560640283
+     ‘note that this snippet uses talib RSI so be careful with "very small numbers" (first case)’
+    """
+    rsi_ = talib.RSI(prices, time_period)
+
+    _rolling = rsi_.rolling(time_period)
+    lowest_rsi = _rolling.min()
+    highest_rsi = _rolling.max()
+
+    stoch = 100 * (rsi_ - lowest_rsi)
+    _diff = highest_rsi - lowest_rsi
+    if _diff.eq(0).any().any():
+        _diff += sflt.epsilon
+    stoch /= _diff
+
+    if fastd_matype == 0: #SMA
+        stochrsi_k = talib.SMA(stoch, fastk_period)
+        stochrsi_d = talib.SMA(stochrsi_k, fastd_period)
+    else: # 1 = EMA
+        stochrsi_k = talib.EMA(stoch, fastk_period)
+        stochrsi_d = talib.EMA(stochrsi_k, fastd_period)
+    diff = stochrsi_k - stochrsi_d
+    return stochrsi_k, stochrsi_d, diff
 
 
 def resample_data(prices: pd.Series, time_frame: str = '1h'):
