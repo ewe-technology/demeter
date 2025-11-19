@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
 
+import demeter._typing
 from demeter import ChainType, Strategy, TokenInfo, Actuator, MarketInfo, Snapshot, AtTimeTrigger, MarketTypeEnum
 from demeter.aave import AaveV3Market
 from demeter.uniswap import UniV3Pool, UniLpMarket, V3CoreLib
@@ -99,14 +100,14 @@ class DeltaHedgingStrategy(Strategy):
         pos_l = L * snapshot.prices[eth.name]
         self.h = pos_h
         self.l = pos_l
-        total_cash = self.get_cash_net_value(snapshot.prices)
+        total_cash = self.get_cash_net_value(snapshot.prices)  # u danwei
 
         # work
-        aave_supply_value = total_cash * self.usdc_aave_supply
-        aave_borrow_value = aave_supply_value * AAVE_POLYGON_USDC_ALPHA
+        aave_supply_value = total_cash * self.usdc_aave_supply #
+        aave_borrow_value = aave_supply_value * AAVE_POLYGON_USDC_ALPHA # anquan xishu
 
         market_aave.supply(usdc, aave_supply_value)
-        market_aave.borrow(eth, aave_borrow_value / snapshot.prices[eth.name])
+        market_aave.borrow(eth, aave_borrow_value / snapshot.prices[eth.name])  # borrow amount -delta weth
 
         self.last_net_value = total_cash
 
@@ -144,6 +145,8 @@ class DeltaHedgingStrategy(Strategy):
 if __name__ == "__main__":
     start_date = date(2023, 8, 14)
     end_date = date(2023, 8, 17)
+    # start_date = date(2025, 6, 1)
+    # end_date = date(2025, 7, 31)
     file_name = f"delta_hedging"
 
     market_key_uni = MarketInfo("uni")
@@ -169,7 +172,9 @@ if __name__ == "__main__":
     broker.set_balance(eth, 0)  # set balance
 
     actuator.strategy = DeltaHedgingStrategy()
-    actuator.set_price(market_uni.get_price_from_data())
+    price = market_uni.get_price_from_data()
+    price[0]["USD"] = 1
+    actuator.set_price(price, quote_token=demeter.USD)
 
     actuator.run()
     df = actuator.account_status_df

@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Union
+from typing import Dict
 
 import pandas as pd
 
@@ -16,8 +17,6 @@ class GmxV2Balance(MarketBalance):
     gm_amount: Decimal
     long_amount: Decimal
     short_amount: Decimal
-    realized_profit: Decimal
-    pending_pnl: Decimal
 
 
 @dataclass
@@ -25,6 +24,7 @@ class GmxV2Pool(object):
     long_token: TokenInfo
     short_token: TokenInfo
     index_token: TokenInfo
+    market_token: TokenInfo = None
 
 
 @dataclass
@@ -66,6 +66,23 @@ class Gmx2WithdrawAction(BaseAction):
         )
 
 
+def position_dict_to_dataframe(positions: Dict) -> pd.DataFrame:
+    pos_dict = {
+        "key": [],
+        "collateral_token": [],
+        "collateral_amount": [],
+        "size_in_usd": [],
+        "size_in_tokens": []
+    }
+    for k, v in positions.items():
+        pos_dict["key"].append(k)
+        pos_dict["collateral_token"].append(v.collateralToken)
+        pos_dict["collateral_amount"].append(v.collateralAmount)
+        pos_dict["size_in_usd"].append(v.sizeInUsd)
+        pos_dict["size_in_tokens"].append(v.sizeInTokens)
+    return pd.DataFrame(pos_dict)
+
+
 @dataclass
 class Gmx2DepositAction(BaseAction):
     long_amount: UnitDecimal
@@ -95,4 +112,70 @@ class Gmx2DepositAction(BaseAction):
                 "fee_usd": self.fee_usd.to_str(),
                 "price_impact_usd": self.price_impact_usd.to_str(),
             },
+        )
+
+
+@dataclass
+class Gmx2IncreasePositionAction(BaseAction):
+    collateralToken: str
+    collateralAmount: UnitDecimal
+    sizeInUsd: UnitDecimal
+    sizeInTokens: UnitDecimal
+    borrowingFactor: UnitDecimal
+    fundingFeeAmountPerSize: UnitDecimal
+    longTokenClaimableFundingAmountPerSize: UnitDecimal
+    shortTokenClaimableFundingAmountPerSize: UnitDecimal
+    isLong: bool
+
+    def set_type(self):
+        self.action_type = ActionTypeEnum.gmx2_increase_position
+
+    def get_output_str(self):
+        return get_action_str(
+            self,
+            ForColorEnum.light_green,
+            {
+                'collateralToken': self.collateralToken,
+                'collateralAmount': self.collateralAmount.to_str(),
+                'sizeInUsd': self.sizeInUsd.to_str(),
+                'sizeInTokens': self.sizeInTokens.to_str(),
+                'borrowingFactor': self.borrowingFactor.to_str(),
+                'fundingFeeAmountPerSize': self.fundingFeeAmountPerSize.to_str(),
+                'longTokenClaimableFundingAmountPerSize': self.longTokenClaimableFundingAmountPerSize.to_str(),
+                'shortTokenClaimableFundingAmountPerSize': self.shortTokenClaimableFundingAmountPerSize.to_str(),
+                'isLong': self.isLong
+            }
+        )
+
+
+@dataclass
+class Gmx2DecreasePositionAction(BaseAction):
+    collateralToken: str
+    collateralAmount: UnitDecimal
+    sizeInUsd: UnitDecimal
+    sizeInTokens: UnitDecimal
+    borrowingFactor: UnitDecimal
+    fundingFeeAmountPerSize: UnitDecimal
+    longTokenClaimableFundingAmountPerSize: UnitDecimal
+    shortTokenClaimableFundingAmountPerSize: UnitDecimal
+    isLong: bool
+
+    def set_type(self):
+        self.action_type = ActionTypeEnum.gmx2_decrease_position
+
+    def get_output_str(self):
+        return get_action_str(
+            self,
+            ForColorEnum.light_green,
+            {
+                'collateralToken': self.collateralToken,
+                'collateralAmount': self.collateralAmount.to_str(),
+                'sizeInUsd': self.sizeInUsd.to_str(),
+                'sizeInTokens': self.sizeInTokens.to_str(),
+                'borrowingFactor': self.borrowingFactor.to_str(),
+                'fundingFeeAmountPerSize': self.fundingFeeAmountPerSize.to_str(),
+                'longTokenClaimableFundingAmountPerSize': self.longTokenClaimableFundingAmountPerSize.to_str(),
+                'shortTokenClaimableFundingAmountPerSize': self.shortTokenClaimableFundingAmountPerSize.to_str(),
+                'isLong': self.isLong
+            }
         )

@@ -21,7 +21,7 @@ class Strategy(object):
         self.data: MarketDict[pd.DataFrame] = MarketDict()
         self.markets: MarketDict[Market] = MarketDict()
         self.prices: pd.DataFrame | None = None
-        self.triggers: [Trigger] = []
+        self.triggers: List[Trigger] = []
         self.account_status: List[AccountStatus] = []
         self.account_status_df: pd.DataFrame | None = None
         self.comment_last_action: Callable[[str], None] | None = None
@@ -67,6 +67,15 @@ class Strategy(object):
 
         """
         pass
+
+    def on_error(self, snapshot: Snapshot, e: Exception):
+        """
+        this will be called on error
+
+        you can continue backtest if you do not throw this error again
+        """
+        print("Exception on ", snapshot.timestamp, "Error message: ", e)
+        raise e
 
     def notify(self, action: BaseAction):
         """
