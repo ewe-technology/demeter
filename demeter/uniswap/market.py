@@ -700,7 +700,7 @@ class UniLpMarket(Market):
             token1_used,
             liquidity,
         ) = self._add_liquidity_by_tick(token0_amt, token1_amt, lower_tick, upper_tick, sqrt_price_x96)
-        # print(f"token0_amt: {token0_amt}, token1_amt: {token1_amt}, token0_used: {token0_used}, token1_used: {token1_used}, lower_tick: {lower_tick}, upper_tick: {upper_tick}")
+        # print(f"token0_amt: {token0_amt}, token1_amt: {token1_amt}, token0_used: {token0_used}, token1_used: {token1_used}, lower_tick: {lower_tick}, upper_tick: {upper_tick}, sqrt_price_x96: {sqrt_price_x96}, liquidity: {liquidity}, base_max_amount: {base_max_amount}, quote_max_amount: {quote_max_amount}")
         base_used, quote_used = self._convert_pair(token0_used, token1_used)
         self._record_action(
             AddLiquidityAction(

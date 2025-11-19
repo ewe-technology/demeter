@@ -1,5 +1,5 @@
 from decimal import Decimal
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict
 
 import numpy as np
 import pandas as pd
@@ -37,7 +37,8 @@ class RemixDAOParams:
                  rescale_tick_upper_boundary_offset=10,
                  tick_lower_boundary_offset=0,
                  tick_spread_lower=60, tick_spread_upper=60, tick_upper_boundary_offset=0, init_tick_spread=75,
-                 tick_spacing: int = 10):
+                 tick_spacing: int = 10,
+                 tick_gap_upper: int = 1, tick_gap_lower: int = 1):
         self.rescale_tick_lower_boundary_offset = rescale_tick_lower_boundary_offset
         self.rescale_tick_tolerance = rescale_tick_tolerance
         self.rescale_tick_upper_boundary_offset = rescale_tick_upper_boundary_offset
@@ -47,6 +48,11 @@ class RemixDAOParams:
         self.tick_upper_boundary_offset = tick_upper_boundary_offset
         self.tick_spacing = tick_spacing
         self.init_tick_spread = init_tick_spread
+        self.tick_gap_upper = tick_gap_upper
+        self.tick_gap_lower = tick_gap_lower
+        pass
+
+
 
 
 class RemixDaoUtils:
@@ -105,11 +111,11 @@ class RemixDaoUtils:
         """
         return row_data.market_status[self.market_key]
 
-    # def is_rescale_allowed_with_one_tick_spacing(self, current_tick: int, current_tick_lower: int,
-    #                                              current_tick_upper: int) -> bool:
-    #     # Verify Rescale Condition
-    #     return current_tick < (current_tick_lower - self.params.tick_gap_lower) or current_tick > (
-    #             current_tick_upper + self.params.tick_gap_upper)
+    def is_rescale_allowed_with_one_tick_spacing(self, current_tick: int, current_tick_lower: int,
+                                                 current_tick_upper: int) -> bool:
+        # Verify Rescale Condition
+        return current_tick < (current_tick_lower - self.params.tick_gap_lower) or current_tick > (
+                current_tick_upper + self.params.tick_gap_upper)
 
     def is_rescale_allowed_with_non_one_tick_spacing(
             self,
@@ -224,7 +230,7 @@ class RemixDaoUtils:
     pass
 
     def verify_and_get_new_rescale_tick_boundary(self, row_data: Snapshot, was_in_range: bool,
-                                                 last_rescale_tick: int) -> (bool, int, int):
+                                                 last_rescale_tick: int) -> Tuple[bool, int, int]:
         # Get Tick Info
         tick_spacing, current_tick, current_tick_lower, current_tick_upper = self.get_tick_info(row_data)
 
@@ -235,28 +241,28 @@ class RemixDaoUtils:
             return False, 0, 0
 
         # Get Rescale Info and Verify
-        # if tick_spacing == 1:
-        #     allow_rescale = self.is_rescale_allowed_with_one_tick_spacing(
-        #         current_tick, current_tick_lower, current_tick_upper
-        #     )
-        # else:
-        allow_rescale = self.is_rescale_allowed_with_non_one_tick_spacing(
-            was_in_range, last_rescale_tick,
-            tick_spacing, current_tick, current_tick_lower, current_tick_upper
-        )
+        if tick_spacing == 1:
+            allow_rescale = self.is_rescale_allowed_with_one_tick_spacing(
+                current_tick, current_tick_lower, current_tick_upper
+            )
+        else:
+            allow_rescale = self.is_rescale_allowed_with_non_one_tick_spacing(
+                was_in_range, last_rescale_tick,
+                tick_spacing, current_tick, current_tick_lower, current_tick_upper
+            )
 
         # Calculate newTickUpper & newTickLower
         if not allow_rescale:
             return False, 0, 0
         else:
-            # if tick_spacing == 1:
-            #     new_tick_lower, new_tick_upper = self.calculate_one_tick_spacing_rescale_tick_boundary(
-            #         current_tick, current_tick_lower
-            #     )
-            # else:
-            new_tick_lower, new_tick_upper = self.calculate_non_one_tick_spacing_rescale_tick_boundary(
-                tick_spacing, current_tick, current_tick_lower
-            )
+            if tick_spacing == 1:
+                new_tick_lower, new_tick_upper = self.calculate_one_tick_spacing_rescale_tick_boundary(
+                    current_tick, current_tick_lower
+                )
+            else:
+                new_tick_lower, new_tick_upper = self.calculate_non_one_tick_spacing_rescale_tick_boundary(
+                    tick_spacing, current_tick, current_tick_lower
+                )
 
         # Verify Rescale Result
         if current_tick_upper == new_tick_upper and current_tick_lower == new_tick_lower:
@@ -266,7 +272,7 @@ class RemixDaoUtils:
 
     @staticmethod
     def calculate_trade(base: Decimal, quote: Decimal, price: Decimal, base_percent: Decimal,
-                        quote_percent: Decimal) -> (Decimal, Decimal):
+                        quote_percent: Decimal) -> Tuple[Decimal, Decimal]:
 
         # Calculate the desired amounts
         base_desired = base_percent * (base + quote / price)

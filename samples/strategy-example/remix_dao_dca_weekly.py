@@ -95,11 +95,11 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
                                                self.params.indicator_length_min))
 
         # if self.params.rescale_frequency == RescaleFrequency.hourly:
-        #     self.triggers.append(PeriodTrigger(time_delta=timedelta(hours=1), do=self.rescale_work))
+        self.triggers.append(PeriodTrigger(time_delta=timedelta(hours=1), do=self.rescale_work))
         # else:
         #     self.triggers.append(PeriodTrigger(time_delta=timedelta(days=1), do=self.rescale_work))
 
-        self.triggers.append(PeriodTrigger(time_delta=timedelta(minutes=5), do=self.rescale_work))
+        # self.triggers.append(PeriodTrigger(time_delta=timedelta(minutes=5), do=self.rescale_work))
 
         dt = datetime(self.params.data_end_date.year, self.params.data_end_date.month, self.params.data_end_date.day,
                       23, 59, 0)
@@ -993,7 +993,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     eth = TokenInfo(name="eth", decimal=18)
     btc = TokenInfo(name="btc", decimal=8)
 
-    base_token, quote_token, init_quote = eth, usdc, Decimal(100000)  #  USDC
+    base_token, quote_token, init_quote = eth, usdc, Decimal(1000)  #  USDC
 
     # base_token, quote_token, init_quote = eth, usdc, Decimal(1000)  # DCA USDC
 
@@ -1015,13 +1015,13 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     # token0, token1 = eth, usdc
     # contract_address, fee, chain_name = "0xC6962004f452bE9203591991D15f6b388e09E8D0", 0.05, ChainType.arbitrum.name  # weth/usdc
 
-    dca_usdc_amount = Decimal(10000)
+    dca_usdc_amount = Decimal(0)
 
     # pool = UniV3Pool(btc, eth, _fee, _quote_token)
     _tick_spacing = int(fee * 200)  # 10  # should simply be fee * 200
     _aggressive = True
     _compound = False
-    _folder_prefix = f"new-5m-simple-{id}-{quote_token.name.lower()}"
+    _folder_prefix = f"new-simple-{id}-{quote_token.name.lower()}"
     _dca_add_if_non_empty = False
     _dca_timing = DcaTiming.none
     _dca_addon_price_percent = ZERO # Decimal(0.5) # Decimal(0.5)
@@ -1049,13 +1049,13 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     #                 100,  # 18.12%
     #                 120,  # 21.33
     #                 ]
-    # l: List[int] = [
-    #     100,200]
+
     l: List[int] = [
         # 5,
         # 10,
         # 15,
-        25, 50, 100, 200
+        #25,  # no liquidity at 2025-01-14 07:00:00
+        50, #100, 200
     ]
     #25, 50,
     _remix_spreads = list(map(lambda i: RescaleParam(init_tick_spread=0, bull_lower_spread=i, bull_upper_spread=i,
@@ -1265,7 +1265,7 @@ if __name__ == "__main__":
 
         # ISAO cases
         #  2021/05/04~2024/09/30
-        (datetime(2021, 5, 13, 0, 0, 0), date(2021, 5, 13), date(2024, 12, 31), "dca", []),
+        # (datetime(2021, 5, 13, 0, 0, 0), date(2021, 5, 13), date(2024, 12, 31), "dca", []),
         #  2021/05/04~2021/12/31
         # (datetime(2021, 5, 13, 0, 0, 0), date(2021, 5, 13), date(2021, 12, 31), "dca", []),
         #  2022/01/01~2022/12/31
@@ -1274,6 +1274,11 @@ if __name__ == "__main__":
         # (datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2023, 12, 31), "dca", []),
         #  2024/01/01~2024/09/30
         # (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2024, 12, 31), "dca", []),
+
+        #  2021/01/01~2025/07/31
+        (datetime(2021, 5, 5, 0, 0, 0), date(2021, 5, 5), date(2025, 7, 31), "dca", []),
+        #  2024/01/01~2025/07/31
+        # (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2025, 7, 31), "dca", []),
 
         # for WBTC/USDT
         #  2021/06/24~2024/11/11

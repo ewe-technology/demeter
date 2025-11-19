@@ -50,6 +50,7 @@ class GlobalParams:
     init_short_amount: Decimal = ZERO
     short_stop_loss_ratio: Decimal = Decimal(1)
     do_lp_rebalance: bool = True
+    refill_percent: Decimal | None = None # in decimal form 0.1 is 10%
 
 @dataclass
 class ShortInfo:

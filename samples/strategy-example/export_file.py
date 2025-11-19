@@ -47,6 +47,9 @@ class ExportData(object):
         self.short_stop_loss_hit: bool = False
         self.short_percent_change: decimal.Decimal = ZERO
         self.short_resolved_price: decimal.Decimal | None = ZERO
+        self.refill_base: Decimal = ZERO
+        self.refill_quote: Decimal = ZERO
+        self.refill_usdc: Decimal = ZERO
 
 def to_str(d: decimal.Decimal | int | None) -> str:
     if d is not None:
@@ -72,7 +75,8 @@ def export_file(file_path: str, actions: List[ExportData]):
              "total_base_fee", "total_quote_fee",
              #"param_type",
              "short_amount", "short_price", "short_stop_loss", "lp_change",
-             "stop_loss_hit", "short_percent_change", "short_resolved_price"])
+             "stop_loss_hit", "short_percent_change", "short_resolved_price",
+             "refill_base", "refill_quote", "refill_usdc"])
 
         for action in actions:
             csvwriter.writerow(
@@ -89,7 +93,8 @@ def export_file(file_path: str, actions: List[ExportData]):
                  to_str(action.total_base_fee), to_str(action.total_quote_fee),
                  #action.param_type,
                  to_str(action.short_amount), to_str(action.short_price), to_str(action.short_stop_loss), to_str(action.lp_change),
-                 to_str(action.short_stop_loss_hit), to_str(action.short_percent_change), to_str(action.short_resolved_price)])
+                 to_str(action.short_stop_loss_hit), to_str(action.short_percent_change), to_str(action.short_resolved_price),
+                 to_str(action.refill_base), to_str(action.refill_quote), to_str(action.refill_usdc),])
 
         pass
 
@@ -143,17 +148,18 @@ def export_apr_results(file_path: str, metrics: List[Tuple[str, Dict[str, Decima
              "Rate of Return USD", "Total Net Value USD", "LP Net Value USD", "Total Fee USD", "Total Invested USD",
              "Invest Quote-only Return Rate",
              "Remain Short", "Total Net Value With Short", "Total Return With Short",
-             "Early End Date"])
+             "Total Refill USD"])
 
 
         for (strategy, m) in metrics:
             # strategy = metric[0]
             # m = metric[1]
-            d = m.get("early_end_date")
-            formatted_time = ""
-            if d is not None and not d == ZERO:
-                dt_object = datetime.fromtimestamp(float(d))
-                formatted_time = datetime.strftime(dt_object, '%Y-%m-%d %H:%M:%S')
+
+            # d = m.get("early_end_date")
+            # formatted_time = ""
+            # if d is not None and not d == ZERO:
+            #     dt_object = datetime.fromtimestamp(float(d))
+            #     formatted_time = datetime.strftime(dt_object, '%Y-%m-%d %H:%M:%S')
 
             csvwriter.writerow(
                 [strategy, m[MetricEnum.return_value.name], m[MetricEnum.return_rate.name],
@@ -172,7 +178,7 @@ def export_apr_results(file_path: str, metrics: List[Tuple[str, Dict[str, Decima
                  to_str(m.get("total_fee_usd", None)), to_str(m.get("total_invested_usd", None)),
                  to_str(m.get("quote_return_usd", None)),
                  to_str(m.get("short_amount")), to_str(m.get("total_net_value_with_short")), to_str(m.get("total_gl_with_short")),
-                 formatted_time])
+                 to_str(m.get("total_refill_usd", None)),])
 
     pass
 

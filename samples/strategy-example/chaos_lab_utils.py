@@ -47,16 +47,30 @@ def stochRSI_self_implement(prices: pd.Series, time_period = 14, fastk_period = 
      ‘note that this snippet uses talib RSI so be careful with "very small numbers" (first case)’
     """
     rsi_ = talib.RSI(prices, time_period)
+    print(len(prices))
+    print("====rsi=====")
+    print(len(rsi_))
+    print(','.join(map(str, rsi_.values)))
+    print("============")
 
     _rolling = rsi_.rolling(time_period)
     lowest_rsi = _rolling.min()
     highest_rsi = _rolling.max()
+    print("====highest rsi=====")
+    print(len(highest_rsi))
+    print(','.join(map(str, highest_rsi.values)))
+    print("============")
 
     stoch = 100 * (rsi_ - lowest_rsi)
     _diff = highest_rsi - lowest_rsi
     if _diff.eq(0).any().any():
         _diff += sflt.epsilon
     stoch /= _diff
+
+    print("====stoch=====")
+    print(len(stoch))
+    print(','.join(map(str, stoch.values)))
+    print("============")
 
     if fastd_matype == 0: #SMA
         stochrsi_k = talib.SMA(stoch, fastk_period)

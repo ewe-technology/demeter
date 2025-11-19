@@ -3,6 +3,8 @@ import copy
 from dataclasses import dataclass
 import math
 import multiprocessing
+import random
+import time
 from decimal import Decimal
 from enum import Enum
 from pathlib import Path
@@ -14,7 +16,7 @@ from pandas import Series
 import demeter
 from demeter import (
     Strategy,
-    RowData,
+    Snapshot,
     Actuator,
     TokenInfo,
     MarketInfo,
@@ -35,6 +37,49 @@ from rm_types import RescaleFrequency, TestParams, GlobalParams, RangeStrategy, 
 conservative_fluctuation = Decimal(0.03)
 ZERO = Decimal(0)
 ONE = Decimal(1)
+
+## BTC
+# INIT_PRICE = 93576  # ONE #strat.usdc_prices.iloc[0]
+# FINAL_PRICE = 104722.96
+btcPrices = {
+"2025-01-01": 93576,
+"2025-11-09": 104722.96,
+}
+
+## stable
+INIT_PRICE = 1
+FINAL_PRICE = 1
+
+## ETH price
+ethPrices = {"2022-08-25": 1656.56,
+"2022-12-31": 1196.13,
+"2023-01-01": 1196.13,
+"2023-12-31": 2281.87,
+"2024-01-01": 2281.87,
+"2024-12-31": 3337.78,
+"2025-01-01": 3337.78,
+"2025-11-09": 3583.46,}
+
+def getPrice(tokenName, date):
+    tokenName = tokenName.lower()
+
+    # Normalize date to string 'YYYY-MM-DD' if not already a string
+    if not isinstance(date, str):
+        try:
+            # Works for datetime, date, pandas.Timestamp, etc.
+            date = date.strftime("%Y-%m-%d")
+        except Exception:
+
+            # Last resort: try pandas to_datetime then format
+            date = pd.to_datetime(date).strftime("%Y-%m-%d")
+
+
+    if tokenName == "btc":
+        return btcPrices.get(date)
+    elif tokenName == "eth":
+        return ethPrices.get(date)
+    else:
+        return 1
 
 
 class RemixDaoDcaWeekStratStrategy(Strategy):
@@ -132,7 +177,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
 
         return price_sum / factor_sum
 
-    # def add_dca_fund(self, row: RowData):
+    # def add_dca_fund(self, row: Snapshot):
     #
     #     if row.timestamp.year == self.params.cal_start_datetime.year and row.timestamp.month == self.params.cal_start_datetime.month:
     #         return  # skip first month
@@ -140,7 +185,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
     #     if self.gp.dca_add_if_non_empty or self.dca_quote_to_be_used == _ZERO:
     #         self.dca_quote_to_be_used += self.gp.dca_usdc_amount
 
-    def flip_param(self, row_data: RowData):
+    def flip_param(self, row_data: Snapshot):
         if self.utils.bull:
             self.utils.use_bear_params()
         else:
@@ -182,7 +227,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
         return to_amount, final_quote
 
 
-    def check_and_add_dca(self, row_data: RowData):
+    def check_and_add_dca(self, row_data: Snapshot):
 
         timing = self.gp.dca_add_timing
         if timing == DcaTiming.none:
@@ -444,7 +489,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
         tick_space = self.utils.params.tick_spacing
         return self.utils.ceiling_tick(lower, tick_space), self.utils.floor_tick(upper, tick_space)
 
-    def calculate_strategy_tick_range(self, row_data: RowData, current_tick: int, lower_tick: int, upper_tick: int,
+    def calculate_strategy_tick_range(self, row_data: Snapshot, current_tick: int, lower_tick: int, upper_tick: int,
                                       multiplier: float) -> tuple[int, int]:
 
         lp_row_data: Series = self.utils.get_lp_row_data(row_data)
@@ -456,7 +501,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
             return self.round_to_tick_space(lower_tick, lower_tick + tick_dif)
         pass
 
-    def calculate_strategy_tick_range_atr(self, row_data: RowData, current_tick: int, lower_tick: int, upper_tick: int,
+    def calculate_strategy_tick_range_atr(self, row_data: Snapshot, current_tick: int, lower_tick: int, upper_tick: int,
                                           multiplier: float) -> tuple[int, int]:
 
         lp_row_data: Series = self.utils.get_lp_row_data(row_data)
@@ -468,7 +513,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
             return self.round_to_tick_space(lower_tick, lower_tick + tick_dif)
         pass
 
-    def calculate_tick_bounds(self, row_data: RowData, is_first_lp: bool = False) -> tuple[int, int]:
+    def calculate_tick_bounds(self, row_data: Snapshot, is_first_lp: bool = False) -> tuple[int, int]:
         lp_row_data = self.utils.get_lp_row_data(row_data)
         spread_lower = self.utils.params.tick_spread_lower
         spread_upper = self.utils.params.tick_spread_upper
@@ -479,7 +524,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
         upper = lp_row_data.openTick + spread_upper * self.utils.params.tick_spacing
         return self.round_to_tick_space(low, upper)
 
-    def calculate_tick_bounds_std(self, row_data: RowData, multiplier: float = 2) -> tuple[int, int]:
+    def calculate_tick_bounds_std(self, row_data: Snapshot, multiplier: float = 2) -> tuple[int, int]:
         lp_row_data = self.utils.get_lp_row_data(row_data)
         tick_dif = int(lp_row_data.std_1_hr * multiplier) * self.utils.params.tick_spacing
         tick_dif = max(tick_dif, self.utils.params.tick_spacing)
@@ -487,7 +532,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
         upper = lp_row_data.closeTick + tick_dif
         return self.round_to_tick_space(low, upper)
 
-    def calculate_tick_bounds_atr(self, row_data: RowData, multiplier: float) -> tuple[int, int]:
+    def calculate_tick_bounds_atr(self, row_data: Snapshot, multiplier: float) -> tuple[int, int]:
         lp_row_data = self.utils.get_lp_row_data(row_data)
         tick_dif = int(lp_row_data.atr_1_hr * multiplier) * self.utils.params.tick_spacing
         tick_dif = max(tick_dif, self.utils.params.tick_spacing)
@@ -524,7 +569,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
                 price_actions = [pal]
         return price_actions, bull
 
-    def rescale_work(self, row_data: RowData):
+    def rescale_work(self, row_data: Snapshot):
 
         lp_market: UniLpMarket = self.broker.markets[self.utils.market_key]
 
@@ -654,19 +699,20 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
 
                 if self.params.compound:
                     self.utils.current_position_info, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(
-                        new_tick_lower, new_tick_upper)
+                        new_tick_lower, new_tick_upper, tick=current_tick)
                 else:
                     self.utils.current_position_info, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(
-                        new_tick_lower, new_tick_upper, base, quote)
+                        new_tick_lower, new_tick_upper, base, quote, tick=current_tick)
             except Exception as e:
-                print(f"failed to add liquidity, upper: {new_tick_upper}, lower: {new_tick_lower}")
+                print(f"failed to add liquidity, current tick: {current_tick}, upper: {new_tick_upper}, lower: {new_tick_lower}")
                 raise e
 
             _, current_tick, _, _ = self.utils.get_tick_info(row_data)
 
             if base_used == ZERO and quote_used == ZERO:
+
                 print(
-                    f"\nno position place: {self.utils.current_position_info}, old_position_info: {old_position_info}, "
+                    f"\nno position place ({row_data.timestamp.strftime("%Y-%m-%d %H:%M:%S")}): {self.utils.current_position_info}, old_position_info: {old_position_info}, "
                     f"current_tick: {current_tick}, new_tick_lower: {new_tick_lower}, new_tick_upper: {new_tick_upper}, "
                     f"positions: {lp_market.positions}, base: {base}, quote: {quote}, "
                     f"rebalance_base_fee: {rebalance_base_fee}, rebalance_quote_fee: {rebalance_quote_fee}, balance_data: {self.balance_data}")
@@ -757,11 +803,12 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
             self.last_price = current_price
         pass
 
-    def get_usdc_price(self, row_data: RowData) -> Decimal:
-        lp_row_data = row_data.market_status[self.utils.market_key]
-        return Decimal(lp_row_data.usdc_price)
+    def get_usdc_price(self, row_data: Snapshot) -> Decimal:
+        # lp_row_data = row_data.market_status[self.utils.market_key]
+        # return Decimal(lp_row_data.usdc_price)
+        return ONE
 
-    def first_lp(self, row_data: RowData):
+    def first_lp(self, row_data: Snapshot):
 
         lp_market: UniLpMarket = self.broker.markets[self.utils.market_key]
         # lp_row_data = row_data.market_status[self.utils.market_key]
@@ -769,12 +816,12 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
         if len(lp_market.positions) > 0:
             raise RuntimeError("shouldn't have any position")
 
-        quote_usdc_price = self.init_quote_usd_price = self.get_usdc_price(row_data)
-        quote_amount = self.gp.init_quote_usdc / quote_usdc_price
+        quote_usdc_price = self.init_quote_usd_price = Decimal(getPrice(self.gp.quote_token.name, row_data.timestamp))#Decimal(INIT_PRICE) #self.get_usdc_price(row_data)
+        quote_amount = self.gp.init_quote #self.gp.init_quote_usdc / quote_usdc_price
 
         lp_market.broker.add_to_balance(self.gp.quote_token, quote_amount)
         self.total_invested += quote_amount
-        self.total_invested_usdc += self.gp.init_quote_usdc
+        self.total_invested_usdc += self.gp.init_quote_usdc * quote_usdc_price
 
         if not self.params.initial_swap:
 
@@ -813,7 +860,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
         # print(f"market_status ({type(lp_row_data).__name__}): {str(lp_row_data)}")
         pass
 
-    def calculate_final_result(self, row_data: RowData):
+    def calculate_final_result(self, row_data: Snapshot):
 
         lp_market: UniLpMarket = self.broker.markets[self.utils.market_key]
         _, current_tick, _, _ = self.utils.get_tick_info(row_data)
@@ -864,7 +911,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
         print(f"total dca added: {self.dca_total_added}")
 
         lp_row_data = self.utils.get_lp_row_data(row_data)
-        usd_price = self.final_quote_usd_price = lp_row_data.usdc_price
+        usd_price = self.final_quote_usd_price = Decimal(getPrice(self.gp.quote_token.name, row_data.timestamp))#Decimal(FINAL_PRICE) #ONE #lp_row_data.usdc_price
 
         self.total_fee_usd = self.total_fee * usd_price
         self.total_net_value_usd = self.final_total_net_value * usd_price
@@ -872,12 +919,12 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
 
         pass
 
-    def on_bar(self, row_data: RowData):
+    def on_bar(self, row_data: Snapshot):
         """
         Called after triggers on each iteration, at this time, market are not updated yet(Take uniswap market for example, fee of this minute are not added to positions).
 
         :param row_data: data in this iteration, include current timestamp, price, all columns data, and indicators(such as simple moving average)
-        :type row_data: RowData
+        :type row_data: Snapshot
         """
 
         if self.was_in_range or self.utils.current_position_info is None:
@@ -893,12 +940,12 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
 
         pass
 
-    def after_bar(self, row_data: RowData):
+    def after_bar(self, row_data: Snapshot):
         """
         called after market are updated on each iteration
 
         :param row_data: data in this iteration, include current timestamp, price, all columns data, and indicators(such as simple moving average)
-        :type row_data: RowData
+        :type row_data: Snapshot
         """
 
         # pos_info = self.utils.current_position_info
@@ -1013,9 +1060,10 @@ def run_test(bull_params: RemixDAOParams, bear_params: RemixDAOParams, params: T
         metrics["total_invested_usd"] = strat.total_invested_usdc
 
 
-        init_price = strat.usdc_prices.iloc[0]
-        final_price = strat.usdc_prices.iloc[-1]
+        init_price = getPrice(gp.quote_token.name, params.data_start_date)#INIT_PRICE #ONE #strat.usdc_prices.iloc[0]
+        final_price = getPrice(gp.quote_token.name, params.data_end_date) #FINAL_PRICE #ONE #strat.usdc_prices.iloc[-1]
         metrics["quote_return_usd"] = Decimal(return_rate(init_price, final_price))
+
 
         return metrics
     except Exception as e:
@@ -1040,8 +1088,11 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     demeter.Formats.global_num_format = ".4g"  # change out put formats here
     usdc = TokenInfo(name="usdc", decimal=6)
     eth = TokenInfo(name="eth", decimal=18)
+    wstEth = TokenInfo(name="wsteth", decimal=18)
     btc = TokenInfo(name="btc", decimal=8)
     cbbtc = TokenInfo(name="cbbtc", decimal=8)
+    usdt = TokenInfo(name="usdt", decimal=6)
+    dai = TokenInfo(name="dai", decimal=18)
 
     # base_token, quote_token, init_quote = eth, usdc, Decimal(1000000)  #  USDC
 
@@ -1049,27 +1100,40 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
 
     # base_token, quote_token, init_quote = btc, eth, Decimal(1)  # ETH
     # base_token, quote_token, init_quote = eth, btc, Decimal(1)  # BTC
-    base_token, quote_token, init_quote = cbbtc, btc, Decimal(1)  # BTC/cbBTC
+    # base_token, quote_token, init_quote = cbbtc, btc, Decimal(1)  # BTC/cbBTC
+    # base_token, quote_token, init_quote = usdt, usdc, Decimal(100000)  # USDC/USDT
+    # base_token, quote_token, init_quote = wstEth, eth, Decimal(100)  # wstETH/ETH
+    base_token, quote_token, init_quote = dai, usdt, Decimal(100000)  # dai/usdt
 
-    token0, token1 = btc, cbbtc
-    contract_address, fee, chain_name = "0xe8f7c89C5eFa061e340f2d2F206EC78FD8f7e124", 0.01, ChainType.ethereum.name  # wbtc/cbbtc  2021-09-20
+    # token0, token1 = usdc, usdt
+    # contract_address, fee, chain_name = "0x3416cF6C708Da44DB2624D63ea0AAef7113527C6", 0.01, ChainType.ethereum.name  # usdc/usdt  2021-11-20
+    # token0, token1 = btc, cbbtc
+    # contract_address, fee, chain_name = "0xe8f7c89C5eFa061e340f2d2F206EC78FD8f7e124", 0.01, ChainType.ethereum.name  # wbtc/cbbtc  2021-09-20
+    # token0, token1 = wstEth, eth
+    # contract_address, fee, chain_name = "0x109830a1AAaD605BbF02a9dFA7B0B92EC2FB7dAa", 0.01, ChainType.ethereum.name  # wstEth/eth  2022-08-25
+    token0, token1 = dai, usdt
+    contract_address, fee, chain_name = "0x48DA0965ab2d2cbf1C17C09cFB5Cbe67Ad5B1406", 0.01, ChainType.ethereum.name  # dai/usdt  2022-07-20
+
     # token0, token1 = btc, eth
     # contract_address, fee, chain_name = "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0", 0.05, ChainType.ethereum.name # wbtc/weth  2021-05-13
     # contract_address, fee, chain_name = "0x2f5e87C9312fa29aed5c179E456625D79015299c", 0.05, ChainType.arbitrum.name # wbtc/weth
     # contract_address, fee, chain_name = "0xCBCdF9626bC03E24f779434178A73a0B4bad62eD", 0.3, ChainType.ethereum.name # wbtc/weth
 
+
+## negative tick: token0 is worthless than token1
+
     # token0, token1 = usdc, eth
     # contract_address, fee, chain_name = "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", 0.05, ChainType.ethereum.name  # weth/usdc
     # token0, token1 = eth, usdc
     # contract_address, fee, chain_name = "0xC6962004f452bE9203591991D15f6b388e09E8D0", 0.05, ChainType.arbitrum.name  # weth/usdc
-    _init_quote_usdc = Decimal(1000)
+    _init_quote_usdc = init_quote * INIT_PRICE
     _dca_usdc_amount = Decimal(10000)
 
     # pool = UniV3Pool(btc, eth, _fee, _quote_token)
-    _tick_spacing = int(fee * 200)  # 10  # should simply be fee * 200
+    _tick_spacing = 1 # int(fee * 200)  # 10  # should simply be fee * 200
     _aggressive = True
     _compound = False
-    _folder_prefix = f"cbbtc-const-no-{id}-{quote_token.name.lower()}"
+    _folder_prefix = f"{token0.name.lower()}{token1.name.lower()}-const-{"aggressive" if _aggressive else "conservative"}-{id}-{quote_token.name.lower()}"
     _dca_add_if_non_empty = False
     _dca_timing = DcaTiming.none
     _dca_addon_price_percent = ZERO  # Decimal(0.5)
@@ -1089,7 +1153,8 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
 
     # l: List[int] = [10, 20, 30, 40, 50, 60, 80, 120, 150, 200, 250, 300]
     # l: List[int] = [100, 160, 120, 150, 200, 250, 300]
-    l: List[int] = [3, 4, 5, 6, 7, 8, 9, 10]
+    # l: List[int] = [3, 4, 5, 6, 7, 8, 9, 10]
+    l: List[int] = [2] # [3, 4, 5, 6, 7, 8, 9, 10] if _aggressive else [25, 20, 15, 14, 13, 12, 11, 10]
     _remix_spreads = list(map(lambda i: RescaleParam(init_tick_spread=i, bull_lower_spread=i, bull_upper_spread=i,
                                                      bear_lower_spread=i, bear_upper_spread=i, ), l))
 
@@ -1104,7 +1169,9 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
         rescale_tick_lower_boundary_offset=10,
         # rescale_tick_tolerance=10,
         init_tick_spread=120,
-        tick_spacing=_tick_spacing)
+        tick_spacing=_tick_spacing,
+        tick_gap_lower=1,
+        tick_gap_upper=1, )
     _param_no_offset = RemixDAOParams(  # offset + range
         tick_spread_upper=60,
         tick_spread_lower=60,
@@ -1114,7 +1181,9 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
         rescale_tick_lower_boundary_offset=0,
         # rescale_tick_tolerance=10,
         init_tick_spread=120,
-        tick_spacing=_tick_spacing)
+        tick_spacing=_tick_spacing,
+        tick_gap_lower=1,
+        tick_gap_upper=1, )
 
     _cmp = ""
     if _compound:
@@ -1178,7 +1247,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
             #                    ))
             parameters.append((bull_no_offset, bear_no_offset,
                                TestParams(range_strategy=RangeStrategy.remix_dao, indicator_mult=1,
-                                          report_name=f"{init_quote}{quote_token.name}_{RangeStrategy.remix_dao.name}_no_offset_{bull_no_offset.init_tick_spread}_{bull_no_offset.tick_spread_lower}-{bull_no_offset.tick_spread_upper}_{bear_no_offset.tick_spread_lower}-{bear_no_offset.tick_spread_upper}_{rescale_frequency.name}-{gp.dca_add_if_non_empty}",
+                                          report_name=f"{"agg" if _aggressive else "cons"}-{init_quote}{quote_token.name}_{RangeStrategy.remix_dao.name}_no_offset_{bull_no_offset.init_tick_spread}_{bull_no_offset.tick_spread_lower}-{bull_no_offset.tick_spread_upper}_{bear_no_offset.tick_spread_lower}-{bear_no_offset.tick_spread_upper}_{rescale_frequency.name}-{gp.dca_add_if_non_empty}",
                                           indicator_length_hr=1, to_swap=False,
                                           aggressive=_aggressive, compound=_compound,
                                           rescale_frequency=rescale_frequency,
@@ -1188,7 +1257,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
                                ))
             # parameters.append((no_offset,
             #                    TestParams(range_strategy=RangeStrategy.remix_dao, indicator_mult=1,
-            #                               report_name=f"{init_quote}{quote_token.name}_{RangeStrategy.remix_dao.name}_rebalance_{no_offset.init_tick_spread}_{no_offset.tick_spread_lower}_{no_offset.tick_spread_upper}_{rescale_frequency.name}{_cmp}",
+            #                               report_name=f"{"agg" if _aggressive else "cons"}-{init_quote}{quote_token.name}_{RangeStrategy.remix_dao.name}_rebalance_{no_offset.init_tick_spread}_{no_offset.tick_spread_lower}_{no_offset.tick_spread_upper}_{rescale_frequency.name}{_cmp}",
             #                               indicator_length_hr=1, to_swap=True,
             #                               aggressive=_aggressive, compound=_compound, rescale_frequency=rescale_frequency,
             #                               cal_start_datetime=csd, data_start_date=dsd, data_end_date=ded, folder=folder,
@@ -1271,16 +1340,27 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     pool = UniV3Pool(token0, token1, fee, quote_token)
     market = UniLpMarket(market_key, pool)
     market.data_path = f"../real-data/{contract_address}"
+    # Random short sleep (5–10 seconds) to stagger parallel preload calls and avoid rate limits / I/O spikes
+    try:
+        _delay = random.uniform(2, 6)
+        print(f"stagger preload: sleeping {_delay:.2f}s before loading data for {contract_address}")
+        time.sleep(_delay)
+    except Exception:
+        # If anything goes wrong, proceed without sleeping
+        pass
+
     market.load_data(chain_name, contract_address, dsd, ded)
 
-    contract_address_usdc = "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
-    market_key_usdc = MarketInfo("usdc")
-    pool_usdc = UniV3Pool(usdc, eth, fee, usdc)
-    market_usdc = UniLpMarket(market_key_usdc, pool_usdc)
-    market_usdc.data_path = f"../real-data/{contract_address_usdc}"
-    market_usdc.load_data(chain_name, contract_address_usdc, dsd, ded)
+    # contract_address_usdc = "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
+    # market_key_usdc = MarketInfo("usdc")
+    # pool_usdc = UniV3Pool(usdc, eth, fee, usdc)
+    # market_usdc = UniLpMarket(market_key_usdc, pool_usdc)
+    # market_usdc.data_path = f"../real-data/{contract_address_usdc}"
+    # market_usdc.load_data(chain_name, contract_address_usdc, dsd, ded)
 
-    result = list(map(lambda p: (p[2].report_name, run_test(p[0], p[1], p[2], gp, market.data, market_usdc.data)), parameters))
+    # result = list(map(lambda p: (p[2].report_name, run_test(p[0], p[1], p[2], gp, market.data, market_usdc.data)), parameters))
+    result = list(
+        map(lambda p: (p[2].report_name, run_test(p[0], p[1], p[2], gp, market.data, None)), parameters))
     export_apr_results(f"{folder}/apr_remix_{init_quote}_results.csv", result)
     pass
 
@@ -1314,7 +1394,26 @@ if __name__ == "__main__":
         #(datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2023, 12, 31), "dca", []),
         #  2024/01/01~2024/09/30
         #(datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2024, 11, 11), "dca", []),
-        (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2024, 11, 9), "dca", []),
+        # (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2024, 12, 31), "dca", []),
+
+        # first btc/cbbtc
+        # (datetime(2025, 1, 1, 0, 0, 0), date(2025, 1, 1), date(2025, 11, 9), "dca", []),
+        # first usdc/usdt
+        # (datetime(2021, 11, 20, 0, 0, 0), date(2021, 11, 20), date(2021, 12, 31), "dca", []),
+        # full usdc/usdt
+        # (datetime(2021, 11, 20, 0, 0, 0), date(2021, 11, 20), date(2025, 11, 9), "dca", []),
+        # first wstETH/ETH
+        # (datetime(2022, 8, 25, 0, 0, 0), date(2022, 8, 25), date(2022, 12, 31), "dca", []),
+        # full wstETH/ETH
+        # (datetime(2022, 8, 25, 0, 0, 0), date(2022, 8, 25), date(2025, 11, 9), "dca", []),
+        # first DAI/USDT
+        (datetime(2022, 7, 20, 0, 0, 0), date(2022, 7, 20), date(2022, 12, 31), "dca", []),
+        # full DAI/USDT
+        # (datetime(2022, 7, 20, 0, 0, 0), date(2022, 7, 20), date(2025, 11, 9), "dca", []),
+        # (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2022, 12, 31), "dca", []),
+        # (datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2023, 12, 31), "dca", []),
+        # (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2024, 12, 31), "dca", []),
+        # (datetime(2025, 1, 1, 0, 0, 0), date(2025, 1, 1), date(2025, 11, 9), "dca", []),
         
         # switch run
         # SCENARIO A (SMA20/EMA20)

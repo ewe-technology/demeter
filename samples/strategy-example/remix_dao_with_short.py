@@ -836,9 +836,9 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
 
     l: List[int] = [
         #5,
-        10,
-        15,
-        25, 50, 100, 200
+       # 10,
+       # 15,
+        25, 50, #100, 200
     ]
 
     _remix_spreads = list(map(lambda i: RescaleParam(init_tick_spread=0, bull_lower_spread=i, bull_upper_spread=i,
@@ -1047,15 +1047,20 @@ if __name__ == "__main__":
 
         # ISAO cases
         #  2021/05/04~2024/09/30
-        (datetime(2021, 5, 13, 0, 0, 0), date(2021, 5, 13), date(2024, 12, 31), "dca", []),
+        # (datetime(2021, 5, 13, 0, 0, 0), date(2021, 5, 13), date(2024, 12, 31), "dca", []),
         #  2021/05/04~2021/12/31
-        (datetime(2021, 5, 13, 0, 0, 0), date(2021, 5, 13), date(2021, 12, 31), "dca", []),
+        # (datetime(2021, 5, 13, 0, 0, 0), date(2021, 5, 13), date(2021, 12, 31), "dca", []),
         #  2022/01/01~2022/12/31
-        (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2022, 12, 31), "dca", []),
+        # (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2022, 12, 31), "dca", []),
         #  2023/01/01~2023/12/31
-        (datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2023, 12, 31), "dca", []),
+        # (datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2023, 12, 31), "dca", []),
         #  2024/01/01~2024/09/30
-        (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2024, 12, 31), "dca", []),
+        # (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2024, 12, 31), "dca", []),
+
+        #  2021/01/01~2025/07/31
+        (datetime(2021, 1, 1, 0, 0, 0), date(2021, 1, 1), date(2025, 7, 31), "dca", []),
+        #  2024/01/01~2025/07/31
+        (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2025, 7, 31), "dca", []),
 
         # for WBTC/USDT
         #  2021/06/24~2024/11/11

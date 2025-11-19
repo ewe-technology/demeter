@@ -48,10 +48,14 @@ class GmxV2LpStrategy(Strategy):
         if self.gmx_config.position_open_strategy == IndicatorType.MACD.value:
 
             resampled_prices = resample_data(market_data.longPrice, self.gmx_config.strategy_sample_period)
-            # print(resampled_prices)
+            # print(', '.join(map(str, resampled_prices.values)))
             # self.add_column(MARKET_KEY, "resampled_price", resampled_prices)
 
+
             macd_data, macd_signal, macd_delta = macd_function(resampled_prices, self.gmx_config.macd.fast_period, self.gmx_config.macd.slow_period, self.gmx_config.macd.signal_period)
+            print("------macd_delta--------")
+            print(','.join(map(str, macd_delta.values)))
+            print("------")
             # print(f"{macd_data.keys()}")
             # print(f"{macd_signal.keys()}")
             # print(f"{macd_hist.keys()}")
@@ -60,7 +64,7 @@ class GmxV2LpStrategy(Strategy):
             self.add_column(MARKET_KEY, "macd_delta", macd_delta)
         elif self.gmx_config.position_open_strategy == IndicatorType.RSI.value:
             resampled_prices = resample_data(market_data.longPrice, self.gmx_config.strategy_sample_period)
-
+            # print(', '.join(map(str, resampled_prices.values)))
             # rsi_fastk, rsi_fastd, rsi_delta = stochRSI(resampled_prices, self.gmx_config.stock_rsi.time_period,
             #                                           self.gmx_config.stock_rsi.fastk_period,
             #                                           self.gmx_config.stock_rsi.fastd_period, self.gmx_config.stock_rsi.fastd_matype)
@@ -68,6 +72,11 @@ class GmxV2LpStrategy(Strategy):
                                                                       self.gmx_config.stock_rsi.fastk_period,
                                                                       self.gmx_config.stock_rsi.fastd_period,
                                                                       self.gmx_config.stock_rsi.fastd_matype)
+            print(','.join(map(str, rsi_fastk.values)))
+            print("------")
+            print(','.join(map(str, rsi_fastd.values)))
+            print("------")
+            print(','.join(map(str, rsi_delta.values)))
             # print(f"{macd_data.keys()}")
             # print(f"{macd_signal.keys()}")
             # print(f"{macd_hist.keys()}")

@@ -108,6 +108,7 @@ def get_liquidity_for_amount0(sqrtA: int, sqrtB: int, amount: int) -> int:
         (sqrtA, sqrtB) = (sqrtB, sqrtA)
 
     intermediate = mul_div(sqrtA, sqrtB, 2**96)
+    print(f"intermediate: {intermediate}, sqrtA: {sqrtA}, sqrtB: {sqrtB}")
     return mul_div(amount, intermediate, sqrtB - sqrtA)
 
 
@@ -135,7 +136,7 @@ def get_liquidity(
     sqrtA = get_sqrt_ratio_at_tick(tickA)
     sqrtB = get_sqrt_ratio_at_tick(tickB)
 
-    # print(f"sqrt: {sqrt}, sqrtA: {sqrtA}, sqrtB: {sqrtB}")
+    print(f"sqrt: {sqrt}, sqrtA: {sqrtA}, sqrtB: {sqrtB}")
 
     if sqrtA > sqrtB:
         (sqrtA, sqrtB) = (sqrtB, sqrtA)
