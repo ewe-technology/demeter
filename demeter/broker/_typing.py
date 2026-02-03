@@ -28,9 +28,10 @@ class MarketTypeEnum(Enum):
     uniswap_v3 = 1
     aave_v3 = 2
     deribit_option = 3
-    squeeth = 4
+    # squeeth = 4
     gmx_v1 = 5
-    gmx_v2 = 6
+    gmx_v2_lp = 6
+    gmx_v2_prep = 7
 
 
 class MarketInfo(NamedTuple):
@@ -179,8 +180,9 @@ class ActionTypeEnum(Enum):
     gmx_sell_glp = "gmx_sell_glp"
     gmx2_deposit = "gmx2_deposit"
     gmx2_withdraw = "gmx2_withdraw"
-    gmx2_increase_position = "gmx_increase_position"
-    gmx2_decrease_position = "gmx_decrease_position"
+    gmx2_swap = "gmx2_swap"
+    gmx2_increase_position = "gmx2_increase"
+    gmx2_decrease_position = "gmx2_decrease"
 
     def __str__(self):
         return self.name

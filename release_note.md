@@ -1,3 +1,10 @@
+# Ver 1.2.0
+
+* [Breaking change]Split GmxV2Market to GmxV2PerpMarket and GmxV2LpMarket
+* [Breaking change]Remove squeeth market as it has offline.
+* Fix issues in GmxV2PerpMarket 
+
+
 # Ver 1.1.6
 
 * Add quote token to BacktestConfig class

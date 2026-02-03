@@ -59,14 +59,14 @@ class PricingUtils:
         :param impactFactor: the impact factor
         :param impactExponentFactor: the impact exponent factor
         """
-        hasPositiveImpact: bool = nextDiffUsd < initialDiffUsd
+        balanceWasImproved: bool = nextDiffUsd < initialDiffUsd
 
         deltaDiffUsd: float = Calc.diff(
             PricingUtils.applyImpactFactor(initialDiffUsd, impactFactor, impactExponentFactor),
             PricingUtils.applyImpactFactor(nextDiffUsd, impactFactor, impactExponentFactor),
         )
 
-        priceImpactUsd: float = Calc.toSigned(deltaDiffUsd, hasPositiveImpact)
+        priceImpactUsd: float = Calc.toSigned(deltaDiffUsd, balanceWasImproved)
 
         return priceImpactUsd
 
@@ -76,7 +76,8 @@ class PricingUtils:
         nextDiffUsd: float,
         positiveImpactFactor: float,
         negativeImpactFactor: float,
-        impactExponentFactor: float,
+        positiveImpactExponentFactor: float,
+        negativeImpactExponentFactor: float,
     ) -> float:
         """
         @dev get the price impact USD if there is a crossover in balance
@@ -85,27 +86,16 @@ class PricingUtils:
         short open interest becomes larger than the long open interest
         """
         positiveImpactUsd: float = PricingUtils.applyImpactFactor(
-            initialDiffUsd, positiveImpactFactor, impactExponentFactor
+            initialDiffUsd, positiveImpactFactor, positiveImpactExponentFactor
         )
         negativeImpactUsd: float = PricingUtils.applyImpactFactor(
-            nextDiffUsd, negativeImpactFactor, impactExponentFactor
+            nextDiffUsd, negativeImpactFactor, negativeImpactExponentFactor
         )
         deltaDiffUsd: float = Calc.diff(positiveImpactUsd, negativeImpactUsd)
 
         priceImpactUsd: float = Calc.toSigned(deltaDiffUsd, positiveImpactUsd > negativeImpactUsd)
 
         return priceImpactUsd
-
-    # @staticmethod
-    # def applyImpactFactor(diffUsd: int, impactFactor: int, impactExponentFactor: int) -> int:
-    #     """
-    #     @dev apply the impact factor calculation to a USD diff value
-    #     :param diffUsd: the difference in USD
-    #     :param impactFactor: the impact factor
-    #     :param impactExponentFactor: the impact exponent factor
-    #     """
-    #     exponentValue: int = Precision.applyExponentFactor(diffUsd, impactExponentFactor)
-    #     return Precision.applyFactor(exponentValue, impactFactor)
 
     @staticmethod
     def applyImpactFactor(diffUsd: float, impactFactor: float, impactExponentFactor: float) -> float:
@@ -118,8 +108,6 @@ class PricingUtils:
         # it is pool_value / 10**30 / supply * 10**18
         # 18 is decimal of GM
         return pool_value / supply_amount
-
-
 
 
 class Precision:
