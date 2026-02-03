@@ -410,59 +410,59 @@ class Actuator(object):
         row_id = 0
         data_length = len(index_array)
         self.logger.info("start main loop...")
-        with tqdm(total=data_length, ncols=150) as pbar:
-            for timestamp_index in index_array:
-                current_price = self._token_prices.loc[timestamp_index]
-                # prepare data of a row
-                self.__set_market_snapshot(timestamp_index, False)
-                # execute strategy, and some calculate
-                self._currents.timestamp = timestamp_index.to_pydatetime()
-                snapshot = self.__get_snapshot(timestamp_index, row_id, current_price)
-                try:
-                    self._strategy.before_bar(snapshot)
+        # with tqdm(total=data_length, ncols=150) as pbar:
+        for timestamp_index in index_array:
+            current_price = self._token_prices.loc[timestamp_index]
+            # prepare data of a row
+            self.__set_market_snapshot(timestamp_index, False)
+            # execute strategy, and some calculate
+            self._currents.timestamp = timestamp_index.to_pydatetime()
+            snapshot = self.__get_snapshot(timestamp_index, row_id, current_price)
+            try:
+                self._strategy.before_bar(snapshot)
 
-                    if self._strategy.triggers:
-                        for trigger in self._strategy.triggers:
-                            if trigger.when(snapshot):
-                                trigger.do(snapshot)
-                    # remove outdate triggers
-                    self._strategy.triggers = [x for x in self._strategy.triggers if not x.is_out_date(self._currents.timestamp)]
-                    for market in self.broker.markets.values():
-                        if market.is_open and market.open is not None:
-                            market.open(snapshot)
+                if self._strategy.triggers:
+                    for trigger in self._strategy.triggers:
+                        if trigger.when(snapshot):
+                            trigger.do(snapshot)
+                # remove outdate triggers
+                self._strategy.triggers = [x for x in self._strategy.triggers if not x.is_out_date(self._currents.timestamp)]
+                for market in self.broker.markets.values():
+                    if market.is_open and market.open is not None:
+                        market.open(snapshot)
 
-                    self._strategy.on_bar(snapshot)
+                self._strategy.on_bar(snapshot)
 
-                    # important, take uniswap market for example,
-                    # if liquidity has changed in the head of this minute,
-                    # this will add the new liquidity to total_liquidity in current minute.
-                    self.__set_market_snapshot(timestamp_index, True)
+                # important, take uniswap market for example,
+                # if liquidity has changed in the head of this minute,
+                # this will add the new liquidity to total_liquidity in current minute.
+                self.__set_market_snapshot(timestamp_index, True)
 
-                    # update broker status, e.g. re-calculate fee
-                    # and read the latest status from broker
-                    for market in self._broker.markets.values():
-                        market.update()
-                    after_snapshot = self.__get_snapshot(timestamp_index, row_id, current_price)
-                    self._strategy.after_bar(after_snapshot)
-                    self.notify(self.strategy, self._currents.actions)
-                except (RuntimeError, AssertionError) as e:
-                    # notify what has already happened
-                    self.notify(self.strategy, self._currents.actions)
-                    # equal means after_snapshot has already set in this loop, so error should in after_bar or notify
-                    # will use the latest snapshot
-                    if snapshot.timestamp == after_snapshot.timestamp:
-                        self._strategy.on_error(after_snapshot, e)
-                    else:  # after_snapshot is the old loop, use snapshot which updated in this loop
-                        self._strategy.on_error(snapshot, e)
+                # update broker status, e.g. re-calculate fee
+                # and read the latest status from broker
+                for market in self._broker.markets.values():
+                    market.update()
+                after_snapshot = self.__get_snapshot(timestamp_index, row_id, current_price)
+                self._strategy.after_bar(after_snapshot)
+                self.notify(self.strategy, self._currents.actions)
+            except (RuntimeError, AssertionError) as e:
+                # notify what has already happened
+                self.notify(self.strategy, self._currents.actions)
+                # equal means after_snapshot has already set in this loop, so error should in after_bar or notify
+                # will use the latest snapshot
+                if snapshot.timestamp == after_snapshot.timestamp:
+                    self._strategy.on_error(after_snapshot, e)
+                else:  # after_snapshot is the old loop, use snapshot which updated in this loop
+                    self._strategy.on_error(snapshot, e)
 
-                account_status = self._broker.get_account_status(current_price, timestamp_index.to_pydatetime())
-                pbar.set_description(desc=f"{timestamp_index}: {account_status.net_value:.2f} {self._broker.quote_token.name}", refresh=False)
-                self._account_status_list.append(account_status)
-                # notify actions in current loop
-                self._currents.actions = []
-                # move forward for process bar and index
-                pbar.update()
-                row_id += 1
+            account_status = self._broker.get_account_status(current_price, timestamp_index.to_pydatetime())
+            # pbar.set_description(desc=f"{timestamp_index}: {account_status.net_value:.2f} {self._broker.quote_token.name}", refresh=False)
+            self._account_status_list.append(account_status)
+            # notify actions in current loop
+            self._currents.actions = []
+            # move forward for process bar and index
+            # pbar.update()
+            row_id += 1
 
         self.logger.info("main loop finished")
         self.__backtest_finished = True

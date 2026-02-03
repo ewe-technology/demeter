@@ -677,6 +677,7 @@ class UniLpMarket(Market):
         :return: added get_position, base token used, quote token used, liquidity
         :rtype: (PositionInfo, Decimal, Decimal, int)
         """
+        # print(f"original lower_tick: {lower_tick}, original upper_tick: {upper_tick}, pool tick spacing: {self.pool_info.tick_spacing}")
         if trim_tick:
             lower_tick = nearest_usable_tick(lower_tick, self.pool_info.tick_spacing)
             upper_tick = nearest_usable_tick(upper_tick, self.pool_info.tick_spacing)
@@ -687,6 +688,7 @@ class UniLpMarket(Market):
         if sqrt_price_x96 == -1 and tick != -1:
             sqrt_price_x96 = tick_to_sqrt_price_x96(tick)
 
+        # print(f"trimmed lower: {lower_tick}, trimmed upper: {upper_tick}, sqrt_price_x96: {sqrt_price_x96}")
         base_max_amount = self.broker.get_token_balance(self.base_token) if base_max_amount is None else base_max_amount
         quote_max_amount = (
             self.broker.get_token_balance(self.quote_token) if quote_max_amount is None else quote_max_amount

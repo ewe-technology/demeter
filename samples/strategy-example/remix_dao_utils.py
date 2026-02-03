@@ -8,7 +8,11 @@ from pandas import Series
 from demeter import Snapshot, MarketInfo, Trigger
 from demeter.result import MetricEnum, annualized_return, return_rate, sharpe_ratio, volatility, max_draw_down, \
     return_value, alpha_beta
-from demeter.uniswap import UniLpMarket, PositionInfo, Position
+from demeter.uniswap import UniLpMarket, PositionInfo, Position, V3CoreLib
+from rm_types import GlobalParams
+from export_file import ExportData
+from math_const import ZERO
+from datetime import datetime
 
 
 # class StrategyInfo:
@@ -38,7 +42,8 @@ class RemixDAOParams:
                  tick_lower_boundary_offset=0,
                  tick_spread_lower=60, tick_spread_upper=60, tick_upper_boundary_offset=0, init_tick_spread=75,
                  tick_spacing: int = 10,
-                 tick_gap_upper: int = 1, tick_gap_lower: int = 1):
+                 tick_gap_upper: int = 1, tick_gap_lower: int = 1,
+                 price_range_change: Decimal = Decimal(0), range_rescale_buffer_percent: Decimal = Decimal(0.05)):
         self.rescale_tick_lower_boundary_offset = rescale_tick_lower_boundary_offset
         self.rescale_tick_tolerance = rescale_tick_tolerance
         self.rescale_tick_upper_boundary_offset = rescale_tick_upper_boundary_offset
@@ -50,6 +55,9 @@ class RemixDAOParams:
         self.init_tick_spread = init_tick_spread
         self.tick_gap_upper = tick_gap_upper
         self.tick_gap_lower = tick_gap_lower
+
+        self.price_range_change = price_range_change
+        self.range_rescale_buffer_percent = range_rescale_buffer_percent # 0.05 = 5%
         pass
 
 
@@ -66,6 +74,50 @@ class RemixDaoUtils:
         self.params = bull_params if start_with_bull_param else bear_params # default to bull
         self.printed = False
         self.current_position_info: PositionInfo | None = None
+        self.one_side_position_info: PositionInfo | None = None
+
+
+    @staticmethod
+    def yearly_snapshot(gp: GlobalParams, lp_market: UniLpMarket, row_data: Snapshot, current_price: Decimal,
+                        current_tick: int, current_position: PositionInfo, idle_base: Decimal, idle_quote: Decimal, total_base_fee: Decimal,
+                        total_quote_fee: Decimal) -> ExportData:
+        ed = ExportData()
+        ed.time = row_data.timestamp
+        ed.price = current_price
+        ed.tick = current_tick
+
+        if current_position is not None:
+            ed.tick_lower, ed.tick_upper = current_position[0], current_position[1]
+            pos = lp_market.positions[current_position]
+            ed.price_lower, ed.price_upper = pos.lower_price, pos.upper_price
+            ed.new_tick_lower, ed.new_tick_upper = current_position[0], current_position[1]
+            status = lp_market.get_position_status(current_position)
+            if gp.token1 == lp_market.base_token:
+                ed.base_removed, ed.quote_removed = status.amount1, status.amount0
+            else:
+                ed.base_removed, ed.quote_removed = status.amount0, status.amount1
+        else:
+            ed.tick_lower, ed.tick_upper = None, None
+            ed.price_lower, ed.price_upper = None, None
+            ed.new_tick_lower, ed.new_tick_upper = None, None
+            ed.base_removed, ed.quote_removed = ZERO, ZERO
+
+        ed.base_fee, ed.quote_fee = ZERO, ZERO
+
+        ed.base_added, ed.quote_added = ZERO, ZERO
+        ed.was_in_range = False
+        ed.total_base_fee, ed.total_quote_fee = total_base_fee, total_quote_fee
+
+        ed.lp_net_value = lp_market.get_market_balance().net_value
+        ed.lp_net_value_with_idle = (idle_base * ed.price) + idle_quote + ed.lp_net_value
+        ed.quote_balance = lp_market.broker.get_token_balance(gp.quote_token)
+        ed.base_balance = lp_market.broker.get_token_balance(gp.base_token)
+        ed.total_net_value = ed.lp_net_value + ed.quote_balance + (ed.base_balance * ed.price)
+        ed.total_net_value_base = ed.total_net_value / ed.price
+
+        ed.param_type = "none"
+        return ed
+
 
     def use_bull_params(self):
         self.bull = True
@@ -177,16 +229,19 @@ class RemixDaoUtils:
             return (base_floor + 1) * tick_spacing
         return base_floor * tick_spacing
 
-    def calculate_non_one_tick_spacing_rescale_tick_boundary(self, tick_spacing, current_tick, current_tick_lower):
+    def calculate_non_one_tick_spacing_rescale_tick_boundary(self, tick_spacing: int, current_tick: int, current_tick_lower: int, use_min_tick_space: bool = False):
         # tick_spread_upper, tick_spread_lower, _, _, rescale_tick_upper_boundary_offset, rescale_tick_lower_boundary_offset, _, _ = get_rescale_info(strategy_address, controller_address)
 
-        if current_tick < current_tick_lower:
-            tick_spread = self.params.tick_spread_lower
-
+        if use_min_tick_space:
+            tick_distance = tick_spacing
         else:
-            tick_spread = self.params.tick_spread_upper
+            if current_tick < current_tick_lower:
+                tick_spread = self.params.tick_spread_lower
 
-        tick_distance = tick_spacing if tick_spread == 0 else 2 * tick_spread * tick_spacing
+            else:
+                tick_spread = self.params.tick_spread_upper
+
+            tick_distance = tick_spacing if tick_spread == 0 else 2 * tick_spread * tick_spacing
 
         if current_tick < current_tick_lower:
             new_tick_lower = RemixDaoUtils.ceiling_tick(current_tick, tick_spacing) + (
@@ -230,7 +285,7 @@ class RemixDaoUtils:
     pass
 
     def verify_and_get_new_rescale_tick_boundary(self, row_data: Snapshot, was_in_range: bool,
-                                                 last_rescale_tick: int) -> Tuple[bool, int, int]:
+                                                 last_rescale_tick: int, use_min_tick_space: bool = False) -> Tuple[bool, int, int]:
         # Get Tick Info
         tick_spacing, current_tick, current_tick_lower, current_tick_upper = self.get_tick_info(row_data)
 
@@ -261,7 +316,7 @@ class RemixDaoUtils:
                 )
             else:
                 new_tick_lower, new_tick_upper = self.calculate_non_one_tick_spacing_rescale_tick_boundary(
-                    tick_spacing, current_tick, current_tick_lower
+                    tick_spacing, current_tick, current_tick_lower, use_min_tick_space
                 )
 
         # Verify Rescale Result
@@ -300,7 +355,7 @@ class RemixDaoUtils:
 
 def performance_metrics_for_dca(
     values: pd.Series, dca_total: float, annualized_risk_free_rate=0.03, benchmark: pd.Series | None = None,
-        total_fee: Decimal | None = None
+        total_fee: Decimal | None = None, idle_amount: Decimal = ZERO,
 ) -> Dict[str, Decimal]:
     """
     Calculate all performance metrics
@@ -314,7 +369,7 @@ def performance_metrics_for_dca(
     values = values.apply(lambda x: float(x))
 
     init = values.iloc[0] + dca_total
-    final = values.iloc[-1]
+    final = values.iloc[-1] #+ float(idle_amount)
 
     start = values.index[0]
     start1 = values.index[1]
@@ -351,7 +406,9 @@ def performance_metrics_for_dca(
         MetricEnum.annualized_benchmark_rate.name: benchmark_apr,
         "total_fee_return": fee_return,
     }
-    return {k: v for k, v in metric_map.items()}
+    metrics = {k: v for k, v in metric_map.items()}
+    metrics["idle_amount"] = idle_amount
+    return metrics
 
 class MonthlyTrigger(Trigger):
 
@@ -374,3 +431,10 @@ class WeeklyTrigger(Trigger):
     def when(self, row_data: Snapshot) -> bool:
         ts = row_data.timestamp
         return ts.weekday() == self._day and ts.hour == 0 and ts.minute == 0
+
+_TEN = Decimal(10)
+def near_zero(x: Decimal, decimal_place: int) -> bool:
+    return abs(x) < _TEN ** -decimal_place
+
+def is_first_minute_of_hour(ts: datetime) -> bool:
+    return ts.minute == 0

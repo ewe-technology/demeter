@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from decimal import Decimal
 from enum import Enum
 
@@ -13,9 +13,47 @@ class RangeStrategy(str, Enum):
     atr = "atr"
 
 
-class RescaleFrequency(str, Enum):
-    hourly = "hourly"
-    daily = "daily"
+# class RescaleFrequency(str, Enum):
+#     minute1 = "1m"
+#     minute5 = "5m"
+#     minute15 = "15m"
+#     minute30 = "30m"
+#     hourly = "1h"
+#     daily = "1d"
+
+class RescaleFrequency(Enum):
+    minute1 = timedelta(minutes=1)
+    minute5 = timedelta(minutes=5)
+    minute15 = timedelta(minutes=15)
+    minute30 = timedelta(minutes=30)
+    hourly = timedelta(hours=1)
+    hour4 = timedelta(hours=4)
+    hour8 = timedelta(hours=8)
+    hour12 = timedelta(hours=12)
+    daily = timedelta(days=1)
+
+    def __str__(self) -> str:
+        match self:
+            case RescaleFrequency.minute1:
+                return "1m"
+            case RescaleFrequency.minute5:
+                return "5m"
+            case RescaleFrequency.minute15:
+                return "15m"
+            case RescaleFrequency.minute30:
+                return "30m"
+            case RescaleFrequency.hourly:
+                return "1h"
+            case RescaleFrequency.hour4:
+                return "4h"
+            case RescaleFrequency.hour8:
+                return "8h"
+            case RescaleFrequency.hour12:
+                return "12h"
+            case RescaleFrequency.daily:
+                return "1d"
+        return ""
+
 
 class DcaTiming(str, Enum):
     base_only = "base_only"
@@ -82,7 +120,9 @@ class TestParams:
                  rescale_frequency: RescaleFrequency = RescaleFrequency.hourly,
                  initial_swap: bool = True,
                  flip_param_dates: list[datetime] = [],
-                 start_with_bull_param: bool = True):
+                 start_with_bull_param: bool = True,
+                 initial_type: int = 1,
+                 starting_mark_price: Decimal = ZERO):
         self.range_strategy = range_strategy
         self.indicator_mult = indicator_mult
         self.report_name = report_name
@@ -103,6 +143,8 @@ class TestParams:
         self.initial_swap = initial_swap
         self.flip_param_dates = flip_param_dates
         self.start_with_bull_param = start_with_bull_param
+        self.initial_type = initial_type # 1: even balance, 0: dont swap, -1: all swap
+        self.starting_mark_price = starting_mark_price
         
 
 # class PriceAction(Enum):

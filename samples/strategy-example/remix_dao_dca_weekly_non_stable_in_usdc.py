@@ -1152,17 +1152,17 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
 
     # base_token, quote_token, init_quote = eth, usdc, Decimal(1000000)  #  USDC
 
-    # base_token, quote_token, init_quote = eth, usdc, Decimal(10000)  # DCA USDC
+    base_token, quote_token, init_quote = eth, usdc, Decimal(100000)  # DCA USDC
 
     # base_token, quote_token, init_quote = btc, eth, Decimal(1)  # ETH
     # base_token, quote_token, init_quote = eth, btc, Decimal(1)  # BTC
     # base_token, quote_token, init_quote = cbbtc, btc, Decimal(1)  # BTC/cbBTC
-    base_token, quote_token, init_quote = usdt, usdc, Decimal(2000)  # USDC/USDT
+    # base_token, quote_token, init_quote = usdt, usdc, Decimal(2000)  # USDC/USDT
     # base_token, quote_token, init_quote = wstEth, eth, Decimal(100)  # wstETH/ETH
     # base_token, quote_token, init_quote = dai, usdt, Decimal(2000)  # dai/usdt
 
-    token0, token1 = usdc, usdt
-    contract_address, fee, chain_name = "0x3416cF6C708Da44DB2624D63ea0AAef7113527C6", 0.01, ChainType.ethereum.name  # usdc/usdt  2021-11-20
+    # token0, token1 = usdc, usdt
+    # contract_address, fee, chain_name = "0x3416cF6C708Da44DB2624D63ea0AAef7113527C6", 0.01, ChainType.ethereum.name  # usdc/usdt  2021-11-20
     # token0, token1 = btc, cbbtc
     # contract_address, fee, chain_name = "0xe8f7c89C5eFa061e340f2d2F206EC78FD8f7e124", 0.01, ChainType.ethereum.name  # wbtc/cbbtc  2021-09-20
     # token0, token1 = wstEth, eth
@@ -1178,18 +1178,19 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
 
 ## negative tick: token0 is worthless than token1
 
-    # token0, token1 = usdc, eth
-    # contract_address, fee, chain_name = "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", 0.05, ChainType.ethereum.name  # weth/usdc
+    token0, token1 = usdc, eth
+    contract_address, fee, chain_name = "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", 0.05, ChainType.ethereum.name  # weth/usdc
     # token0, token1 = eth, usdc
     # contract_address, fee, chain_name = "0xC6962004f452bE9203591991D15f6b388e09E8D0", 0.05, ChainType.arbitrum.name  # weth/usdc
     _init_quote_usdc = init_quote * INIT_PRICE
     _dca_usdc_amount = Decimal(10000)
 
     # pool = UniV3Pool(btc, eth, _fee, _quote_token)
-    _tick_spacing = 1 # int(fee * 200)  # 10  # should simply be fee * 200
-    _aggressive = False
+    _is_stable = False
+    _tick_spacing = 1 if _is_stable else int(fee * 200)  # 10  # should simply be fee * 200
+    _aggressive = True
     _compound = False
-    _folder_prefix = f"{token0.name.lower()}{token1.name.lower()}-short-{"aggressive" if _aggressive else "conservative"}-{quote_token.name.lower()}"
+    _folder_prefix = f"{token0.name.lower()}{token1.name.lower()}-{"aggressive" if _aggressive else "conservative"}-{quote_token.name.lower()}"
     _dca_add_if_non_empty = False
     _dca_timing = DcaTiming.none
     _dca_addon_price_percent = ZERO  # Decimal(0.5)
@@ -1210,17 +1211,19 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     # l: List[int] = [10, 20, 30, 40, 50, 60, 80, 120, 150, 200, 250, 300]
     # l: List[int] = [100, 160, 120, 150, 200, 250, 300]
     # l: List[int] = [3, 4, 5, 6, 7, 8, 9, 10]
-    l: List[int] = [1]
+    l: List[int] = [
+        15, 20, 30, 60, 120, 180
+    ]
     # l: List[int] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]  # if _aggressive else [25, 20, 15, 14, 13, 12, 11, 10]
     _remix_spreads = list(map(lambda i: RescaleParam(init_tick_spread=i, bull_lower_spread=i, bull_upper_spread=i,
                                                      bear_lower_spread=i, bear_upper_spread=i, ), l))
 
     # _rescale_frequencies = [RescaleFrequency.minute5, RescaleFrequency.minute15, RescaleFrequency.minute30, RescaleFrequency.hourly]  # RescaleFrequency.hourly,
-    _rescale_frequencies = [RescaleFrequency.minute15, ]
+    _rescale_frequencies = [RescaleFrequency.hourly, ]
     # _rescale_frequencies = [RescaleFrequency.minute5, RescaleFrequency.minute15, ]
     # _rescale_frequencies = [RescaleFrequency.minute30, RescaleFrequency.hourly]  # RescaleFrequency.hourly,
 
-    _init_type: int = 0
+    _init_type: int = 1
     _param_with_offset = RemixDAOParams(  # offset + range
         tick_spread_upper=60,
         tick_spread_lower=60,
@@ -1459,6 +1462,16 @@ if __name__ == "__main__":
         #(datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2024, 11, 11), "dca", []),
         # (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2024, 12, 31), "dca", []),
 
+
+        #  2023/01/01~2023/12/31
+       (datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2023, 12, 31), "dca", []),
+        #  2024/01/01~2024/09/30
+        (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2024, 12, 31), "dca", []),
+        (datetime(2025, 1, 1, 0, 0, 0), date(2025, 1, 1), date(2025, 11, 30), "dca", []),
+        (datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2024, 12, 31), "dca", []),
+        (datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2025, 11, 30), "dca", []),
+
+
         # first btc/cbbtc
         # (datetime(2025, 1, 1, 0, 0, 0), date(2025, 1, 1), date(2025, 11, 9), "dca", []),
         # first usdc/usdt
@@ -1466,7 +1479,7 @@ if __name__ == "__main__":
         # full usdc/usdt
         # (datetime(2021, 11, 20, 0, 0, 0), date(2021, 11, 20), date(2025, 11, 9), "dca", []),
         # short
-        (datetime(2025, 11, 27, 0, 0, 0), date(2025, 11, 27), date(2025, 11, 30), "dca", []),
+        # (datetime(2025, 11, 27, 0, 0, 0), date(2025, 11, 27), date(2025, 11, 30), "dca", []),
         # first wstETH/ETH
         # (datetime(2022, 8, 25, 0, 0, 0), date(2022, 8, 25), date(2022, 12, 31), "dca", []),
         # full wstETH/ETH
