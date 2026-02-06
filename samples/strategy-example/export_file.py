@@ -63,6 +63,7 @@ class ExportData(object):
 
         self.swap_fee_base: Decimal = ZERO
         self.swap_fee_quote: Decimal = ZERO
+        self.is_lp_removed: bool = False
 
         # self.lock_count: int = 0
         # self.rescale_count: int = 0
@@ -96,7 +97,7 @@ def export_file(file_path: str, actions: List[ExportData]):
              "price_lower", "price_upper",
              # "was_in_range",
              "total_base_fee", "total_quote_fee",
-             "swap_fee_base", "swap_fee_quote",
+             "swap_fee_base", "swap_fee_quote", "is_lp_removed",
              #"param_type",
              "short_amount", "short_price", "short_stop_loss", "lp_change",
              "stop_loss_hit", "short_percent_change", "short_resolved_price",
@@ -115,7 +116,7 @@ def export_file(file_path: str, actions: List[ExportData]):
                  to_str(action.price_lower), to_str(action.price_upper),
                  # action.was_in_range,
                  to_str(action.total_base_fee), to_str(action.total_quote_fee),
-                 to_str(action.swap_fee_base), to_str(action.swap_fee_quote),
+                 to_str(action.swap_fee_base), to_str(action.swap_fee_quote), action.is_lp_removed,
                  #action.param_type,
                  to_str(action.short_amount), to_str(action.short_price), to_str(action.short_stop_loss), to_str(action.lp_change),
                  to_str(action.short_stop_loss_hit), to_str(action.short_percent_change), to_str(action.short_resolved_price),

@@ -122,6 +122,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.total_lock_count: int = 0
         self.upper_rescale_count: int = 0
         self.lower_rescale_count: int = 0
+        self.out_of_range_count: int = 0
         # self.total_pause_minutes: int = 0
         self.last_rescale_side: int = 0  # 1 all base, -1 all quote, 0 initial
         self.invest_token0: Decimal = ZERO
@@ -131,6 +132,10 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.leftover_base: Decimal = ZERO
         self.leftover_quote: Decimal = ZERO
         self.out_of_fund_date: datetime | None = None
+        self.rescale_range: tuple[Decimal, Decimal] = (ZERO, ZERO)
+        self.removed_base_fee = ZERO
+        self.removed_quote_fee = ZERO
+        self.is_lp_removed = False
 
 
     def initialize(self):
@@ -280,175 +285,45 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             lp_row_data = row_data.market_status[self.utils.market_key]
             return Decimal(lp_row_data.usdc_price)
 
-    def calculate_range(self, lp_market: UniLpMarket, current_price: Decimal) -> tuple[Decimal, Decimal, int, int]:
-        """
-        using the self.starting_range_price as starting price, use `Decimal(self.utils.params.init_tick_spread) / HUNDRED` as percentage
-        calculate range sections from starting price using percentage, 
-        the first range below starting price is low1 = starting_range_price * (ONE - percent), upper = starting_range_price
-        the second range below is low2 = low1 * (ONE - percent), upper = low1 
-        and the logic follows and vice versa for ranges above the starting price
-        
-        using the provided current_price, find the range section that current_price falls into and return the lower and upper price of that range and the respective tick and the tick must be order from low to high
-        """
+    def calculate_range(self, lp_market: UniLpMarketV2, current_price: Decimal) -> tuple[Decimal, Decimal, int, int]:
+        percent = Decimal(self.utils.params.init_tick_spread) / HUNDRED / Decimal(2)
+        price_dif = current_price * percent
+        upper_price, lower_price = current_price + price_dif, current_price - price_dif
+        lower_tick = lp_market.price_to_raw_tick(lower_price)
+        upper_tick = lp_market.price_to_raw_tick(upper_price)
 
-        percent = Decimal(self.utils.params.init_tick_spread) / HUNDRED
-        starting_range_price = self.params.starting_mark_price
-        if current_price >= starting_range_price:
-            # Above or equal to starting price
-            # Sections: [starting * (1+p)^n, starting * (1+p)^(n+1)]
-            # current_price = starting * (1+p)^n  => n = log(current/starting) / log(1+p)
-            # We want n such that starting * (1+p)^n <= current_price < starting * (1+p)^(n+1)
-            # except if current_price == starting_range_price, it might be the upper bound of the first range below
-            # but the comment says "the first range below starting price is low1 = starting_range_price * (ONE - percent), upper = starting_range_price"
-            # so starting_range_price is the upper bound of the first range BELOW.
-            # And for ranges ABOVE, I assume starting_range_price is the lower bound of the first range ABOVE.
-            
-            # Special case for current_price == starting_range_price
-            # If we want it to fall into the first range below as per "upper = starting_range_price", 
-            # then we should check current_price > self.starting_range_price here.
-            
-            if current_price == starting_range_price:
-                lower_price = starting_range_price * (ONE - percent)
-                upper_price = starting_range_price
-            else: # current_price > starting_range_price
-                n = 0
-                lower_price = starting_range_price
-                upper_price = starting_range_price * (ONE + percent)
-                while not (lower_price <= current_price < upper_price):
-                    lower_price = upper_price
-                    upper_price = lower_price * (ONE + percent)
-                    n += 1
-                    if n > 1000: # Safety break
-                        break
-        else: # current_price < starting_range_price
-            upper_price = starting_range_price
-            lower_price = starting_range_price * (ONE - percent)
-            n = 0
-            while not (lower_price <= current_price < upper_price):
-                upper_price = lower_price
-                lower_price = upper_price * (ONE - percent)
-                n += 1
-                if n > 1000: # Safety break
-                    break
-
-        lower_tick = lp_market.price_to_tick(lower_price)
-        upper_tick = lp_market.price_to_tick(upper_price)
-        
         if lower_tick > upper_tick:
             lower_tick, upper_tick = upper_tick, lower_tick
-            
-        lower_tick, upper_tick = self.round_to_tick_space(lower_tick, upper_tick)
 
+        # print(f"before rounding tick {lower_tick}, {upper_tick}")
+        lower_tick, upper_tick = self.round_to_tick_space(lower_tick, upper_tick)
+        # print(f"after rounding tick {lower_tick}, {upper_tick}")
         return lower_price, upper_price, lower_tick, upper_tick
 
-    def check_rebalance(self, lp_market: UniLpMarket, current_price: Decimal) -> tuple[bool, Decimal, Decimal, int, int]:
-        pos_info = self.utils.current_position_info
-        token0, token1 = lp_market.get_position_amount(pos_info)
-        rebalance = False
-        if lp_market.pool_info.is_token0_quote:
-            rebalance = self.is_base_zero(token1) or self.is_quote_zero(token0)
+    def check_rebalance(self, lp_market: UniLpMarketV2, current_price: Decimal) -> tuple[bool, Decimal, Decimal, int, int]:
+        # token0, token1 = lp_market.get_position_amount(self.utils.current_position_info)
+        # rebalance = False
+        # if lp_market.pool_info.is_token0_quote:
+        #     rebalance = self.is_base_zero(token1) or self.is_quote_zero(token0)
+        # else:
+        #     rebalance = self.is_base_zero(token0) or self.is_quote_zero(token1)
+        #
+        # if rebalance:
+        #     lower_price, upper_price, lower_tick, upper_tick = self.calculate_range(lp_market, current_price)
+        #     return True, lower_price, upper_price, lower_tick, upper_tick
+        # else:
+        #     return False, ZERO, ZERO, ZERO, ZERO
+        if current_price < self.rescale_range[0] or current_price > self.rescale_range[1]:
+
+            lower_price, upper_price, lower_tick, upper_tick = self.calculate_range(lp_market, current_price)
+            return True, lower_price, upper_price, lower_tick, upper_tick
         else:
-            rebalance = self.is_base_zero(token0) or self.is_quote_zero(token1)
+            return False, ZERO, ZERO, 0, 0
 
-        if rebalance:
-            # price has crossed out of current range
-            pos = lp_market.positions[pos_info]
-            lower_range_price = pos.lower_price
-            upper_range_price = pos.upper_price
-            range_diff = upper_range_price - lower_range_price
-            buffer_pct = self.utils.params.range_rescale_buffer_percent
-
-            if current_price < lower_range_price:
-                # price dropped below range
-                buffer_price = lower_range_price - (range_diff * buffer_pct)
-                if current_price <= buffer_price:
-                    # crossed the percentage of the range, rescale to the specific range
-                    # but first check if it's far enough to check the buffer of the new range
-                    price_in_range_lower, price_in_range_upper, _, _ = self.calculate_range(lp_market, current_price)
-                    new_range_diff = price_in_range_upper - price_in_range_lower
-                    new_buffer_price = price_in_range_upper - (new_range_diff * buffer_pct)
-
-                    if current_price <= new_buffer_price:
-                        # crossed the buffer of the target range, use target range
-                        lower_price, upper_price, lower_tick, upper_tick = self.calculate_range(lp_market, current_price)
-                    else:
-                        # not crossed the buffer of the target range, move to the range above it
-                        target_price = price_in_range_upper + Decimal("0.000001")
-                        lower_price, upper_price, lower_tick, upper_tick = self.calculate_range(lp_market, target_price)
-
-                    if lower_tick == pos_info[0] and upper_tick == pos_info[1]:
-                        return False, ZERO, ZERO, ZERO, ZERO
-                    return True, lower_price, upper_price, lower_tick, upper_tick
-                else:
-
-                    # Range above the range price is in
-                    # Price slightly above the upper bound of the range price is in
-                    # We need the price upper bound of the range the price is in
-                    # calculate_range returns (lower_price, upper_price, lower_tick, upper_tick)
-                    price_in_range_lower, price_in_range_upper, _, _ = self.calculate_range(lp_market, current_price)
-                    target_price = price_in_range_upper + Decimal("0.000001")
-                    lower_price, upper_price, lower_tick, upper_tick = self.calculate_range(lp_market, target_price)
-                    
-                    if lower_tick == pos_info[0] and upper_tick == pos_info[1]:
-                        return False, ZERO, ZERO, ZERO, ZERO
-                    return True, lower_price, upper_price, lower_tick, upper_tick
-
-            elif current_price > upper_range_price:
-                # price rose above range
-                buffer_price = upper_range_price + (range_diff * buffer_pct)
-                if current_price >= buffer_price:
-                    # crossed the percentage of the range, rescale to the specific range
-                    # but first check if it's far enough to check the buffer of the new range
-                    price_in_range_lower, price_in_range_upper, _, _ = self.calculate_range(lp_market, current_price)
-                    new_range_diff = price_in_range_upper - price_in_range_lower
-                    new_buffer_price = price_in_range_lower + (new_range_diff * buffer_pct)
-
-                    if current_price >= new_buffer_price:
-                        # crossed the buffer of the target range, use target range
-                        lower_price, upper_price, lower_tick, upper_tick = self.calculate_range(lp_market, current_price)
-                    else:
-                        # not crossed the buffer of the target range, move to the range below it
-                        target_price = price_in_range_lower - Decimal("0.000001")
-                        lower_price, upper_price, lower_tick, upper_tick = self.calculate_range(lp_market, target_price)
-
-                    if lower_tick == pos_info[0] and upper_tick == pos_info[1]:
-                        return False, ZERO, ZERO, ZERO, ZERO
-                    return True, lower_price, upper_price, lower_tick, upper_tick
-                else:
-                    # if price is higher than the upper range and the prices has not crossed the range's buffer
-                    # then the LP should be placed directly in the range below the range that the price is in
-                    price_in_range_lower, price_in_range_upper, _, _ = self.calculate_range(lp_market, current_price)
-                    target_price = price_in_range_lower - Decimal("0.000001")
-                    lower_price, upper_price, lower_tick, upper_tick = self.calculate_range(lp_market, target_price)
-                    
-                    if lower_tick == pos_info[0] and upper_tick == pos_info[1]:
-                        return False, ZERO, ZERO, ZERO, ZERO
-                    return True, lower_price, upper_price, lower_tick, upper_tick
-
-        return False, ZERO, ZERO, ZERO, ZERO
-
-
-
-    def calculate_tick_bounds(self, row_data: Snapshot, is_first_lp: bool = False) -> tuple[int, int]:
-        lp_row_data = self.utils.get_lp_row_data(row_data)
-        spread_lower = self.utils.params.tick_spread_lower
-        spread_upper = self.utils.params.tick_spread_upper
-        if is_first_lp:
-            spread_lower = spread_upper = self.utils.params.init_tick_spread  # max(self.utils.params.tick_spread_lower, self.utils.params.tick_spread_upper)
-
-        low = lp_row_data.openTick - spread_lower * self.utils.params.tick_spacing
-        upper = lp_row_data.openTick + spread_upper * self.utils.params.tick_spacing
-        return self.round_to_tick_space(low, upper)
 
     def get_balance_base_quote_amounts(self) -> tuple[Decimal, Decimal]:
         base = self.broker.get_token_balance(self.gp.base_token)
         quote = self.broker.get_token_balance(self.gp.quote_token)
-        # if self.broker.quote_token == usdc:
-        #     quote = usdc_balance
-        #     base = eth_balance
-        # else:
-        #     base = usdc_balance
-        #     quote = eth_balance
 
         return base, quote
 
@@ -457,80 +332,70 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         # if row_data.timestamp.hour == 0 and row_data.timestamp.minute == 0:
         #     self.lock_until_time = None
 
-        lp_market: UniLpMarket = self.broker.markets[self.utils.market_key]
+        lp_market: UniLpMarketV2 = self.broker.markets[self.utils.market_key]
 
-        if len(lp_market.positions) == 0 or self.out_of_fund_date is not None:
+        if self.out_of_fund_date is not None:
             return
-        # print(
-        #     f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} => after position check, positions: {lp_market.positions}")
-        # self.check_and_add_dca(row_data, lp_market)
 
-        current_price = row_data.prices[self.gp.base_token.name]
+        current_price = lp_market.market_status.data.price
         try:
-
-            # if self.is_in_lock(row_data):
-            #     return
-            # if not self.params.aggressive:
-            #     in_lock = self.is_in_lock(row_data)
-            #     if in_lock:
-            #         return
-            #     elif self.lock_until_time is None:
-            #         # check price fluctuate
-            #         fluc: Decimal = (current_price - self.last_price) / self.last_price
-            #         if fluc.copy_abs() > conservative_fluctuation:
-            #             self.lock_until_time = row_data.timestamp + timedelta(hours=24)
-            #             self.total_lock_count += 1
-            #             # print(
-            #             #     f"time: {row_data.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, rescale locked until {self.lock_until_time.strftime("%Y-%m-%d %H:%M:%S")} ")
-            #             return
-            #         pass
-            #     else:  # just got out of lock ignore price fluctuate, just check if rescale is needed
-            #         self.lock_until_time = None
-            #         pass
-
-            # lp_row_data = row_data.market_status[market_key]
-
-            # allow_rescale, new_tick_upper, new_tick_lower = self.utils.verify_and_get_new_rescale_tick_boundary(
-            #     row_data, self.was_in_range, self.last_rescale_tick)
             allow_rescale, _, _, new_tick_lower, new_tick_upper = self.check_rebalance(lp_market, current_price)
 
             # Check if rescaling is allowed
-            if not allow_rescale:
+            if not allow_rescale and not self.is_lp_removed:
                 # print("current condition not allow rescale: " + row_data.timestamp.strftime("%Y-%m-%d %H:%M:%S"))
                 return
 
             tick_spacing, current_tick, _, _ = self.utils.get_tick_info(row_data)
+
+            if not allow_rescale and self.is_lp_removed:
+                # If we are here, it means is_lp_removed is True, so we need to add liquidity back.
+                # But allow_rescale is False, so check_rebalance didn't calculate new ticks.
+                # We should use the calculate_range to get valid ticks based on current price.
+                _, _, new_tick_lower, new_tick_upper = self.calculate_range(lp_market, current_price)
+                if new_tick_lower == new_tick_upper:
+                     # fallback to old position ticks if current calculation fails to create a range
+                     new_tick_lower, new_tick_upper = old_position_info[0], old_position_info[1]
             old_position_info = self.utils.current_position_info
 
+            if not self.is_lp_removed:
+                if ((new_tick_lower == old_position_info[0] and new_tick_upper == old_position_info[1])
+                        or new_tick_lower >= new_tick_upper):
+                    print(f"same tick, do not rescale: {new_tick_lower}, {new_tick_upper}")
+                    return
 
-            if ((new_tick_lower == old_position_info[0] and new_tick_upper == old_position_info[1])
-                    or new_tick_lower >= new_tick_upper):
-                # print(f"same tick, do not rescale: {new_tick_lower}, {new_tick_upper}")
-                return
+                if old_position_info[0] > current_tick:
+                    self.upper_rescale_count += 1
+                else:
+                    self.lower_rescale_count += 1
 
-            if old_position_info[0] > current_tick:
-                self.upper_rescale_count += 1
+                if current_tick < old_position_info[0] or current_tick > old_position_info[1]:
+                    self.out_of_range_count += 1
+
+                base_fee, quote_fee = lp_market.collect_fee(self.utils.current_position_info, collect_to_user=True)
+
+                try:
+                    base_removed, quote_removed = lp_market.remove_liquidity(self.utils.current_position_info, collect=True)
+                except Exception as e:
+                    print(f"{row_data.timestamp.strftime("%Y-%m-%d %H:%M")} => failed to remove liquidity: {self.utils.current_position_info}")
+                    print(f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} => current tick: {current_tick}, positions: {lp_market.positions}")
+                    raise e
+
+                self.total_base_fee += base_fee
+                self.total_quote_fee += quote_fee
             else:
-                self.lower_rescale_count += 1
-
-            base_fee, quote_fee = lp_market.collect_fee(self.utils.current_position_info, collect_to_user=True)
-
-            try:
-                base, quote = lp_market.remove_liquidity(self.utils.current_position_info, collect=True)
-                base_removed, quote_removed = base, quote
-            except Exception as e:
-                print(f"{row_data.timestamp.strftime("%Y-%m-%d %H:%M")} => failed to remove liquidity: {self.utils.current_position_info}")
-                print(f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} => current tick: {current_tick}, positions: {lp_market.positions}")
-                raise e
-
-            self.total_base_fee += base_fee
-            self.total_quote_fee += quote_fee
+                # was already removed, record fees earned if any (though should be zero if removed)
+                base_fee, quote_fee = self.removed_base_fee, self.removed_quote_fee
+                self.total_base_fee += base_fee
+                self.total_quote_fee += quote_fee
+                self.removed_base_fee = ZERO
+                self.removed_quote_fee = ZERO
+                self.is_lp_removed = False
+                base_removed, quote_removed = ZERO, ZERO
 
             rebalance_base_fee, rebalance_quote_fee = ZERO, ZERO
 
-
             try:
-
                 to_swap_base = lp_market.broker.get_token_balance(self.gp.base_token) - self.total_base_fee
                 to_swap_quote = lp_market.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
 
@@ -543,27 +408,28 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
                 base = lp_market.broker.get_token_balance(self.gp.base_token) - self.total_base_fee
                 quote = lp_market.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
 
-
-                # if self.params.compound:
-                #     self.utils.current_position_info, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(
-                #         new_tick_lower, new_tick_upper, tick=current_tick)
-                # else:
                 self.utils.current_position_info, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(
                     new_tick_lower, new_tick_upper, base, quote, tick=current_tick)
 
                 left_base = lp_market.broker.get_token_balance(self.gp.base_token) - self.total_base_fee
                 left_quote = lp_market.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
 
-                # print(f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} orig base: {to_swap_base}, orig quote: {to_swap_quote}, base_to_swap: {base_to_swap}, quote_to_swap: {quote_to_swap},"
-                #       f" swapped base: {swapped_base}, quote: {swapped_quote}, final base: {base}, quote: {quote}, base_used: {base_used}, quote_used: {quote_used}, left_base: {left_base}, left_quote: {left_quote}")
-
-
+                # update next rescale price
+                lower_price = lp_market.tick_to_price(new_tick_lower)
+                diff = abs(lower_price - current_price) / Decimal(2)
+                self.rescale_range = (current_price - diff, current_price + diff)
+                # print(
+                #     f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} orig base: {to_swap_base}, orig quote: {to_swap_quote},"
+                #     f" swapped_base: {swapped_base}, swapped_quote: {swapped_quote}, final balance base: {base}, quote: {quote}, base_used: {base_used}, quote_used: {quote_used}, left_base: {left_base}, left_quote: {left_quote},"
+                #     f" current price: {current_price}, rescale range: {self.rescale_range}, current_tick: {current_tick}, new_tick_lower: {new_tick_lower}, new_tick_upper: {new_tick_upper}")
                 # lock until today is over
                 # self.lock_until_time = datetime(row_data.timestamp.year, row_data.timestamp.month,
                 #                                 row_data.timestamp.day, 23, 59, 0)
 
                     # print(f"add LP => new position info ({current_tick}): { self.utils.current_position_info}, base: {base_used}, quote: {quote_used}, base_leftover: {base_leftover}, quote_leftover: {quote_leftover} ")
             except Exception as e:
+                if new_tick_upper == new_tick_lower:
+                    print(f"ERROR: new_tick_upper and new_tick_lower are both {new_tick_upper}. current_price: {current_price}, allow_rescale: {allow_rescale}, is_lp_removed: {self.is_lp_removed}")
                 print(
                     f"failed to add liquidity, current tick: {current_tick}, upper: {new_tick_upper}, lower: {new_tick_lower}")
                 raise e
@@ -588,6 +454,42 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             pos = lp_market.positions[self.utils.current_position_info]
             ed.price_lower, ed.price_upper = pos.lower_price, pos.upper_price
 
+            # param_changed = False
+            # current_param_type = "bull" if self.utils.bull else "bear"
+
+            # if not self.params.to_swap and self.params.range_strategy == RangeStrategy.remix_dao:
+            #     bull: bool | None = None
+            #     if current_tick > new_tick_upper: # range is under price
+            #         new_upper_price = pos.upper_price
+            #         self.ps_lower, bull = self.price_trend_check(current_price, new_upper_price, self.pa_lower)
+            #         if bull is not None and len(self.pa_lower) >= 3:
+            #             if self.utils.bull == bull: # same price trend as param
+            #                 # trim self.ps_lower to the last price action
+            #                 self.ps_lower = [self.pa_lower[-1]]
+            #             else: # change param
+            #                 param_changed = True
+            #                 if bull:
+            #                     self.utils.use_bull_params()
+            #                 else:
+            #                     self.utils.use_bear_params()
+            #     else:
+            #         new_lower_price = pos.lower_price
+            #         self.ps_upper, bull = self.price_trend_check(current_price, new_lower_price, self.pa_upper)
+            #         if bull is not None and len(self.ps_upper) >= 3:
+            #             if self.utils.bull == bull: # same price trend as param
+            #                 # trim self.ps_upper to the last price action
+            #                 self.ps_upper = [self.ps_upper[-1]]
+            #             else: # change param
+            #                 param_changed = True
+            #                 if bull:
+            #                     self.utils.use_bull_params()
+            #                 else:
+            #                     self.utils.use_bear_params()
+            #     if param_changed:
+            #         self.pa_lower = []
+            #         self.pa_upper = []
+            #     pass
+
             ed.new_tick_lower, ed.new_tick_upper = self.utils.current_position_info[0], \
                 self.utils.current_position_info[1]
 
@@ -595,7 +497,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             ed.base_removed, ed.quote_removed = base_removed, quote_removed
             ed.base_added, ed.quote_added = base_used, quote_used
             ed.was_in_range = self.was_in_range
-            ed.total_base_fee, ed.total_quote_fee = self.total_base_fee, self.total_quote_fee
+            ed.total_base_fee, ed.total_quote_fee = self.total_base_fee + self.removed_base_fee, self.total_quote_fee + self.removed_quote_fee
+            ed.is_lp_removed = self.is_lp_removed
 
             ed.lp_net_value = lp_market.get_market_balance().net_value
             ed.lp_net_value_with_idle = (self.idle_base * ed.price) + self.idle_quote + ed.lp_net_value
@@ -635,7 +538,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
     def first_lp(self, row_data: Snapshot):
 
-        lp_market: UniLpMarket = self.broker.markets[self.utils.market_key]
+        lp_market: UniLpMarketV2 = self.broker.markets[self.utils.market_key]
         # lp_row_data = row_data.market_status[self.utils.market_key]
 
         if len(lp_market.positions) > 0:
@@ -651,7 +554,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
         tick_spacing, current_tick, _, _ = self.utils.get_tick_info(row_data)
         _lower_price = _upper_price = None
-        current_price = row_data.prices[self.gp.base_token.name]
+        current_price = lp_market.market_status.data.price
         # if not self.params.initial_swap:
         if self.params.initial_type == 0:  # all quote
 
@@ -679,11 +582,13 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
             (_lower_price, _upper_price, lower, upper) = self.calculate_range(lp_market, current_price)
 
-            final_base = lp_market.broker.get_token_balance(self.gp.base_token)
-            final_quote = lp_market.broker.get_token_balance(self.gp.quote_token)
+            to_swap_base, to_swap_quote = self.get_balance_base_quote_amounts()
+            # _, _, base_fee, quote_fee = self.even_rebalance(lp_market)
+            base_to_swap, quote_to_swap = self.calculate_swap_amount(current_tick, lower, upper,
+                                                                     to_swap_base, to_swap_quote)
+            swapped_base, swapped_quote, base_fee, quote_fee = self.execute_swap(lp_market, base_to_swap,
+                                                                                           quote_to_swap)
 
-            base_to_swap, quote_to_swap = self.calculate_swap_amount(current_tick, lower, upper, final_base, final_quote)
-            swapped_base, swapped_quote, base_fee, quote_fee = self.execute_swap(lp_market, base_to_swap, quote_to_swap)
 
             final_base = lp_market.broker.get_token_balance(self.gp.base_token)
             final_quote = lp_market.broker.get_token_balance(self.gp.quote_token)
@@ -696,8 +601,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
         print(f"initial swap: {final_base} / {final_quote}, fee: {base_fee} / {quote_fee}")
         print(
-            f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} first_lp base_to_swap: {base_to_swap}, quote_to_swap: {quote_to_swap}, "
-            f"swapped base: {swapped_base}, quote: {swapped_quote}, final base: {final_base}, quote: {final_quote}, "
+            f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} first_lp final base: {final_base}, quote: {final_quote}, "
             f"base_used: {base_used}, quote_used: {quote_used}, left_base: {left_base}, left_quote: {left_quote}")
         print(
             f"\nadding first liquidity, price: {str(current_price)}, range: {str(lower)} ~ {str(upper)}, price: {_lower_price} ~ {_upper_price}, current tick: {current_tick}")
@@ -711,7 +615,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
         lp_market: UniLpMarket = self.broker.markets[self.utils.market_key]
         _, current_tick, _, _ = self.utils.get_tick_info(row_data)
-        current_price = row_data.prices[self.gp.base_token.name]
+        current_price = lp_market.market_status.data.price
         ed = ExportData()
         ed.time = row_data.timestamp
         ed.price = current_price
@@ -730,14 +634,17 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
         base_fee, quote_fee = lp_market.collect_fee(self.utils.current_position_info, collect_to_user=True)
 
-        self.total_base_fee += base_fee
-        self.total_quote_fee += quote_fee
+        self.total_base_fee += base_fee + self.removed_base_fee
+        self.total_quote_fee += quote_fee + self.removed_quote_fee
+        self.removed_base_fee = ZERO
+        self.removed_quote_fee = ZERO
 
         ed.base_fee, ed.quote_fee = base_fee, quote_fee
         ed.base_removed, ed.quote_removed = None, None
         ed.base_added, ed.quote_added = None, None
         ed.was_in_range = self.was_in_range
         ed.total_base_fee, ed.total_quote_fee = self.total_base_fee, self.total_quote_fee
+        ed.is_lp_removed = self.is_lp_removed
 
         ed.lp_net_value = lp_market.get_market_balance().net_value
         ed.quote_balance = lp_market.broker.get_token_balance(
@@ -775,6 +682,37 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         pos_info = self.utils.current_position_info
         if pos_info is None:
             return
+
+        lp_market: UniLpMarketV2 = self.broker.markets[self.utils.market_key]
+        current_price = lp_market.market_status.data.price
+
+        if self.out_of_fund_date is None and not self.is_lp_removed and (current_price < self.rescale_range[0] or current_price > self.rescale_range[1]):
+            # remove liquidity
+            base_fee, quote_fee = lp_market.collect_fee(self.utils.current_position_info, collect_to_user=True)
+            self.removed_base_fee += base_fee
+            self.removed_quote_fee += quote_fee
+
+            lp_market.remove_liquidity(self.utils.current_position_info, collect=True)
+            self.is_lp_removed = True
+            self.out_of_range_count += 1
+
+            # logging removal
+            ed = ExportData()
+            ed.time = row_data.timestamp
+            ed.price = current_price
+            _, current_tick, _, _ = self.utils.get_tick_info(row_data)
+            ed.tick = current_tick
+            ed.tick_lower, ed.tick_upper = pos_info[0], pos_info[1]
+            ed.base_fee, ed.quote_fee = base_fee, quote_fee
+            ed.total_base_fee, ed.total_quote_fee = self.total_base_fee + self.removed_base_fee, self.total_quote_fee + self.removed_quote_fee
+            ed.is_lp_removed = self.is_lp_removed
+            ed.lp_net_value = lp_market.get_market_balance().net_value
+            ed.quote_balance = lp_market.broker.get_token_balance(self.gp.quote_token)
+            ed.base_balance = lp_market.broker.get_token_balance(self.gp.base_token)
+            ed.total_net_value = ed.lp_net_value + ed.quote_balance + (ed.base_balance * ed.price)
+            ed.total_net_value_base = ed.total_net_value / ed.price
+            ed.param_type = "bull" if self.utils.bull else "bear"
+            self.export_actions.append(ed)
 
         lp_row_data = row_data.market_status[self.utils.market_key]
         in_lock = self.is_in_lock(row_data)
@@ -826,7 +764,7 @@ def run_test(bull_params: RemixDAOParams, bear_params: RemixDAOParams, params: T
         broker = actuator.broker
         pool = UniV3Pool(gp.token0, gp.token1, gp.fee, gp.quote_token,
                          tick_spacing=bull_params.tick_spacing)  # declare pool, Arbitrum One
-        market = UniLpMarket(market_key, pool)
+        market = UniLpMarketV2(market_key, pool)
 
         broker.add_market(market)
         # broker.set_balance(gp.quote_token, gp.init_quote)
@@ -903,7 +841,7 @@ def run_test(bull_params: RemixDAOParams, bear_params: RemixDAOParams, params: T
         else:
             init_price = getPrice(gp.quote_token.name, params.data_start_date)  # INIT_PRICE #ONE #
             final_price = getPrice(gp.quote_token.name,
-                                   params.data_end_date)  # FINAL_PRICE #ONE #strat.usdc_prices.iloc[-1]
+                               params.data_end_date)  # FINAL_PRICE #ONE #strat.usdc_prices.iloc[-1]
 
         metrics["quote_return_usd"] = Decimal(return_rate(init_price, final_price))
 
@@ -911,6 +849,7 @@ def run_test(bull_params: RemixDAOParams, bear_params: RemixDAOParams, params: T
         metrics["rescale_count"] = Decimal(strat.lower_rescale_count + strat.upper_rescale_count)
         metrics["upper_rescale_count"] = Decimal(strat.upper_rescale_count)
         metrics["lower_rescale_count"] = Decimal(strat.lower_rescale_count)
+        metrics["out_of_range_count"] = Decimal(strat.out_of_range_count)
 
         metrics["in_range_pct"] = Decimal(
             strat.total_in_range_minutes / strat.total_minutes) if strat.total_minutes > 0 else Decimal(0)
@@ -992,12 +931,12 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     _dca_usdc_amount = Decimal(10000)
 
     # pool = UniV3Pool(btc, eth, _fee, _quote_token)
-    _starting_mark_price = Decimal(4000) #Decimal(20)
+    _starting_mark_price = Decimal(0)
     _is_stable = False
     _tick_spacing = 1 if _is_stable else int(fee * 200)  # 10  # should simply be fee * 200
     _aggressive = True
     _compound = False
-    _folder_prefix = f"ISAO-percentage-Bv2-{_starting_mark_price}-{token0.name.lower()}{token1.name.lower()}-{"aggressive" if _aggressive else "conservative"}-{quote_token.name.lower()}"
+    _folder_prefix = f"ISAO-percentage-Dv2-{token0.name.lower()}{token1.name.lower()}-{"aggressive" if _aggressive else "conservative"}-{quote_token.name.lower()}"
     _dca_add_if_non_empty = False
     _dca_timing = DcaTiming.none
     _dca_addon_price_percent = ZERO  # Decimal(0.5)
@@ -1017,21 +956,17 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
 
 
     l: List[int] = [
-        3, 5, 10, 15, 20, 25, 30 # 用來當range percent
+        3, 5, 10, 15, 20, 30, 40 # 用來當range percent, 是total range percent，單邊要除以2
     ]
 
     _remix_spreads = list(map(lambda i: RescaleParam(init_tick_spread=i, bull_lower_spread=i, bull_upper_spread=i,
                                                      bear_lower_spread=i, bear_upper_spread=i, ), l))
 
     # _rescale_frequencies = [RescaleFrequency.minute5, RescaleFrequency.minute15, RescaleFrequency.minute30, RescaleFrequency.hourly]  # RescaleFrequency.hourly,
-    _rescale_frequencies = [
-        RescaleFrequency.hourly, RescaleFrequency.hour4, RescaleFrequency.hour8,
-                            RescaleFrequency.hour12, RescaleFrequency.daily
-        ]
+    _rescale_frequencies = [RescaleFrequency.minute1, RescaleFrequency.minute5, RescaleFrequency.minute15]
     # _rescale_frequencies = [RescaleFrequency.minute5, RescaleFrequency.minute15, ]
-    # _rescale_frequencies = [RescaleFrequency.minute30, RescaleFrequency.hourly]  # RescaleFrequency.hourly,
+    # _rescale_frequencies = [RescaleFrequency.hourly]
 
-    _range_rescale_buffer_percent = Decimal(0.3)
     _init_type: int = 1
     _param_with_offset = RemixDAOParams(  # offset + range
         tick_spread_upper=60,
@@ -1044,8 +979,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
         init_tick_spread=120,
         tick_spacing=_tick_spacing,
         tick_gap_lower=1,
-        tick_gap_upper=1,
-        range_rescale_buffer_percent=_range_rescale_buffer_percent,)
+        tick_gap_upper=1, )
     _param_no_offset = RemixDAOParams(  # offset + range
         tick_spread_upper=60,
         tick_spread_lower=60,
@@ -1057,9 +991,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
         init_tick_spread=120,
         tick_spacing=_tick_spacing,
         tick_gap_lower=1,
-        tick_gap_upper=1,
-        range_rescale_buffer_percent=_range_rescale_buffer_percent,
-    )
+        tick_gap_upper=1, )
 
     _cmp = ""
     if _compound:
@@ -1123,7 +1055,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
             parameters.append((bull_no_offset, bear_no_offset,
                                TestParams(range_strategy=RangeStrategy.remix_dao, indicator_mult=1,
                                           # report_name=f"{"agg" if _aggressive else "cons"}-{init_quote}{quote_token.name}_{RangeStrategy.remix_dao.name}_no_offset_{bull_no_offset.init_tick_spread}_{bull_no_offset.tick_spread_lower}-{bull_no_offset.tick_spread_upper}_{bear_no_offset.tick_spread_lower}-{bear_no_offset.tick_spread_upper}_{rescale_frequency.name}-{gp.dca_add_if_non_empty}",
-                                          report_name=f"{"agg" if _aggressive else "cons"}-{init_quote}{quote_token.name}_{RangeStrategy.remix_dao.name}_no_offset_{bear_no_offset.init_tick_spread}_{rescale_frequency}_{(_range_rescale_buffer_percent * Decimal("100")):.0f}",
+                                          report_name=f"{"agg" if _aggressive else "cons"}-{init_quote}{quote_token.name}_{RangeStrategy.remix_dao.name}_no_offset_{bear_no_offset.init_tick_spread}_{rescale_frequency}",
                                           indicator_length_hr=1, to_swap=False,
                                           aggressive=_aggressive, compound=_compound,
                                           rescale_frequency=rescale_frequency,
@@ -1254,6 +1186,18 @@ if __name__ == "__main__":
 
     date_ranges: List[tuple[datetime, date, date, str, list[datetime]]] = [
         # (_cal_start_date, _data_start_date, _data_end_date)
+        # total-market
+        # (datetime(2023, 10, 16, 0, 0, 0), date(2023, 10, 6), date(2024, 9, 3), []),
+        # bull-market
+        # (datetime(2023, 10, 16, 0, 0, 0), date(2023, 10, 6), date(2024, 5, 26), []),
+        # bear-market
+        # (datetime(2024, 5, 27, 0, 0, 0), date(2024, 5, 1), date(2024, 9, 3), []),
+        # 20240311 - 20240903
+        # (datetime(2024, 3, 11, 0, 0, 0), date(2024, 3, 11), date(2024, 9, 3), []),
+        # BTC/ETH BEAR 20220613 - 20220912
+        # (datetime(2022, 6, 13, 0, 0, 0), date(2022, 6, 13), date(2022, 9, 12), []),
+        # 20240311 ~ 20240903
+        # (datetime(2024, 3, 11, 0, 0, 0), date(2024, 3, 11), date(2024, 9, 3), []),
 
         # ISAO cases
         # (datetime(2024, 7, 1, 0, 0, 0), date(2024, 7, 1), date(2024, 11, 15), "dca", []),
@@ -1262,13 +1206,38 @@ if __name__ == "__main__":
         #  2021/05/04~2021/12/31
         # (datetime(2021, 5, 13, 0, 0, 0), date(2021, 5, 13), date(2021, 12, 31), "dca", []),
         #  2022/01/01~2022/12/31
-        (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2022, 12, 31), "", []),
+        # (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2022, 12, 31), "", []),
         #  2023/01/01~2023/12/31
-        (datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2023, 12, 31), "", []),
+        # (datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2023, 12, 31), "", []),
         #  2024/01/01~2024/09/30
-        (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2024, 12, 31), "", []),
-        (datetime(2025, 1, 1, 0, 0, 0), date(2025, 1, 1), date(2025, 12, 31), "", []),
+        # (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2024, 12, 31), "", []),
+        # (datetime(2025, 1, 1, 0, 0, 0), date(2025, 1, 1), date(2025, 12, 31), "", []),
         (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2025, 12, 31), "", []),
+
+
+        # (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2025, 1, 1), "", []),
+
+        # first btc/cbbtc
+        # (datetime(2025, 1, 1, 0, 0, 0), date(2025, 1, 1), date(2025, 11, 9), "dca", []),
+        # first usdc/usdt
+        # (datetime(2021, 11, 20, 0, 0, 0), date(2021, 11, 20), date(2021, 12, 31), "dca", []),
+        # full usdc/usdt
+        # (datetime(2021, 11, 20, 0, 0, 0), date(2021, 11, 20), date(2025, 11, 9), "dca", []),
+        # short
+        # (datetime(2025, 11, 27, 0, 0, 0), date(2025, 11, 27), date(2025, 11, 30), "dca", []),
+        # first wstETH/ETH
+        # (datetime(2022, 8, 25, 0, 0, 0), date(2022, 8, 25), date(2022, 12, 31), "dca", []),
+        # full wstETH/ETH
+        # (datetime(2022, 8, 25, 0, 0, 0), date(2022, 8, 25), date(2025, 11, 9), "dca", []),
+        # first DAI/USDT
+        # (datetime(2022, 7, 20, 0, 0, 0), date(2022, 7, 20), date(2022, 12, 31), "dca", []),
+        # full DAI/USDT
+        # (datetime(2022, 7, 20, 0, 0, 0), date(2022, 7, 20), date(2025, 11, 9), "dca", []),
+        # (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2022, 12, 31), "dca", []),
+        # (datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2023, 12, 31), "dca", []),
+        # (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2024, 12, 31), "dca", []),
+        # (datetime(2025, 1, 1, 0, 0, 0), date(2025, 1, 1), date(2025, 11, 9), "dca", []),
+
     ]
 
     threads = map(lambda dr: multiprocessing.Process(target=process_for_date, args=dr), date_ranges)
