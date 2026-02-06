@@ -177,6 +177,14 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
         quantity_a = amount_b / price
         return Decimal(quantity_a)
 
+    def get_quote_usdc_price(self, row_data: Snapshot) -> Decimal:
+        if self.usdc_prices is None:
+            return Decimal(getPrice(self.gp.quote_token.name,
+                             row_data.timestamp))
+        else:
+            lp_row_data = row_data.market_status[self.utils.market_key]
+            return Decimal(lp_row_data.usdc_price)
+
     def calculate_wrap_range(self, lp_market: UniLpMarket, current_tick: int, current_price: Decimal, base: Decimal,
                              quote: Decimal, upper_range: int, lower_range: int) -> tuple[int, int]:
         # given the base and quote amount and total range (upper_range + lower_range), calculate the best upper and lower tick of a range to place into the liquidity which will maximize the usage of funds without doing any swap
@@ -551,8 +559,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
         if len(lp_market.positions) > 0:
             raise RuntimeError("shouldn't have any position")
 
-        quote_usdc_price = self.init_quote_usd_price = Decimal(getPrice(self.gp.quote_token.name,
-                                                                        row_data.timestamp))  # Decimal(INIT_PRICE) #self.get_usdc_price(row_data)
+        quote_usdc_price = self.init_quote_usd_price = self.get_quote_usdc_price(row_data)
         quote_amount = self.gp.init_quote  # self.gp.init_quote_usdc / quote_usdc_price
 
         lp_market.broker.add_to_balance(self.gp.quote_token, quote_amount)
@@ -643,8 +650,7 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
         self.final_total_net_value = ed.total_net_value
         self.final_lp_net_value = ed.lp_net_value
 
-        usd_price = self.final_quote_usd_price = Decimal(
-            getPrice(self.gp.quote_token.name, row_data.timestamp))  # Decimal(FINAL_PRICE) #ONE #lp_row_data.usdc_price
+        usd_price = self.final_quote_usd_price = self.get_quote_usdc_price(row_data)
 
         self.total_fee_usd = self.total_fee * usd_price
         self.total_net_value_usd = self.final_total_net_value * usd_price
@@ -783,9 +789,14 @@ def run_test(bull_params: RemixDAOParams, bear_params: RemixDAOParams, params: T
             return_rate(float(strat.total_invested_usdc), float(strat.total_net_value_usd)))
         metrics["total_invested_usd"] = strat.total_invested_usdc
 
-        init_price = getPrice(gp.quote_token.name, params.data_start_date)  # INIT_PRICE #ONE #strat.usdc_prices.iloc[0]
-        final_price = getPrice(gp.quote_token.name,
-                               params.data_end_date)  # FINAL_PRICE #ONE #strat.usdc_prices.iloc[-1]
+        if strat.usdc_prices is not None:
+            init_price = strat.usdc_prices.iloc[0]
+            final_price = strat.usdc_prices.iloc[-1]
+        else:
+            init_price = getPrice(gp.quote_token.name, params.data_start_date)  # INIT_PRICE #ONE #
+            final_price = getPrice(gp.quote_token.name,
+                                   params.data_end_date)  # FINAL_PRICE #ONE #strat.usdc_prices.iloc[-1]
+
         metrics["quote_return_usd"] = Decimal(return_rate(init_price, final_price))
 
         metrics["lock_count"] = Decimal(strat.total_lock_count)
@@ -999,7 +1010,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
             parameters.append((bull_no_offset, bear_no_offset,
                                TestParams(range_strategy=RangeStrategy.remix_dao, indicator_mult=1,
                                           # report_name=f"{"agg" if _aggressive else "cons"}-{init_quote}{quote_token.name}_{RangeStrategy.remix_dao.name}_no_offset_{bull_no_offset.init_tick_spread}_{bull_no_offset.tick_spread_lower}-{bull_no_offset.tick_spread_upper}_{bear_no_offset.tick_spread_lower}-{bear_no_offset.tick_spread_upper}_{rescale_frequency.name}-{gp.dca_add_if_non_empty}",
-                                          report_name=f"{"agg" if _aggressive else "cons"}-{init_quote}{quote_token.name}_{RangeStrategy.remix_dao.name}_no_offset_{bear_no_offset.tick_spread_lower}-{bear_no_offset.tick_spread_upper}_{rescale_frequency.value}",
+                                          report_name=f"{"agg" if _aggressive else "cons"}-{init_quote}{quote_token.name}_{RangeStrategy.remix_dao.name}_no_offset_{bear_no_offset.tick_spread_lower}-{bear_no_offset.tick_spread_upper}_{rescale_frequency}",
                                           indicator_length_hr=1, to_swap=False,
                                           aggressive=_aggressive, compound=_compound,
                                           rescale_frequency=rescale_frequency,
