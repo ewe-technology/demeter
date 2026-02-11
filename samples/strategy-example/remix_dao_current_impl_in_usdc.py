@@ -850,9 +850,9 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     load_eth_price = False
     # base_token, quote_token, init_quote = eth, usdc, Decimal(1000000)  #  USDC
 
-    # base_token, quote_token, init_quote = eth, usdc, Decimal(100000)  # DCA USDC
+    base_token, quote_token, init_quote = eth, usdc, Decimal(100000)  # DCA USDC
 
-    base_token, quote_token, init_quote = btc, eth, Decimal(1)  # ETH
+    # base_token, quote_token, init_quote = btc, eth, Decimal(1)  # ETH
     # base_token, quote_token, init_quote = eth, btc, Decimal(1)  # BTC
     # base_token, quote_token, init_quote = cbbtc, btc, Decimal(1)  # BTC/cbBTC
     # base_token, quote_token, init_quote = usdt, usdc, Decimal(2000)  # USDC/USDT
@@ -868,15 +868,15 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     # token0, token1 = dai, usdt
     # contract_address, fee, chain_name = "0x48DA0965ab2d2cbf1C17C09cFB5Cbe67Ad5B1406", 0.01, ChainType.ethereum.name  # dai/usdt  2022-07-20
 
-    token0, token1 = btc, eth
-    contract_address, fee, chain_name, load_eth_price = "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0", 0.05, ChainType.ethereum.name, True # wbtc/weth  2021-05-13
+    # token0, token1 = btc, eth
+    # contract_address, fee, chain_name, load_eth_price = "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0", 0.05, ChainType.ethereum.name, True # wbtc/weth  2021-05-13
     # contract_address, fee, chain_name = "0x2f5e87C9312fa29aed5c179E456625D79015299c", 0.05, ChainType.arbitrum.name # wbtc/weth
     # contract_address, fee, chain_name = "0xCBCdF9626bC03E24f779434178A73a0B4bad62eD", 0.3, ChainType.ethereum.name # wbtc/weth
 
     ## negative tick: token0 is worthless than token1
 
-    # token0, token1 = usdc, eth
-    # contract_address, fee, chain_name = "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", 0.05, ChainType.ethereum.name  # weth/usdc
+    token0, token1 = usdc, eth
+    contract_address, fee, chain_name = "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", 0.05, ChainType.ethereum.name  # weth/usdc
     # token0, token1 = eth, usdc
     # contract_address, fee, chain_name = "0xC6962004f452bE9203591991D15f6b388e09E8D0", 0.05, ChainType.arbitrum.name  # weth/usdc
     _init_quote_usdc = init_quote * INIT_PRICE
@@ -910,8 +910,8 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     # l: List[int] = [3, 4, 5, 6, 7, 8, 9, 10]
     l: List[int] = [
         # 15, 20, 30, 60, 120, 180
-        # 10, 30, 40, 50, 60, 100, 150, 200, 250, 300
-        160, 120, 100, 80, 40, 30, 20 # btc/eth
+        10, 30, 40, 50, 60, 100, 150, 200, 250, 300
+        # 160, 120, 100, 80, 40, 30, 20 # btc/eth
     ]
     # l: List[int] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]  # if _aggressive else [25, 20, 15, 14, 13, 12, 11, 10]
     _remix_spreads = list(map(lambda i: RescaleParam(init_tick_spread=i, bull_lower_spread=i, bull_upper_spread=i,
@@ -1160,7 +1160,7 @@ if __name__ == "__main__":
         #  2021/05/04~2021/12/31
         # (datetime(2021, 5, 13, 0, 0, 0), date(2021, 5, 13), date(2021, 12, 31), "dca", []),
         #  2022/01/01~2022/12/31
-        (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2022, 12, 31), "", []),
+        # (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2022, 12, 31), "", []),
         #  2023/01/01~2023/12/31
         # (datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2023, 12, 31), "dca", []),
         #  2024/01/01~2024/09/30
@@ -1168,10 +1168,10 @@ if __name__ == "__main__":
         # (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2024, 12, 31), "dca", []),
 
         #  2023/01/01~2023/12/31
-        (datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2023, 12, 31), "", []),
+        # (datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2023, 12, 31), "", []),
         #  2024/01/01~2024/09/30
-        (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2024, 12, 31), "", []),
-        (datetime(2025, 1, 1, 0, 0, 0), date(2025, 1, 1), date(2025, 12, 31), "", []),
+        # (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2024, 12, 31), "", []),
+        # (datetime(2025, 1, 1, 0, 0, 0), date(2025, 1, 1), date(2025, 12, 31), "", []),
         # (datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2024, 12, 31), "dca", []),
         # (datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2025, 11, 30), "", []),
         # (datetime(2021, 5, 13, 0, 0, 0), date(2021, 5, 13), date(2025, 12, 31), "", []),

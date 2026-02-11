@@ -623,16 +623,16 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
         position_info = self.utils.current_position_info
         ed.tick_lower, ed.tick_upper = position_info[0], position_info[1]
-
+        base_fee, quote_fee = ZERO, ZERO
         pos = lp_market.positions.get(position_info, None)
         if pos is None:
             ed.price_lower, ed.price_upper = None, None
         else:
             ed.price_lower, ed.price_upper = pos.lower_price, pos.upper_price
+            base_fee, quote_fee = lp_market.collect_fee(self.utils.current_position_info, collect_to_user=True)
 
         ed.new_tick_lower, ed.new_tick_upper = position_info[0], position_info[1]
 
-        base_fee, quote_fee = lp_market.collect_fee(self.utils.current_position_info, collect_to_user=True)
 
         self.total_base_fee += base_fee + self.removed_base_fee
         self.total_quote_fee += quote_fee + self.removed_quote_fee
@@ -898,9 +898,9 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
 
     # base_token, quote_token, init_quote = eth, usdc, Decimal(1000000)  #  USDC
 
-    # base_token, quote_token, init_quote = eth, usdc, Decimal(100000)  # DCA USDC
+    base_token, quote_token, init_quote = eth, usdc, Decimal(100000)  # DCA USDC
 
-    base_token, quote_token, init_quote = btc, eth, Decimal(1)  # ETH
+    # base_token, quote_token, init_quote = btc, eth, Decimal(1)  # ETH
     # base_token, quote_token, init_quote = eth, btc, Decimal(1)  # BTC
     # base_token, quote_token, init_quote = cbbtc, btc, Decimal(1)  # BTC/cbBTC
     # base_token, quote_token, init_quote = usdt, usdc, Decimal(2000)  # USDC/USDT
@@ -916,15 +916,15 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     # token0, token1 = dai, usdt
     # contract_address, fee, chain_name = "0x48DA0965ab2d2cbf1C17C09cFB5Cbe67Ad5B1406", 0.01, ChainType.ethereum.name  # dai/usdt  2022-07-20
 
-    token0, token1 = btc, eth
-    contract_address, fee, chain_name, load_eth_price = "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0", 0.05, ChainType.ethereum.name, True # wbtc/weth  2021-05-13
+    # token0, token1 = btc, eth
+    # contract_address, fee, chain_name, load_eth_price = "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0", 0.05, ChainType.ethereum.name, True # wbtc/weth  2021-05-13
     # contract_address, fee, chain_name = "0x2f5e87C9312fa29aed5c179E456625D79015299c", 0.05, ChainType.arbitrum.name # wbtc/weth
     # contract_address, fee, chain_name = "0xCBCdF9626bC03E24f779434178A73a0B4bad62eD", 0.3, ChainType.ethereum.name # wbtc/weth
 
     ## negative tick: token0 is worthless than token1
 
-    # token0, token1 = usdc, eth
-    # contract_address, fee, chain_name = "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", 0.05, ChainType.ethereum.name  # weth/usdc
+    token0, token1 = usdc, eth
+    contract_address, fee, chain_name = "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", 0.05, ChainType.ethereum.name  # weth/usdc
     # token0, token1 = eth, usdc
     # contract_address, fee, chain_name = "0xC6962004f452bE9203591991D15f6b388e09E8D0", 0.05, ChainType.arbitrum.name  # weth/usdc
     _init_quote_usdc = init_quote * INIT_PRICE
@@ -963,7 +963,8 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
                                                      bear_lower_spread=i, bear_upper_spread=i, ), l))
 
     # _rescale_frequencies = [RescaleFrequency.minute5, RescaleFrequency.minute15, RescaleFrequency.minute30, RescaleFrequency.hourly]  # RescaleFrequency.hourly,
-    _rescale_frequencies = [RescaleFrequency.minute1, RescaleFrequency.minute5, RescaleFrequency.minute15, RescaleFrequency.hourly]
+    _rescale_frequencies = [RescaleFrequency.hourly, RescaleFrequency.hour4, RescaleFrequency.hour8,
+                            RescaleFrequency.hour12, RescaleFrequency.daily] #RescaleFrequency.hourly,
     # _rescale_frequencies = [RescaleFrequency.minute5, RescaleFrequency.minute15, ]
     # _rescale_frequencies = [RescaleFrequency.hourly]
 
