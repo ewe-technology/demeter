@@ -918,6 +918,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     dai = TokenInfo(name="dai", decimal=18)
     load_eth_price = False
     _is_stable = False
+    load_btc_price = False
     # base_token, quote_token, init_quote = eth, usdc, Decimal(1000000)  #  USDC
 
     # base_token, quote_token, init_quote = eth, usdc, Decimal(100000)  # DCA USDC
@@ -932,9 +933,9 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     # token0, token1 = usdc, usdt
     # contract_address, fee, chain_name, _is_stable = "0x3416cF6C708Da44DB2624D63ea0AAef7113527C6", 0.01, ChainType.ethereum.name, True  # usdc/usdt  2021-11-20
     # token0, token1 = btc, cbbtc
-    # contract_address, fee, chain_name, _is_stable = "0xe8f7c89C5eFa061e340f2d2F206EC78FD8f7e124", 0.01, ChainType.ethereum.name, True  # wbtc/cbbtc  2021-09-20
+    # contract_address, fee, chain_name, _is_stable, load_btc_price = "0xe8f7c89C5eFa061e340f2d2F206EC78FD8f7e124", 0.01, ChainType.ethereum.name, True, True  # wbtc/cbbtc  2021-09-20
     # token0, token1 = wstEth, eth
-    # contract_address, fee, chain_name, _is_stable = "0x109830a1AAaD605BbF02a9dFA7B0B92EC2FB7dAa", 0.01, ChainType.ethereum.name, True  # wstEth/eth  2022-08-25
+    # contract_address, fee, chain_name, _is_stable, load_eth_price = "0x109830a1AAaD605BbF02a9dFA7B0B92EC2FB7dAa", 0.01, ChainType.ethereum.name, True, True  # wstEth/eth  2022-08-25
     token0, token1 = dai, usdt
     contract_address, fee, chain_name, _is_stable = "0x48DA0965ab2d2cbf1C17C09cFB5Cbe67Ad5B1406", 0.01, ChainType.ethereum.name, True  # dai/usdt  2022-07-20
 
@@ -1186,6 +1187,14 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
         contract_address_usdc = "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
         market_key_usdc = MarketInfo("usdc")
         pool_usdc = UniV3Pool(usdc, eth, fee, usdc)
+        market_usdc = UniLpMarket(market_key_usdc, pool_usdc)
+        market_usdc.data_path = f"../real-data/{contract_address_usdc}"
+        market_usdc.load_data(chain_name, contract_address_usdc, dsd, ded)
+        usdc_price_data = market_usdc.data
+    elif load_btc_price:
+        contract_address_usdc = "0x56534741CD8B152df6d48AdF7ac51f75169A83b2"
+        market_key_usdc = MarketInfo("usdc")
+        pool_usdc = UniV3Pool(btc, usdc, fee, usdc)
         market_usdc = UniLpMarket(market_key_usdc, pool_usdc)
         market_usdc.data_path = f"../real-data/{contract_address_usdc}"
         market_usdc.load_data(chain_name, contract_address_usdc, dsd, ded)
