@@ -174,29 +174,6 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         pass
 
 
-    def execute_swap(self, lp_market: UniLpMarket, base_to_swap: Decimal, quote_to_swap: Decimal) -> tuple[Decimal, Decimal, Decimal, Decimal]:
-        """
-        Execute the swap using buy and sell as needed.
-        :return: (swapped_base_amount, swapped_quote_amount, fee_base, fee_quote)
-        """
-        fee_base, fee_quote = ZERO, ZERO
-        swapped_base, swapped_quote = ZERO, ZERO
-
-        if base_to_swap > ZERO:
-            # sell base to get quote
-            fee_base, _, swapped_quote = lp_market.sell(base_to_swap)
-            swapped_base = base_to_swap
-        elif quote_to_swap > ZERO:
-            # buy base using quote
-            # calculate base_to_buy from quote_to_swap
-            # quote_amount_with_fee = base_token_amount * price / (1 - self._pool.fee_rate)
-            # base_token_amount = quote_amount_with_fee * (1 - self._pool.fee_rate) / price
-            price = lp_market.market_status.data.price
-            base_to_buy = quote_to_swap * (ONE - Decimal(lp_market.pool_info.fee_rate)) / price
-            fee_quote, _, swapped_base = lp_market.buy(base_to_buy)
-            swapped_quote = quote_to_swap
-
-        return swapped_base, swapped_quote, fee_base, fee_quote
 
     def get_quote_usdc_price(self, row_data: Snapshot) -> Decimal:
         if self.usdc_prices is None:
