@@ -4,7 +4,6 @@ from demeter import (
     Strategy,
     Snapshot,
 )
-from demeter.uniswap.market_data import Snapshot
 from demeter.uniswap import UniLpMarket, liquitidy_math
 from math_const import ZERO, ONE
 from rm_types import TestParams, GlobalParams

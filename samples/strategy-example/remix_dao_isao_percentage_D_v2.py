@@ -29,7 +29,7 @@ from demeter.result import performance_metrics, return_rate
 from demeter.uniswap import UniLpMarket, UniV3Pool, V3CoreLib, base_unit_price_to_sqrt_price_x96
 from datetime import date, timedelta, datetime
 
-from remix_dao_utils import RemixDaoUtils, RemixDAOParams, WeeklyTrigger, performance_metrics_for_dca, getPrice
+from remix_dao_utils import RemixDaoUtils, RemixDAOParams, WeeklyTrigger, performance_metrics_for_dca, getPrice, INIT_PRICE
 from export_file import export_file, ExportData, export_apr_results, export_stable_apr_results
 from chaos_lab_utils import standard_deviation_over_last, average_true_range
 from rm_types import RescaleFrequency, TestParams, GlobalParams, RangeStrategy, PriceActionLog, DcaTiming, DcaAddition
