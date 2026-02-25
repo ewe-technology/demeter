@@ -15,6 +15,51 @@ from math_const import ZERO
 from datetime import datetime
 
 
+## BTC
+# INIT_PRICE = 93576  # ONE #strat.usdc_prices.iloc[0]
+# FINAL_PRICE = 104722.96
+btcPrices = {
+    "2025-01-01": 93576,
+    "2025-11-09": 104722.96,
+}
+
+## stable
+INIT_PRICE = 1
+FINAL_PRICE = 1
+
+## ETH price
+ethPrices = {"2022-08-25": 1656.56,
+             "2022-12-31": 1196.13,
+             "2023-01-01": 1196.13,
+             "2023-12-31": 2281.87,
+             "2024-01-01": 2281.87,
+             "2024-12-31": 3337.78,
+             "2025-01-01": 3337.78,
+             "2025-11-09": 3583.46,
+             "2025-12-31": 2971.64,}
+
+
+def getPrice(tokenName, date):
+    tokenName = tokenName.lower()
+
+    # Normalize date to string 'YYYY-MM-DD' if not already a string
+    if not isinstance(date, str):
+        try:
+            # Works for datetime, date, pandas.Timestamp, etc.
+            date = date.strftime("%Y-%m-%d")
+        except Exception:
+
+            # Last resort: try pandas to_datetime then format
+            date = pd.to_datetime(date).strftime("%Y-%m-%d")
+
+    if tokenName == "btc":
+        return btcPrices.get(date)
+    elif tokenName == "eth":
+        return ethPrices.get(date)
+    else:
+        return 1
+
+
 # class StrategyInfo:
 #
 #     def __init__(self, lp_market: UniLpMarket, market_key: MarketInfo):

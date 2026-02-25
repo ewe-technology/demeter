@@ -29,83 +29,29 @@ from demeter.result import performance_metrics, return_rate
 from demeter.uniswap import UniLpMarket, UniV3Pool, V3CoreLib, base_unit_price_to_sqrt_price_x96, liquitidy_math
 from datetime import date, timedelta, datetime
 
-from remix_dao_utils import RemixDaoUtils, RemixDAOParams, WeeklyTrigger, performance_metrics_for_dca
+from remix_dao_utils import RemixDaoUtils, RemixDAOParams, WeeklyTrigger, performance_metrics_for_dca, getPrice
+from math_const import ZERO, ONE, HUNDRED, CONSERVATIVE_FLUCTUATION
+from base_strategy import BaseRemixDaoStrategy
 from export_file import export_file_2_position, ExportData, export_apr_results, export_stable_apr_results
 from chaos_lab_utils import standard_deviation_over_last, average_true_range
 from rm_types import RescaleFrequency, TestParams, GlobalParams, RangeStrategy, PriceActionLog, DcaTiming, DcaAddition
 
 conservative_fluctuation = Decimal(0.03)
-ZERO = Decimal(0)
-ONE = Decimal(1)
-
-## BTC
-# INIT_PRICE = 93576  # ONE #strat.usdc_prices.iloc[0]
-# FINAL_PRICE = 104722.96
-btcPrices = {
-    "2025-01-01": 93576,
-    "2025-11-09": 104722.96,
-}
-
-## stable
-INIT_PRICE = 1
-FINAL_PRICE = 1
-
-## ETH price
-ethPrices = {"2022-08-25": 1656.56,
-             "2022-12-31": 1196.13,
-             "2023-01-01": 1196.13,
-             "2023-12-31": 2281.87,
-             "2024-01-01": 2281.87,
-             "2024-12-31": 3337.78,
-             "2025-01-01": 3337.78,
-             "2025-11-09": 3583.46, }
 
 
-def getPrice(tokenName, date):
-    tokenName = tokenName.lower()
 
-    # Normalize date to string 'YYYY-MM-DD' if not already a string
-    if not isinstance(date, str):
-        try:
-            # Works for datetime, date, pandas.Timestamp, etc.
-            date = date.strftime("%Y-%m-%d")
-        except Exception:
-
-            # Last resort: try pandas to_datetime then format
-            date = pd.to_datetime(date).strftime("%Y-%m-%d")
-
-    if tokenName == "btc":
-        return btcPrices.get(date)
-    elif tokenName == "eth":
-        return ethPrices.get(date)
-    else:
-        return 1
-
-
-class RemixDaoDcaWeekStratStrategy(Strategy):
+class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
     def __init__(self, _utils: RemixDaoUtils, _params: TestParams, _gp: GlobalParams,
                  usdc_prices: pd.Series | None = None):
-        super().__init__()
-        self.utils = _utils
-        self.params = _params
-        self.was_in_range = False
-        self.last_rescale_tick = 0
-        self.total_base_fee = ZERO
-        self.total_quote_fee = ZERO
-        self.export_actions = []
-        self.lock_until_time = None
+        super().__init__(_utils, _params, _gp)
         self.last_price = ZERO
-        self.balance_data = {}
         self.tick_spreads = pd.Series([])
         self.total_fee = ZERO
         self.final_total_net_value = ZERO
         self.final_lp_net_value = ZERO
         self.total_base_swap_fee = ZERO
         self.total_quote_swap_fee = ZERO
-        self.gp = _gp
-        # self.pa_upper: List[PriceActionLog] = []
-        # self.pa_lower: List[PriceActionLog] = []
         self.total_invested: Decimal = ZERO
         self.total_invested_usdc: Decimal = ZERO
         self.last_check_price: Decimal = ZERO
@@ -170,14 +116,6 @@ class RemixDaoDcaWeekStratStrategy(Strategy):
         self.total_invested = self.broker.get_token_balance(self.broker.quote_token)
         pass
 
-    def is_in_lock(self, row_data: Snapshot) -> bool:
-        return self.lock_until_time is not None and row_data.timestamp <= self.lock_until_time
-
-    @staticmethod
-    def calculate_quantity(price: Decimal, amount_b: Decimal) -> Decimal:
-        # Calculate quantity of Token A
-        quantity_a = amount_b / price
-        return Decimal(quantity_a)
 
     def calculate_wrap_range(self, lp_market: UniLpMarket, current_tick: int, current_price: Decimal, base: Decimal,
                              quote: Decimal, upper_range: int, lower_range: int) -> tuple[int, int]:

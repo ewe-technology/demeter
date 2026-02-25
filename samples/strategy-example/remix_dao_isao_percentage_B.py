@@ -29,7 +29,7 @@ from demeter.result import performance_metrics, return_rate
 from demeter.uniswap import UniLpMarket, UniV3Pool, V3CoreLib, base_unit_price_to_sqrt_price_x96
 from datetime import date, timedelta, datetime
 
-from remix_dao_utils import RemixDaoUtils, RemixDAOParams, WeeklyTrigger, performance_metrics_for_dca
+from remix_dao_utils import RemixDaoUtils, RemixDAOParams, WeeklyTrigger, performance_metrics_for_dca, getPrice
 from export_file import export_file, ExportData, export_apr_results, export_stable_apr_results
 from chaos_lab_utils import standard_deviation_over_last, average_true_range
 from rm_types import RescaleFrequency, TestParams, GlobalParams, RangeStrategy, PriceActionLog, DcaTiming, DcaAddition
@@ -39,49 +39,6 @@ from base_strategy import BaseRemixDaoStrategy
 
 conservative_fluctuation = CONSERVATIVE_FLUCTUATION
 
-## BTC
-# INIT_PRICE = 93576  # ONE #strat.usdc_prices.iloc[0]
-# FINAL_PRICE = 104722.96
-btcPrices = {
-    "2025-01-01": 93576,
-    "2025-11-09": 104722.96,
-}
-
-## stable
-INIT_PRICE = 1
-FINAL_PRICE = 1
-
-## ETH price
-ethPrices = {"2022-08-25": 1656.56,
-             "2022-12-31": 1196.13,
-             "2023-01-01": 1196.13,
-             "2023-12-31": 2281.87,
-             "2024-01-01": 2281.87,
-             "2024-12-31": 3337.78,
-             "2025-01-01": 3337.78,
-             "2025-11-09": 3583.46,
-             "2025-12-31": 2971.64,}
-
-
-def getPrice(tokenName, date):
-    tokenName = tokenName.lower()
-
-    # Normalize date to string 'YYYY-MM-DD' if not already a string
-    if not isinstance(date, str):
-        try:
-            # Works for datetime, date, pandas.Timestamp, etc.
-            date = date.strftime("%Y-%m-%d")
-        except Exception:
-
-            # Last resort: try pandas to_datetime then format
-            date = pd.to_datetime(date).strftime("%Y-%m-%d")
-
-    if tokenName == "btc":
-        return btcPrices.get(date)
-    elif tokenName == "eth":
-        return ethPrices.get(date)
-    else:
-        return 1
 
 
 class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
@@ -173,13 +130,6 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
 
 
-    def get_quote_usdc_price(self, row_data: Snapshot) -> Decimal:
-        if self.usdc_prices is None:
-            return Decimal(getPrice(self.gp.quote_token.name,
-                             row_data.timestamp))
-        else:
-            lp_row_data = row_data.market_status[self.utils.market_key]
-            return Decimal(lp_row_data.usdc_price)
 
     def calculate_range(self, lp_market: UniLpMarket, current_price: Decimal) -> tuple[Decimal, Decimal, int, int]:
         """

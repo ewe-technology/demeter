@@ -4,10 +4,11 @@ from demeter import (
     Strategy,
     Snapshot,
 )
+from demeter.uniswap.market_data import Snapshot
 from demeter.uniswap import UniLpMarket, liquitidy_math
 from math_const import ZERO, ONE
 from rm_types import TestParams, GlobalParams
-from remix_dao_utils import RemixDaoUtils, near_zero
+from remix_dao_utils import RemixDaoUtils, near_zero, getPrice
 
 class BaseRemixDaoStrategy(Strategy):
 
@@ -23,6 +24,15 @@ class BaseRemixDaoStrategy(Strategy):
         self.export_actions = []
         self.lock_until_time = None
         self.balance_data = {}
+        self.usdc_prices: pd.Series | None = None # This will be set by subclasses if provided
+
+    def get_quote_usdc_price(self, row_data: Snapshot) -> Decimal:
+        if self.usdc_prices is None:
+            return Decimal(getPrice(self.gp.quote_token.name,
+                             row_data.timestamp))
+        else:
+            lp_row_data = row_data.market_status[self.utils.market_key]
+            return Decimal(lp_row_data.usdc_price)
 
     def is_quote_zero(self, amount: Decimal):
         return near_zero(amount, self.gp.quote_token.decimal)
