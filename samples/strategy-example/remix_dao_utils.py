@@ -273,6 +273,22 @@ class RemixDaoUtils:
         if tick > 0 and tick % tick_spacing != 0:
             return (base_floor + 1) * tick_spacing
         return base_floor * tick_spacing
+    
+    @staticmethod
+    def round_tick(tick: int, tick_spacing: int) -> int:
+        # 1. 算出基礎的 floor 點
+        # 注意：Python 的 // 是向下取整，對正負數都適用 (floor division)
+        f = (tick // tick_spacing) * tick_spacing
+        
+        # 2. 算出基礎的 ceiling 點
+        c = f + tick_spacing
+    
+        # 3. 判斷距離誰比較近
+        # 如果 tick 距離 ceiling 較近（或剛好在中間），則向上取
+        if (tick - f) < (c - tick):
+            return f
+        else:
+            return c
 
     def calculate_non_one_tick_spacing_rescale_tick_boundary(self, tick_spacing: int, current_tick: int, current_tick_lower: int, use_min_tick_space: bool = False):
         # tick_spread_upper, tick_spread_lower, _, _, rescale_tick_upper_boundary_offset, rescale_tick_lower_boundary_offset, _, _ = get_rescale_info(strategy_address, controller_address)
@@ -321,6 +337,10 @@ class RemixDaoUtils:
         current_price = self.get_current_price(row_data)
         current_tick = self.lp_market.price_to_tick(current_price)
         return tick_spacing, current_tick, current_tick_lower, current_tick_upper
+    
+    def get_raw_tick(self, row_data: Snapshot) -> int:
+        current_price = self.get_current_price(row_data)
+        return self.lp_market.price_to_raw_tick(current_price)
 
     def get_current_price(self, snapshot: Snapshot) -> Decimal:
         # lp_row_data = self.get_lp_row_data(snapshot)

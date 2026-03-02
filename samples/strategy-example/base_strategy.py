@@ -42,6 +42,10 @@ class BaseRemixDaoStrategy(Strategy):
     def round_to_tick_space(self, lower: int, upper: int) -> tuple[int, int]:
         tick_space = self.utils.params.tick_spacing
         return self.utils.ceiling_tick(lower, tick_space), self.utils.floor_tick(upper, tick_space)
+    
+    def round_to_center_tick(self, current: int) -> int:
+        tick_space = self.utils.params.tick_spacing
+        return self.utils.round_to_tick(current, tick_space)
 
     def is_in_lock(self, row_data: Snapshot) -> bool:
         return self.lock_until_time is not None and row_data.timestamp <= self.lock_until_time
