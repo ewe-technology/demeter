@@ -15,6 +15,51 @@ from math_const import ZERO
 from datetime import datetime
 
 
+## BTC
+# INIT_PRICE = 93576  # ONE #strat.usdc_prices.iloc[0]
+# FINAL_PRICE = 104722.96
+btcPrices = {
+    "2025-01-01": 93576,
+    "2025-11-09": 104722.96,
+}
+
+## stable
+INIT_PRICE = 1
+FINAL_PRICE = 1
+
+## ETH price
+ethPrices = {"2022-08-25": 1656.56,
+             "2022-12-31": 1196.13,
+             "2023-01-01": 1196.13,
+             "2023-12-31": 2281.87,
+             "2024-01-01": 2281.87,
+             "2024-12-31": 3337.78,
+             "2025-01-01": 3337.78,
+             "2025-11-09": 3583.46,
+             "2025-12-31": 2971.64,}
+
+
+def getPrice(tokenName, date):
+    tokenName = tokenName.lower()
+
+    # Normalize date to string 'YYYY-MM-DD' if not already a string
+    if not isinstance(date, str):
+        try:
+            # Works for datetime, date, pandas.Timestamp, etc.
+            date = date.strftime("%Y-%m-%d")
+        except Exception:
+
+            # Last resort: try pandas to_datetime then format
+            date = pd.to_datetime(date).strftime("%Y-%m-%d")
+
+    if tokenName == "btc":
+        return btcPrices.get(date)
+    elif tokenName == "eth":
+        return ethPrices.get(date)
+    else:
+        return 1
+
+
 # class StrategyInfo:
 #
 #     def __init__(self, lp_market: UniLpMarket, market_key: MarketInfo):
@@ -228,6 +273,22 @@ class RemixDaoUtils:
         if tick > 0 and tick % tick_spacing != 0:
             return (base_floor + 1) * tick_spacing
         return base_floor * tick_spacing
+    
+    @staticmethod
+    def round_tick(tick: int, tick_spacing: int) -> int:
+        # 1. 算出基礎的 floor 點
+        # 注意：Python 的 // 是向下取整，對正負數都適用 (floor division)
+        f = (tick // tick_spacing) * tick_spacing
+        
+        # 2. 算出基礎的 ceiling 點
+        c = f + tick_spacing
+    
+        # 3. 判斷距離誰比較近
+        # 如果 tick 距離 ceiling 較近（或剛好在中間），則向上取
+        if (tick - f) < (c - tick):
+            return f
+        else:
+            return c
 
     def calculate_non_one_tick_spacing_rescale_tick_boundary(self, tick_spacing: int, current_tick: int, current_tick_lower: int, use_min_tick_space: bool = False):
         # tick_spread_upper, tick_spread_lower, _, _, rescale_tick_upper_boundary_offset, rescale_tick_lower_boundary_offset, _, _ = get_rescale_info(strategy_address, controller_address)
@@ -276,6 +337,10 @@ class RemixDaoUtils:
         current_price = self.get_current_price(row_data)
         current_tick = self.lp_market.price_to_tick(current_price)
         return tick_spacing, current_tick, current_tick_lower, current_tick_upper
+    
+    def get_raw_tick(self, row_data: Snapshot) -> int:
+        current_price = self.get_current_price(row_data)
+        return self.lp_market.price_to_raw_tick(current_price)
 
     def get_current_price(self, snapshot: Snapshot) -> Decimal:
         # lp_row_data = self.get_lp_row_data(snapshot)

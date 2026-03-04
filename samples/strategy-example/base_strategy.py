@@ -4,10 +4,10 @@ from demeter import (
     Strategy,
     Snapshot,
 )
-from demeter.uniswap import UniLpMarket
-from math_const import ZERO
+from demeter.uniswap import UniLpMarket, liquitidy_math
+from math_const import ZERO, ONE
 from rm_types import TestParams, GlobalParams
-from remix_dao_utils import RemixDaoUtils, near_zero
+from remix_dao_utils import RemixDaoUtils, near_zero, getPrice
 
 class BaseRemixDaoStrategy(Strategy):
 
@@ -23,6 +23,15 @@ class BaseRemixDaoStrategy(Strategy):
         self.export_actions = []
         self.lock_until_time = None
         self.balance_data = {}
+        self.usdc_prices: pd.Series | None = None # This will be set by subclasses if provided
+
+    def get_quote_usdc_price(self, row_data: Snapshot) -> Decimal:
+        if self.usdc_prices is None:
+            return Decimal(getPrice(self.gp.quote_token.name,
+                             row_data.timestamp))
+        else:
+            lp_row_data = row_data.market_status[self.utils.market_key]
+            return Decimal(lp_row_data.usdc_price)
 
     def is_quote_zero(self, amount: Decimal):
         return near_zero(amount, self.gp.quote_token.decimal)
@@ -33,6 +42,10 @@ class BaseRemixDaoStrategy(Strategy):
     def round_to_tick_space(self, lower: int, upper: int) -> tuple[int, int]:
         tick_space = self.utils.params.tick_spacing
         return self.utils.ceiling_tick(lower, tick_space), self.utils.floor_tick(upper, tick_space)
+    
+    def round_to_center_tick(self, current: int) -> int:
+        tick_space = self.utils.params.tick_spacing
+        return self.utils.round_to_tick(current, tick_space)
 
     def is_in_lock(self, row_data: Snapshot) -> bool:
         return self.lock_until_time is not None and row_data.timestamp <= self.lock_until_time
@@ -42,6 +55,107 @@ class BaseRemixDaoStrategy(Strategy):
         # Calculate quantity of Token A
         quantity_a = amount_b / price
         return Decimal(quantity_a)
+
+    def calculate_swap_amount(self, current_tick: int, lower_tick: int, upper_tick: int, base_amount: Decimal, quote_amount: Decimal) -> tuple[Decimal, Decimal]:
+        """
+        using current_tick to calculate if a liquidity range of lower_tick to upper_tick to be placed with given base_amount and quote_amount, how much base or quote is needed to be swapped in order to allocate most asset into the liquidity
+        """
+        lp_market: UniLpMarket = self.broker.markets[self.utils.market_key]
+        token0_is_quote = lp_market.pool_info.is_token0_quote
+
+        sqrt_price_x96 = liquitidy_math.get_sqrt_ratio_at_tick(current_tick)
+        sqrt_a = liquitidy_math.get_sqrt_ratio_at_tick(lower_tick)
+        sqrt_b = liquitidy_math.get_sqrt_ratio_at_tick(upper_tick)
+
+        if sqrt_a > sqrt_b:
+            sqrt_a, sqrt_b = sqrt_b, sqrt_a
+
+        if sqrt_price_x96 <= sqrt_a:
+            # All token0
+            if token0_is_quote:
+                return base_amount, ZERO # swap all base to quote (token0)
+            else:
+                return ZERO, quote_amount # swap all quote to base (token0)
+        elif sqrt_price_x96 >= sqrt_b:
+            # All token1
+            if token0_is_quote:
+                return ZERO, quote_amount # swap all quote to base (token1)
+            else:
+                return base_amount, ZERO # swap all base to quote (token1)
+        else:
+            # In range
+            ratio = Decimal(liquitidy_math.amounts_relation(current_tick, lower_tick, upper_tick, lp_market.pool_info.token0.decimal, lp_market.pool_info.token1.decimal))
+            # amount0 = ratio * amount1
+            
+            # Price of token0 in terms of token1
+            p0 = (Decimal(sqrt_price_x96) / Decimal(2**96))**2 * Decimal(10**(lp_market.pool_info.token0.decimal - lp_market.pool_info.token1.decimal))
+            
+            if token0_is_quote:
+                # token0 = quote, token1 = base
+                # ratio = amount1 / amount0 = base / quote
+                # target: base_final = ratio * quote_final
+                
+                # If swap dq (quote) to base:
+                # base + dq * p0 = ratio * (quote - dq)
+                # dq * (ratio + p0) = ratio * quote - base
+                # dq = (ratio * quote - base) / (ratio + p0)
+                
+                delta_quote = (ratio * quote_amount - base_amount) / (ratio + p0)
+                if delta_quote > 0:
+                    return ZERO, delta_quote # swap delta_quote quote to base
+                else:
+                    # swap base to quote
+                    # base_final = base - db
+                    # quote_final = quote + db / p0
+                    # base - db = ratio * (quote + db / p0)
+                    # db * (1 + ratio / p0) = base - ratio * quote
+                    delta_base = (base_amount - ratio * quote_amount) / (ONE + ratio / p0)
+                    return delta_base, ZERO
+            else:
+                # token0 = base, token1 = quote
+                # ratio = amount1 / amount0 = quote / base
+                # target: quote_final = ratio * base_final
+                
+                # If swap db (base) to quote:
+                # quote + db * p0 = ratio * (base - db)
+                # db * (ratio + p0) = ratio * base - quote
+                # db = (ratio * base - quote) / (ratio + p0)
+                
+                delta_base = (ratio * base_amount - quote_amount) / (ratio + p0)
+                if delta_base > 0:
+                    return delta_base, ZERO # swap delta_base base to quote
+                else:
+                    # swap quote to base
+                    # quote_final = quote - dq
+                    # base_final = base + dq / p0
+                    # quote - dq = ratio * (base + dq / p0)
+                    # dq * (1 + ratio / p0) = quote - ratio * base
+                    delta_quote = (quote_amount - ratio * base_amount) / (ONE + ratio / p0)
+                    return ZERO, delta_quote
+
+    def execute_swap(self, lp_market: UniLpMarket, base_to_swap: Decimal, quote_to_swap: Decimal) -> tuple[Decimal, Decimal, Decimal, Decimal]:
+        """
+        Execute the swap using buy and sell as needed.
+        :return: (swapped_base_amount, swapped_quote_amount, fee_base, fee_quote)
+        """
+        fee_base, fee_quote = ZERO, ZERO
+        swapped_base, swapped_quote = ZERO, ZERO
+
+        if base_to_swap > ZERO:
+            # sell base to get quote
+            fee_base, _, swapped_quote = lp_market.sell(base_to_swap)
+            swapped_base = base_to_swap
+        elif quote_to_swap > ZERO:
+            # buy base using quote
+            # calculate base_to_buy from quote_to_swap
+            # quote_amount_with_fee = base_token_amount * price / (1 - self._pool.fee_rate)
+            # base_token_amount = quote_amount_with_fee * (1 - self._pool.fee_rate) / price
+            price = lp_market.market_status.data.price
+            base_to_buy = quote_to_swap * (ONE - Decimal(lp_market.pool_info.fee_rate)) / price
+            fee_quote, _, swapped_base = lp_market.buy(base_to_buy)
+            swapped_quote = quote_to_swap
+
+        return swapped_base, swapped_quote, fee_base, fee_quote
 
     def even_rebalance(self, lp_market: UniLpMarket, base: Decimal | None = None, quote: Decimal | None = None,
                        price: Decimal | None = None) -> tuple[Decimal, Decimal, Decimal | None, Decimal | None]:
