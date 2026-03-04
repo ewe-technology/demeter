@@ -111,29 +111,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         new_trigger = AtTimeTrigger(time=self.params.cal_start_datetime, do=self.first_lp)
         self.triggers.append(new_trigger)
 
-        market_data = self.data[self.utils.market_key]
-
-        # print(market_data.keys()) ==>
-        # Index(['netAmount0', 'netAmount1', 'closeTick', 'openTick', 'lowestTick',
-        #        'highestTick', 'inAmount0', 'inAmount1', 'currentLiquidity', 'open',
-        #        'price', 'low', 'high', 'volume0', 'volume1'],
-        #       dtype='object')
-
         if self.usdc_prices is not None:
             self.add_column(self.utils.market_key, "usdc_price", self.usdc_prices)
-
-        # match self.params.rescale_frequency:
-        #     case RescaleFrequency.minute5:
-        #         self.triggers.append(PeriodTrigger(time_delta=timedelta(minutes=5), do=self.rescale_work))
-        #     case RescaleFrequency.minute15:
-        #         self.triggers.append(PeriodTrigger(time_delta=timedelta(minutes=15), do=self.rescale_work))
-        #     case RescaleFrequency.minute30:
-        #         self.triggers.append(PeriodTrigger(time_delta=timedelta(minutes=30), do=self.rescale_work))
-        #     case RescaleFrequency.hourly:
-        #         self.triggers.append(PeriodTrigger(time_delta=timedelta(hours=1), do=self.rescale_work))
-        #
-        #     case RescaleFrequency.daily:
-        #         self.triggers.append(PeriodTrigger(time_delta=timedelta(days=1), do=self.rescale_work))
 
         self.triggers.append(PeriodTrigger(time_delta=self.params.rescale_frequency.value, do=self.rescale_work))
         dt = datetime(self.params.data_end_date.year, self.params.data_end_date.month, self.params.data_end_date.day,
@@ -145,60 +124,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         pass
 
 
-
-    def even_rebalance(self, lp_market: UniLpMarket, base: Decimal | None = None, quote: Decimal | None = None,
-                       price: Decimal | None = None) -> tuple[Decimal, Decimal, Decimal | None, Decimal | None]:
-        """
-        return: final base, final quote, fee in base token, fee in quote token
-        """
-        if price is None:
-            price = lp_market.market_status.data.price
-
-        if quote is None:
-            amount_quote = lp_market.broker.get_token_balance(lp_market.quote_token)
-        else:
-            amount_quote = quote
-        if base is None:
-            amount_base = lp_market.broker.get_token_balance(lp_market.base_token)
-        else:
-            amount_base = base
-
-        delta_base = (amount_quote / price - amount_base) / (Decimal(2) + lp_market.pool_info.fee_rate)
-        if delta_base >= 0:
-            base_fee, quote_spent, base_got = lp_market.buy(delta_base)
-            # print(f"buy, base_fee: {base_fee}, quote_spent: {quote_spent}, base_got: {base_got}, base: {amount_base}, quote: {amount_quote}")
-            f_base, f_quote, b_fee, q_fee = amount_base + base_got, amount_quote - quote_spent, base_fee, None
-            if f_base <= ZERO or f_quote <= ZERO:
-                print(
-                    f"BAD buy, base_fee: {base_fee}, quote_spent: {quote_spent}, base_got: {base_got}, base: {amount_base}, quote: {amount_quote}, f_base: {f_base}, f_quote: {f_quote}")
-            self.balance_data = {"amount_base": amount_base, "amount_quote": amount_quote, "base_fee": base_fee,
-                                 "quote_spent": quote_spent, "base_got": base_got, "f_base": f_base, "f_quote": f_quote,
-                                 "b_fee": b_fee, "q_fee": q_fee, "price": price}
-            return f_base, f_quote, b_fee, q_fee
-
-        delta_quote = (amount_base - amount_quote / price) / (Decimal(2) - lp_market.pool_info.fee_rate)
-        if delta_quote >= 0:
-            quote_fee, base_spent, quote_got = lp_market.sell(delta_quote)
-            # print(f"sell, quote_fee: {quote_fee}, base_spent: {base_spent}, quote_got: {quote_got}, base: {amount_base}, quote: {amount_quote}")
-            f_base, f_quote, b_fee, q_fee = amount_base - base_spent, amount_quote + quote_got, None, quote_fee
-            if f_base <= ZERO or f_quote <= ZERO:
-                print(
-                    f"BAD sell, quote_fee: {quote_fee}, base_spent: {base_spent}, quote_got: {quote_got}, base: {amount_base}, quote: {amount_quote}, f_base: {f_base}, f_quote: {f_quote}")
-            self.balance_data = {"amount_base": amount_base, "amount_quote": amount_quote, "quote_fee": quote_fee,
-                                 "base_spent": base_spent, "quote_got": quote_got, "f_base": f_base,
-                                 "f_quote": f_quote, "b_fee": b_fee, "q_fee": q_fee, "price": price}
-            return f_base, f_quote, b_fee, q_fee
-
-
-    def calculate_range(self, lp_market: UniLpMarketV2, current_tick: int) -> tuple[Decimal, Decimal, int, int]:
-        """
-        using the self.starting_tick as starting tick, use `self.utils.params.init_tick_spread` as tick_spread
-        calculate range sections from starting tick using tick_spread,
-        the range is calculated from starting_tick plus or minus the tick_spread.
-        on overlapping ticks of ranges, such as 1-2, 2-3, 3-4 when tick falls on 2, the 2-3 (the one as lower boundary) will be chosen.
-
-        using the provided current_tick, find the range section that current_tick falls into and return the lower and upper price of that range and the respective tick and the tick must be order from low to high
-        """
+    def calculate_range(self, lp_market: UniLpMarketV2, current_tick: int, upper_range_ratio: Decimal, lower_range_ratio: Decimal) -> tuple[Decimal, Decimal, int, int]:
         tick_spread = self.utils.params.init_tick_spread
 
         if self.starting_tick is None:
@@ -207,13 +133,17 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         else:
             starting_tick = self.starting_tick
 
-        # range: [starting_tick + n * tick_spread, starting_tick + (n+1) * tick_spread]
-        # We want n such that: starting_tick + n * tick_spread <= current_tick < starting_tick + (n+1) * tick_spread
-        # n = floor((current_tick - starting_tick) / tick_spread)
-
         center_tick = self.utils.round_tick(current_tick, self.utils.params.tick_spacing)
-        lower_tick = center_tick - self.utils.params.tick_spread_lower * self.utils.params.tick_spacing
-        upper_tick = center_tick + self.utils.params.tick_spread_upper * self.utils.params.tick_spacing
+
+        upper_range_ratio_to_tick = math.log(1 + upper_range_ratio) / math.log(1.0001)
+        lower_range_ratio_to_tick = math.log(1 + lower_range_ratio) / math.log(1.0001)
+
+        upper_range_ratio_to_tick_rounded = round(upper_range_ratio_to_tick / tick_spacing) * tick_spacing
+        lower_range_ratio_to_tick_rounded = round(lower_range_ratio_to_tick / tick_spacing) * tick_spacing
+
+        upper_tick = center_tick + upper_range_ratio_to_tick_rounded
+        lower_tick = center_tick - lower_range_ratio_to_tick_rounded
+        
         # print(f"current_tick: {current_tick}, starting_tick: {starting_tick}, tick_spread: {tick_spread},  self.utils.params.tick_spread_lower: {self.utils.params.tick_spread_lower}, self.utils.params.tick_spread_upper: {self.utils.params.tick_spread_upper}")
 
         lower_price = lp_market.tick_to_price(lower_tick)
