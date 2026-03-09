@@ -172,6 +172,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         rebalance = False
         if not (self.positions[0][0] <= current_tick < self.positions[-1][1]):
             rebalance = True
+            print("allow rescale", self.positions[0][0], current_tick, self.positions[-1][1])
 
         return rebalance
 
@@ -225,8 +226,12 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
                 self.total_base_fee += base_fee
                 self.total_quote_fee += quote_fee
 
+            self.positions = []
             print("collect fee success")
             rebalance_base_fee, rebalance_quote_fee = ZERO, ZERO
+
+            lowest, highest = self.valley_shape_config[0][0], self.valley_shape_config[-1][1]
+            (_lower_price, _upper_price, lower_boundary, upper_boundary) = self.calculate_range(lp_market, current_tick, lowest, highest)
             try:
 
                 # to_swap_base = lp_market.broker.get_token_balance(self.gp.base_token) - self.total_base_fee
@@ -243,10 +248,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
                 to_swap_base = lp_market.broker.get_token_balance(self.gp.base_token) - self.total_base_fee
                 to_swap_quote = lp_market.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
 
-                base_to_swap, quote_to_swap = self.calculate_swap_amount(current_tick, new_tick_lower, new_tick_upper, to_swap_base, to_swap_quote)
+                base_to_swap, quote_to_swap = self.calculate_swap_amount(current_tick, lower_boundary, upper_boundary, to_swap_base, to_swap_quote)
                 swapped_base, swapped_quote, rebalance_base_fee, rebalance_quote_fee = self.execute_swap(lp_market, base_to_swap, quote_to_swap)
-                # base, quote, rebalance_base_fee, rebalance_quote_fee = self.even_rebalance(lp_market, to_swap_base,
-                                                                                                    # to_swap_quote)
 
                 self.total_base_swap_fee += rebalance_base_fee if rebalance_base_fee is not None else ZERO
                 self.total_quote_swap_fee += rebalance_quote_fee if rebalance_quote_fee is not None else ZERO
@@ -259,10 +262,16 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
                 #     self.utils.current_position_info, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(
                 #         new_tick_lower, new_tick_upper, tick=current_tick)
                 # else:
-                self.utils.current_position_info, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(
-                    new_tick_lower, new_tick_upper, base, quote, tick=current_tick)
-                base_left_ratio = (base - base_used)/base
-                quote_left_ratio = (quote - quote_used)/quote
+                total_base_used, total_quote_used = ZERO, ZERO
+                for config in self.valley_shape_config:
+                    lower_price, upper_price, lower_tick, upper_tick = self.calculate_range(lp_market, current_tick, config[0], config[1])
+                    position, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(lower_tick, upper_tick, base * config[2], quote * config[2], tick=current_tick) # tick=current_tick
+                    total_base_used += base_used
+                    total_quote_used += quote_used
+                    self.positions.append(position)
+
+                base_left_ratio = (base - total_base_used)/base
+                quote_left_ratio = (quote - total_quote_used)/quote
 
                 if base_left_ratio > 0.001 or quote_left_ratio > 0.001:
                     self.rescale_left_too_much_count += 1
@@ -282,15 +291,15 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
                     # print(f"add LP => new position info ({current_tick}): { self.utils.current_position_info}, base: {base_used}, quote: {quote_used}, base_leftover: {base_leftover}, quote_leftover: {quote_leftover} ")
             except Exception as e:
                 print(
-                    f"failed to add liquidity, current tick: {current_tick}, upper: {new_tick_upper}, lower: {new_tick_lower}")
+                    f"failed to add liquidity, current tick: {current_tick}, upper: {upper_boundary}, lower: {lower_boundary}")
                 raise e
 
-            current_tick = lp_market.price_to_raw_tick(current_price)
+            # current_tick = lp_market.price_to_raw_tick(current_price)
 
             if base_used == ZERO and quote_used == ZERO:
                 self.out_of_fund_date = row_data.timestamp
                 print(
-                    f"\nno position place ({row_data.timestamp.strftime("%Y-%m-%d %H:%M:%S")}): {self.utils.current_position_info}, old_position_info: {old_position_info}, "
+                    f"\nno position place ({row_data.timestamp.strftime("%Y-%m-%d %H:%M:%S")}): {self.utils.current_position_info}, old_position_info: {old_position_infos}, "
                     f"current_tick: {current_tick}, new_tick_lower: {new_tick_lower}, new_tick_upper: {new_tick_upper}, "
                     f"positions: {lp_market.positions}, base: {base}, quote: {quote}, "
                     f"rebalance_base_fee: {rebalance_base_fee}, rebalance_quote_fee: {rebalance_quote_fee}, balance_data: {self.balance_data}")
@@ -300,49 +309,13 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             ed.price = current_price
             ed.tick = current_tick
 
-            ed.tick_lower, ed.tick_upper = old_position_info[0], old_position_info[1]
+            ed.tick_lower, ed.tick_upper = old_position_infos[0][0], old_position_infos[1][1]
 
-            pos = lp_market.positions[self.utils.current_position_info]
-            ed.price_lower, ed.price_upper = pos.lower_price, pos.upper_price
+            # pos = lp_market.positions[self.utils.current_position_info]
+            ed.price_lower, ed.price_upper = lp_market.positions[self.positions[0]].lower_price, lp_market.positions[self.positions[-1]].upper_price
 
-            # param_changed = False
-            # current_param_type = "bull" if self.utils.bull else "bear"
-
-            # if not self.params.to_swap and self.params.range_strategy == RangeStrategy.remix_dao:
-            #     bull: bool | None = None
-            #     if current_tick > new_tick_upper: # range is under price
-            #         new_upper_price = pos.upper_price
-            #         self.ps_lower, bull = self.price_trend_check(current_price, new_upper_price, self.pa_lower)
-            #         if bull is not None and len(self.pa_lower) >= 3:
-            #             if self.utils.bull == bull: # same price trend as param
-            #                 # trim self.ps_lower to the last price action
-            #                 self.ps_lower = [self.pa_lower[-1]]
-            #             else: # change param
-            #                 param_changed = True
-            #                 if bull:
-            #                     self.utils.use_bull_params()
-            #                 else:
-            #                     self.utils.use_bear_params()
-            #     else:
-            #         new_lower_price = pos.lower_price
-            #         self.ps_upper, bull = self.price_trend_check(current_price, new_lower_price, self.pa_upper)
-            #         if bull is not None and len(self.ps_upper) >= 3:
-            #             if self.utils.bull == bull: # same price trend as param
-            #                 # trim self.ps_upper to the last price action
-            #                 self.ps_upper = [self.ps_upper[-1]]
-            #             else: # change param
-            #                 param_changed = True
-            #                 if bull:
-            #                     self.utils.use_bull_params()
-            #                 else:
-            #                     self.utils.use_bear_params()
-            #     if param_changed:
-            #         self.pa_lower = []
-            #         self.pa_upper = []
-            #     pass
-
-            ed.new_tick_lower, ed.new_tick_upper = self.utils.current_position_info[0], \
-                self.utils.current_position_info[1]
+            ed.new_tick_lower, ed.new_tick_upper = self.positions[0][0], \
+                self.positions[-1][1]
 
             ed.base_fee, ed.quote_fee = base_fee, quote_fee
             ed.base_removed, ed.quote_removed = base_removed, quote_removed
@@ -365,19 +338,19 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             elif self.params.range_strategy == RangeStrategy.atr:
                 ed.indicator_value = lp_row_data.atr_1_hr
             else:
-                ed.indicator_value = new_tick_upper - new_tick_lower
+                ed.indicator_value = upper_boundary - lower_boundary
 
             ed.param_type = "bull" if self.utils.bull else "bear"
 
             self.export_actions.append(ed)
 
-            pos_info = self.utils.current_position_info
-            tick_spread = pos_info[1] - pos_info[0]
-            self.tick_spreads.loc[len(self.tick_spreads)] = tick_spread
+            # pos_info = self.utils.current_position_info
+            # tick_spread = pos_info[1] - pos_info[0]
+            self.tick_spreads.loc[len(self.tick_spreads)] = self.positions[-1][1] - self.positions[0][0]
 
             # print(
             #     f"rescaled at {row_data.timestamp.strftime("%Y-%m-%d %H:%M:%S")}, removed: {base} / {quote}, fee: {base_fee} / {quote_fee}, used: {base_used} / {quote_used}, "
-            #     f"tick: {current_tick}, old_position_info: {old_position_info}, position_info: {str(self.utils.current_position_info)}, was_in_range: {self.was_in_range}, price: {current_price}")
+            #     f"tick: {current_tick}, s: {old_position_info}, position_info: {str(self.utils.current_position_info)}, was_in_range: {self.was_in_range}, price: {current_price}")
 
             self.last_rescale_tick = current_tick
             self.was_in_range = False
@@ -462,22 +435,40 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         ed.tick = current_tick
 
         position_info = self.utils.current_position_info
-        ed.tick_lower, ed.tick_upper = position_info[0], position_info[1]
+        ed.tick_lower, ed.tick_upper = self.positions[0][0], self.positions[-1][1]
 
-        pos = lp_market.positions.get(position_info, None)
-        if pos is None:
+        # pos = lp_market.positions.get(position_info, None)
+        # if pos is None:
+        #     ed.price_lower, ed.price_upper = None, None
+        # else:
+        #     ed.price_lower, ed.price_upper = pos.lower_price, pos.upper_price
+        if len(lp_market.positions) == 0:
             ed.price_lower, ed.price_upper = None, None
         else:
-            ed.price_lower, ed.price_upper = pos.lower_price, pos.upper_price
+            ed.price_lower, ed.price_upper = lp_market.positions[self.positions[0]].lower_price, lp_market.positions[self.positions[-1]].upper_price
 
-        ed.new_tick_lower, ed.new_tick_upper = position_info[0], position_info[1]
+        ed.new_tick_lower, ed.new_tick_upper = self.positions[0][0], self.positions[-1][1]
 
-        base_fee, quote_fee = lp_market.collect_fee(self.utils.current_position_info, collect_to_user=True)
+        # base_fee, quote_fee = lp_market.collect_fee(self.utils.current_position_info, collect_to_user=True)
+        last_base_fee, last_quote_fee = 0, 0
+        for position_info in self.positions:
+            base_fee, quote_fee = lp_market.collect_fee(position_info, collect_to_user=True)
 
-        self.total_base_fee += base_fee
-        self.total_quote_fee += quote_fee
+            try:
+                base, quote = lp_market.remove_liquidity(position_info, collect=True)
+                base_removed, quote_removed = base, quote
+            except Exception as e:
+                print(f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} => failed to remove liquidity: {position_info}")
+                print(f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} => current tick: {current_tick}, positions: {lp_market.positions}")
+                raise e
 
-        ed.base_fee, ed.quote_fee = base_fee, quote_fee
+            self.total_base_fee += base_fee
+            self.total_quote_fee += quote_fee
+            last_base_fee += base_fee
+            last_quote_fee += quote_fee
+
+
+        ed.base_fee, ed.quote_fee = last_base_fee, last_quote_fee
         ed.base_removed, ed.quote_removed = None, None
         ed.base_added, ed.quote_added = None, None
         ed.was_in_range = self.was_in_range
