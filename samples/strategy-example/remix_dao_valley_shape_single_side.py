@@ -106,15 +106,15 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.rescale_left_too_much_count: int = 0
         self.positions: List[PositionInfo] = []
         self.valley_shape_config: List[List[Decimal]] = [
-            # [lower price range, upper price range, liquidity ratio]
+            # [lower price range, upper price range, liquidity ratio, is_single_side]
             # the liquidity ratio need to be double if it's single side liquidity
-            [Decimal(-0.05), Decimal(-0.0357), Decimal(0.39) * 2],
-            [Decimal(-0.0357), Decimal(-0.0214), Decimal(0.06) * 2],
-            [Decimal(-0.0214), Decimal(-0.0071), Decimal(0.04) * 2],
-            [Decimal(-0.0071), Decimal(0.0071), Decimal(0.02)],
-            [Decimal(0.0071), Decimal(0.0214), Decimal(0.04) * 2],
-            [Decimal(0.0214), Decimal(0.0357), Decimal(0.06) * 2],
-            [Decimal(0.0357), Decimal(0.05), Decimal(0.39) * 2],
+            [Decimal(-0.05), Decimal(-0.0357), Decimal(0.39), True],
+            [Decimal(-0.0357), Decimal(-0.0214), Decimal(0.06) , True],
+            [Decimal(-0.0214), Decimal(-0.0071), Decimal(0.04) , True],
+            [Decimal(-0.0071), Decimal(0.0071), Decimal(0.02), False],
+            [Decimal(0.0071), Decimal(0.0214), Decimal(0.04) , True],
+            [Decimal(0.0214), Decimal(0.0357), Decimal(0.06) , True],
+            [Decimal(0.0357), Decimal(0.05), Decimal(0.39) , True],
         ]
 
 
@@ -166,11 +166,54 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             lower_price, upper_price = upper_price, lower_price
 
         return lower_price, upper_price, lower_tick, upper_tick
+    
+    def calculate_single_side_range(self, lp_market: UniLpMarketV2, previous_lower_boundary: int, previous_upper_boundary: int, current_tick: int) -> list[list[int, int, Decimal]]:
+        # print("calculate_single_side_range previous_lower_boundary", previous_lower_boundary, previous_upper_boundary, current_tick)
+        new_ranges = []
+        if current_tick > previous_upper_boundary:
+            rounded_upper_tick = self.utils.round_tick(current_tick, self.utils.params.tick_spacing)
+            if rounded_upper_tick < previous_upper_boundary:
+                rounded_upper_tick += self.utils.params.tick_spacing
+            
+            if rounded_upper_tick >= current_tick:
+                rounded_upper_tick -= self.utils.params.tick_spacing
+            # elif (rounded_upper_tick - previous_upper_boundary) // self.utils.params.tick_spacing > 1:
+            #     rounded_upper_tick -= (rounded_upper_tick - previous_upper_boundary) // self.utils.params.tick_spacing * self.utils.params.tick_spacing
+
+
+            for config in reversed(self.valley_shape_config):
+                range_to_tick = math.log(1 + (config[1]-config[0])) / math.log(1.0001)
+                tick_diff = round(range_to_tick / self.utils.params.tick_spacing) * self.utils.params.tick_spacing
+                rounded_lower_tick = rounded_upper_tick - tick_diff
+                new_ranges.insert(0,[rounded_lower_tick, rounded_upper_tick, config[2]])
+                rounded_upper_tick = rounded_lower_tick
+
+        elif current_tick < previous_lower_boundary:
+            rounded_lower_tick = self.utils.round_tick(current_tick, self.utils.params.tick_spacing)
+            if rounded_lower_tick > previous_lower_boundary:
+                rounded_lower_tick -= self.utils.params.tick_spacing
+            # elif (previous_lower_boundary - rounded_lower_tick) // self.utils.params.tick_spacing > 1:
+            #     rounded_lower_tick += (previous_lower_boundary - rounded_lower_tick) // self.utils.params.tick_spacing * self.utils.params.tick_spacing
+            if rounded_lower_tick <= current_tick:
+                rounded_lower_tick += self.utils.params.tick_spacing
+
+            for config in self.valley_shape_config:
+                range_to_tick = math.log(1 + (config[1]-config[0])) / math.log(1.0001)
+                tick_diff = round(range_to_tick / self.utils.params.tick_spacing) * self.utils.params.tick_spacing
+                new_ranges.append([rounded_lower_tick, rounded_lower_tick + tick_diff, config[2]])
+                rounded_lower_tick += tick_diff
+        
+        else:
+            print("calculate_single_side_range wrong", previous_lower_boundary, current_tick, previous_upper_boundary)
+
+        return new_ranges
+            
+        
 
     def check_rebalance(self, lp_market: UniLpMarketV2, current_tick: int) -> bool:
         # Check if the current price is outside the current LP range
         rebalance = False
-        if not (self.positions[0][0] <= current_tick < self.positions[-1][1]):
+        if not (self.positions[0][0] <= current_tick <= self.positions[-1][1]):
             rebalance = True
             print("allow rescale", self.positions[0][0], current_tick, self.positions[-1][1])
 
@@ -230,30 +273,9 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             print("collect fee success")
             rebalance_base_fee, rebalance_quote_fee = ZERO, ZERO
 
-            lowest, highest = self.valley_shape_config[0][0], self.valley_shape_config[-1][1]
-            (_lower_price, _upper_price, lower_boundary, upper_boundary) = self.calculate_range(lp_market, current_tick, lowest, highest)
+            # lowest, highest = self.valley_shape_config[0][0], self.valley_shape_config[-1][1]
+            # (_lower_price, _upper_price, lower_boundary, upper_boundary) = self.calculate_range(lp_market, current_tick, lowest, highest)
             try:
-
-                # to_swap_base = lp_market.broker.get_token_balance(self.gp.base_token) - self.total_base_fee
-                # to_swap_quote = lp_market.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
-
-                # # base_to_swap, quote_to_swap = self.calculate_swap_amount(current_tick, new_tick_lower, new_tick_upper, to_swap_base, to_swap_quote)
-                # # swapped_base, swapped_quote, base_used_fee, quote_used_fee = self.execute_swap(lp_market, base_to_swap, quote_to_swap)
-                # base, quote, rebalance_base_fee, rebalance_quote_fee = self.even_rebalance(lp_market, to_swap_base,
-                #                                                                                     to_swap_quote)
-
-                # self.total_base_swap_fee += rebalance_base_fee if rebalance_base_fee is not None else ZERO
-                # self.total_quote_swap_fee += rebalance_quote_fee if rebalance_quote_fee is not None else ZERO
-
-                to_swap_base = lp_market.broker.get_token_balance(self.gp.base_token) - self.total_base_fee
-                to_swap_quote = lp_market.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
-
-                base_to_swap, quote_to_swap = self.calculate_swap_amount(current_tick, lower_boundary, upper_boundary, to_swap_base, to_swap_quote)
-                swapped_base, swapped_quote, rebalance_base_fee, rebalance_quote_fee = self.execute_swap(lp_market, base_to_swap, quote_to_swap)
-
-                self.total_base_swap_fee += rebalance_base_fee if rebalance_base_fee is not None else ZERO
-                self.total_quote_swap_fee += rebalance_quote_fee if rebalance_quote_fee is not None else ZERO
-
                 base = lp_market.broker.get_token_balance(self.gp.base_token) - self.total_base_fee
                 quote = lp_market.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
 
@@ -263,19 +285,22 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
                 #         new_tick_lower, new_tick_upper, tick=current_tick)
                 # else:
                 total_base_used, total_quote_used = ZERO, ZERO
-                for config in self.valley_shape_config:
-                    lower_price, upper_price, lower_tick, upper_tick = self.calculate_range(lp_market, current_tick, config[0], config[1])
-                    position, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(lower_tick, upper_tick, base * config[2], quote * config[2], tick=current_tick) # tick=current_tick
+                new_config = self.calculate_single_side_range(lp_market, old_position_infos[0][0], old_position_infos[-1][1], current_tick)
+                print("rescale_work new_config", new_config)
+                for config in new_config:
+                    position, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(config[0], config[1], base * config[2], quote * config[2], tick=current_tick) # tick=current_tick
+                    print("rescale add liquidity", base_used, quote_used)
                     total_base_used += base_used
                     total_quote_used += quote_used
                     self.positions.append(position)
 
-                base_left_ratio = (base - total_base_used)/base
-                quote_left_ratio = (quote - total_quote_used)/quote
 
-                if base_left_ratio > 0.001 or quote_left_ratio > 0.001:
-                    self.rescale_left_too_much_count += 1
-                    print("rescale_work left too much: left_base", base_left_ratio, "left_quote", quote_left_ratio)
+                # base_left_ratio = (base - total_base_used)/base
+                # quote_left_ratio = (quote - total_quote_used)/quote
+
+                # if base_left_ratio > 0.001 or quote_left_ratio > 0.001:
+                #     self.rescale_left_too_much_count += 1
+                #     print("rescale_work left too much: left_base", base_left_ratio, "left_quote", quote_left_ratio)
 
                 left_base = lp_market.broker.get_token_balance(self.gp.base_token) - self.total_base_fee
                 left_quote = lp_market.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
@@ -296,11 +321,13 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
             # current_tick = lp_market.price_to_raw_tick(current_price)
 
-            if base_used == ZERO and quote_used == ZERO:
+            if total_base_used == ZERO and total_quote_used == ZERO:
+                print("total_base_used",total_base_used)
+                print("total_quote_used",total_quote_used)
                 self.out_of_fund_date = row_data.timestamp
                 print(
                     f"\nno position place ({row_data.timestamp.strftime("%Y-%m-%d %H:%M:%S")}): {self.utils.current_position_info}, old_position_info: {old_position_infos}, "
-                    f"current_tick: {current_tick}, new_tick_lower: {new_tick_lower}, new_tick_upper: {new_tick_upper}, "
+                    f"current_tick: {current_tick}, new_tick_lower: {self.positions[0][0]}, new_tick_upper: {self.positions[-1][1]}, "
                     f"positions: {lp_market.positions}, base: {base}, quote: {quote}, "
                     f"rebalance_base_fee: {rebalance_base_fee}, rebalance_quote_fee: {rebalance_quote_fee}, balance_data: {self.balance_data}")
 
@@ -338,7 +365,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             elif self.params.range_strategy == RangeStrategy.atr:
                 ed.indicator_value = lp_row_data.atr_1_hr
             else:
-                ed.indicator_value = upper_boundary - lower_boundary
+                # ed.indicator_value = upper_boundary - lower_boundary
+                ed.indicator_value = 0
 
             ed.param_type = "bull" if self.utils.bull else "bear"
 
@@ -398,8 +426,9 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         total_quote_used = 0
 
         for config in self.valley_shape_config:
+            share = config[2] * 2 if config[3] else config[2]
             lower_price, upper_price, lower_tick, upper_tick = self.calculate_range(lp_market, current_tick, config[0], config[1])
-            position, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(lower_tick, upper_tick, final_base * config[2], final_quote * config[2], tick=current_tick) # tick=current_tick
+            position, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(lower_tick, upper_tick, final_base * share, final_quote * share, tick=current_tick) # tick=current_tick
             total_base_used += base_used
             total_quote_used += quote_used
             self.positions.append(position)
@@ -725,7 +754,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     _tick_spacing = 1 if _is_stable else int(fee * 200)  # 10  # should simply be fee * 200
     _aggressive = True
     _compound = False
-    _folder_prefix = f"ISAO-valley-shape-{token0.name.lower()}{token1.name.lower()}-{quote_token.name.lower()}"
+    _folder_prefix = f"ISAO-valley-shape-single-side-{token0.name.lower()}{token1.name.lower()}-{quote_token.name.lower()}"
     _dca_add_if_non_empty = False
     _dca_timing = DcaTiming.none
     _dca_addon_price_percent = ZERO  # Decimal(0.5)
@@ -1004,14 +1033,14 @@ if __name__ == "__main__":
         #  2021/05/04~2021/12/31
         # (datetime(2021, 5, 13, 0, 0, 0), date(2021, 5, 13), date(2021, 12, 31), "dca", []),
         #  2022/01/01~2022/12/31
-        (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2022, 12, 31), "", []),
+        (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2022, 3, 1), "", []),
         # (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2022, 7, 1), "", []),
         #  2023/01/01~2023/12/31
-        (datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2023, 12, 31), "", []),
+        # (datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2023, 12, 31), "", []),
          # 2024/01/01~2024/09/30
-        (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2024, 12, 31), "", []),
-        (datetime(2025, 1, 1, 0, 0, 0), date(2025, 1, 1), date(2025, 12, 31), "", []),
-        (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2025, 12, 31), "", []),
+        # (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2024, 12, 31), "", []),
+        # (datetime(2025, 1, 1, 0, 0, 0), date(2025, 1, 1), date(2025, 12, 31), "", []),
+        # (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2025, 12, 31), "", []),
 
 
         # (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2025, 1, 1), "", []),
