@@ -29,7 +29,6 @@ from demeter.result import performance_metrics, return_rate
 from demeter.uniswap import UniLpMarket, UniV3Pool, V3CoreLib, base_unit_price_to_sqrt_price_x96, \
     PositionInfo
 from datetime import date, timedelta, datetime
-
 from remix_dao_utils import RemixDaoUtils, RemixDAOParams, WeeklyTrigger, performance_metrics_for_dca, getPrice, INIT_PRICE
 from export_file import export_file, ExportData, export_apr_results, export_stable_apr_results
 from rm_types import RescaleFrequency, TestParams, GlobalParams, RangeStrategy, PriceActionLog, DcaTiming, DcaAddition
@@ -170,8 +169,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         # n = floor((current_tick - starting_tick) / tick_spread)
 
         n = math.floor((current_tick - starting_tick) / tick_spread)
-        lower_tick = starting_tick + n * tick_spread
-        upper_tick = starting_tick + (n + 1) * tick_spread
+        lower_tick = current_tick - tick_spread
+        upper_tick = current_tick + tick_spread
 
         # Ensure ticks are multiples of tick_spacing
         lower_tick, upper_tick = self.round_to_tick_space(lower_tick, upper_tick)
@@ -187,17 +186,21 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
     def check_rebalance(self, lp_market: UniLpMarket, current_tick: int) -> tuple[bool, Decimal, Decimal, int, int]:
         token0, token1 = lp_market.get_position_amount(self.utils.current_position_info)
         rebalance = False
-        if lp_market.pool_info.is_token0_quote:
-            rebalance = self.is_base_zero(token1) or self.is_quote_zero(token0)
-        else:
-            rebalance = self.is_base_zero(token0) or self.is_quote_zero(token1)
+        # if lp_market.pool_info.is_token0_quote:
+        #     rebalance = self.is_base_zero(token1) or self.is_quote_zero(token0)
+        # else:
+        #     rebalance = self.is_base_zero(token0) or self.is_quote_zero(token1)
 
         # Check if the current price is outside the current LP range
-        if not (self.utils.current_position_info[0] <= current_tick < self.utils.current_position_info[1]):
+        if not ((self.utils.current_position_info[0] - self.utils.params.tick_gap_lower) <= current_tick <= (self.utils.current_position_info[1] + self.utils.params.tick_gap_upper)):
             rebalance = True
 
         if rebalance:
             lower_price, upper_price, lower_tick, upper_tick = self.calculate_range(lp_market, current_tick)
+
+            print("before Rebalance", "current_tick", current_tick, "lower_tick", self.utils.current_position_info[0] - self.utils.params.tick_gap_lower, "upper tick", self.utils.current_position_info[1] + self.utils.params.tick_gap_upper)
+            print("check", ((self.utils.current_position_info[0] - self.utils.params.tick_gap_lower) <= current_tick <= (self.utils.current_position_info[1] + self.utils.params.tick_gap_upper)))
+            print("after", "lower_tick", lower_tick, "upper_tick", upper_tick)
             return True, lower_price, upper_price, lower_tick, upper_tick
         else:
             return False, ZERO, ZERO, ZERO, ZERO
@@ -770,6 +773,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     load_eth_price = False
     _is_stable = False
     load_btc_price = False
+    tick_gap = 1
     # base_token, quote_token, init_quote = eth, usdc, Decimal(1000000)  #  USDC
 
     # base_token, quote_token, init_quote = eth, usdc, Decimal(100000)  # DCA USDC
@@ -777,18 +781,18 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     # base_token, quote_token, init_quote = btc, eth, Decimal(1)  # ETH
     # base_token, quote_token, init_quote = eth, btc, Decimal(1)  # BTC
     # base_token, quote_token, init_quote = cbbtc, btc, Decimal(1)  # BTC/cbBTC
-    # base_token, quote_token, init_quote = usdt, usdc, Decimal(2000)  # USDC/USDT
+    base_token, quote_token, init_quote = usdt, usdc, Decimal(1000000)  # USDC/USDT
     # base_token, quote_token, init_quote = wstEth, eth, Decimal(100)  # wstETH/ETH
-    base_token, quote_token, init_quote = dai, usdt, Decimal(100000)  # dai/usdt
+    # base_token, quote_token, init_quote = dai, usdt, Decimal(100000)  # dai/usdt
 
-    # token0, token1 = usdc, usdt
-    # contract_address, fee, chain_name, _is_stable = "0x3416cF6C708Da44DB2624D63ea0AAef7113527C6", 0.01, ChainType.ethereum.name, True  # usdc/usdt  2021-11-20
+    token0, token1 = usdc, usdt
+    contract_address, fee, chain_name, _is_stable = "0x3416cF6C708Da44DB2624D63ea0AAef7113527C6", 0.01, ChainType.ethereum.name, True  # usdc/usdt  2021-11-20
     # token0, token1 = btc, cbbtc
     # contract_address, fee, chain_name, _is_stable, load_btc_price = "0xe8f7c89C5eFa061e340f2d2F206EC78FD8f7e124", 0.01, ChainType.ethereum.name, True, True  # wbtc/cbbtc  2021-09-20
     # token0, token1 = wstEth, eth
     # contract_address, fee, chain_name, _is_stable, load_eth_price = "0x109830a1AAaD605BbF02a9dFA7B0B92EC2FB7dAa", 0.01, ChainType.ethereum.name, True, True  # wstEth/eth  2022-08-25
-    token0, token1 = dai, usdt
-    contract_address, fee, chain_name, _is_stable = "0x48DA0965ab2d2cbf1C17C09cFB5Cbe67Ad5B1406", 0.01, ChainType.ethereum.name, True  # dai/usdt  2022-07-20
+    # token0, token1 = dai, usdt
+    # contract_address, fee, chain_name, _is_stable = "0x48DA0965ab2d2cbf1C17C09cFB5Cbe67Ad5B1406", 0.01, ChainType.ethereum.name, True  # dai/usdt  2022-07-20
 
     # token0, token1 = btc, eth
     # contract_address, fee, chain_name, load_eth_price = "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0", 0.05, ChainType.ethereum.name, True # wbtc/weth  2021-05-13
@@ -810,7 +814,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     _tick_spacing = 1 if _is_stable else int(fee * 200)  # 10  # should simply be fee * 200
     _aggressive = True
     _compound = False
-    _folder_prefix = f"ISAO-tick-B-stable-{_starting_mark_price}-{token0.name.lower()}{token1.name.lower()}-{quote_token.name.lower()}"
+    _folder_prefix = f"ISAO-tick-B-stable-tick-gap-{tick_gap}-{token0.name.lower()}{token1.name.lower()}-{quote_token.name.lower()}"
     _dca_add_if_non_empty = False
     _dca_timing = DcaTiming.none
     _dca_addon_price_percent = ZERO  # Decimal(0.5)
@@ -829,14 +833,14 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
                       dca_addition=_dca_addition)
 
 
-    l: List[int] = list(range(1, 11)) # 1 - 10 用來當tick spread
+    l: List[int] = list(range(1,6)) # 1 - 10 用來當tick spread
     # l: List[int] = list(range(1, 3))  # 1 - 10 用來當tick spread
     _remix_spreads = list(map(lambda i: RescaleParam(init_tick_spread=i, bull_lower_spread=i, bull_upper_spread=i,
                                                      bear_lower_spread=i, bear_upper_spread=i, ), l))
 
     # _rescale_frequencies = [RescaleFrequency.minute5, RescaleFrequency.minute15, RescaleFrequency.minute30, RescaleFrequency.hourly]  # RescaleFrequency.hourly,
     _rescale_frequencies = [RescaleFrequency.hourly, RescaleFrequency.hour4, RescaleFrequency.hour8, RescaleFrequency.hour12, RescaleFrequency.daily]
-    # _rescale_frequencies = [RescaleFrequency.minute5, RescaleFrequency.minute15, ]
+    # _rescale_frequencies = [RescaleFrequency.hourly]
     # _rescale_frequencies = [RescaleFrequency.minute30, RescaleFrequency.hourly]  # RescaleFrequency.hourly,
 
     _init_type: int = 1
@@ -850,8 +854,8 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
         # rescale_tick_tolerance=10,
         init_tick_spread=120,
         tick_spacing=_tick_spacing,
-        tick_gap_lower=1,
-        tick_gap_upper=1, )
+        tick_gap_lower=tick_gap,
+        tick_gap_upper=tick_gap, )
     _param_no_offset = RemixDAOParams(  # offset + range
         tick_spread_upper=60,
         tick_spread_lower=60,
@@ -862,8 +866,8 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
         # rescale_tick_tolerance=10,
         init_tick_spread=120,
         tick_spacing=_tick_spacing,
-        tick_gap_lower=1,
-        tick_gap_upper=1, )
+        tick_gap_lower=tick_gap,
+        tick_gap_upper=tick_gap, )
 
     _cmp = ""
     if _compound:
@@ -927,7 +931,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
             parameters.append((bull_no_offset, bear_no_offset,
                                TestParams(range_strategy=RangeStrategy.remix_dao, indicator_mult=1,
                                           # report_name=f"{"agg" if _aggressive else "cons"}-{init_quote}{quote_token.name}_{RangeStrategy.remix_dao.name}_no_offset_{bull_no_offset.init_tick_spread}_{bull_no_offset.tick_spread_lower}-{bull_no_offset.tick_spread_upper}_{bear_no_offset.tick_spread_lower}-{bear_no_offset.tick_spread_upper}_{rescale_frequency.name}-{gp.dca_add_if_non_empty}",
-                                          report_name=f"{"agg" if _aggressive else "cons"}-{init_quote}{quote_token.name}_{RangeStrategy.remix_dao.name}_no_offset_{bear_no_offset.init_tick_spread}_{rescale_frequency}",
+                                          report_name=f"{"agg" if _aggressive else "cons"}-{init_quote}{quote_token.name}_{RangeStrategy.remix_dao.name}_tick_gap_{bear_no_offset.tick_gap_lower}_spread_{bull_no_offset.init_tick_spread}_{rescale_frequency}",
                                           indicator_length_hr=1, to_swap=False,
                                           aggressive=_aggressive, compound=_compound,
                                           rescale_frequency=rescale_frequency,
@@ -1086,13 +1090,13 @@ if __name__ == "__main__":
         #  2021/05/04~2021/12/31
         # (datetime(2021, 5, 13, 0, 0, 0), date(2021, 5, 13), date(2021, 12, 31), "dca", []),
         #  2022/01/01~2022/12/31
-        # (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2022, 12, 31), "", []),
+        (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2022, 12, 31), "", []),
         #  2023/01/01~2023/12/31
         (datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2023, 12, 31), "", []),
          # 2024/01/01~2024/09/30
         (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2024, 12, 31), "", []),
         (datetime(2025, 1, 1, 0, 0, 0), date(2025, 1, 1), date(2025, 12, 31), "", []),
-        # (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2025, 12, 31), "", []),
+        (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2025, 12, 31), "", []),
 
 
         # (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2025, 1, 1), "", []),
