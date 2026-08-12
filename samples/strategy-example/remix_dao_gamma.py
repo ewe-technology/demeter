@@ -53,12 +53,92 @@ from demeter.uniswap.helper import (
 
 conservative_fluctuation = CONSERVATIVE_FLUCTUATION
 
+# Liquidity bands, as tick offsets from the (rounded) current tick. 17 bands of 120 ticks
+# each, covering [-1020, 1020] around the price (about +-10.7%).
+SHAPE_TICK_BANDS: List[Tuple[int, int]] = [
+    (-1020, -900),
+    (-900, -780),
+    (-780, -660),
+    (-660, -540),
+    (-540, -420),
+    (-420, -300),
+    (-300, -180),
+    (-180, -60),
+    (-60, 60),
+    (60, 180),
+    (180, 300),
+    (300, 420),
+    (420, 540),
+    (540, 660),
+    (660, 780),
+    (780, 900),
+    (900, 1020),
+]
+
+# Share of TOTAL portfolio value each band holds. One entry per column of the shape sheet,
+# in the same order as SHAPE_TICK_BANDS. Each column sums to 1 (camel is 1.0001 because of
+# sheet rounding, build_shape_config normalises it away).
+SHAPE_WEIGHTS: Dict[str, List[Decimal]] = {
+    "triangle": [Decimal(w) for w in
+                 ["0", "0.0088", "0.0263", "0.0439", "0.0614", "0.0789", "0.0965", "0.1140",
+                  "0.1404",
+                  "0.1140", "0.0965", "0.0789", "0.0614", "0.0439", "0.0263", "0.0088", "0"]],
+    "gaussian": [Decimal(w) for w in
+                 ["0.0017", "0.0048", "0.0119", "0.0258", "0.0486", "0.0796", "0.1131", "0.1396",
+                  "0.1498",
+                  "0.1396", "0.1131", "0.0796", "0.0486", "0.0258", "0.0119", "0.0048", "0.0017"]],
+    "exponential": [Decimal(w) for w in
+                    ["0.0096", "0.0140", "0.0204", "0.0296", "0.0431", "0.0627", "0.0912", "0.1328",
+                     "0.1932",
+                     "0.1328", "0.0912", "0.0627", "0.0431", "0.0296", "0.0204", "0.0140", "0.0096"]],
+    "camel": [Decimal(w) for w in
+              ["0.0343", "0.0383", "0.0467", "0.0608", "0.0781", "0.0924", "0.0939", "0.0391",
+               "0.0329",
+               "0.0391", "0.0939", "0.0924", "0.0781", "0.0608", "0.0467", "0.0383", "0.0343"]],
+}
+
+
+def build_shape_config(shape: str) -> List[List]:
+    """
+    Turn one column of the shape sheet into the [lower tick offset, upper tick offset, share] rows
+    the strategy places liquidity with.
+
+    The sheet weights are shares of total value. A band sitting entirely on one side of the current
+    tick only consumes one of the two tokens, so its share of that token's balance is doubled; the
+    band straddling the current tick uses both tokens and keeps its share as is. With the portfolio
+    swapped to a 50/50 value split (which a tick symmetric range wants), that allocates exactly 100%
+    of both balances.
+
+    Zero weight bands are dropped: an empty position would earn nothing while still widening the
+    range that check_rebalance treats as in range.
+    """
+    if shape not in SHAPE_WEIGHTS:
+        raise ValueError(f"unknown shape {shape}, expected one of {list(SHAPE_WEIGHTS.keys())}")
+
+    weights = SHAPE_WEIGHTS[shape]
+    if len(weights) != len(SHAPE_TICK_BANDS):
+        raise ValueError(
+            f"shape {shape} has {len(weights)} weights, expected {len(SHAPE_TICK_BANDS)}")
+
+    total = sum(weights)
+    if total <= ZERO:
+        raise ValueError(f"shape {shape} weights sum to {total}")
+
+    config: List[List] = []
+    for (lower_offset, upper_offset), weight in zip(SHAPE_TICK_BANDS, weights):
+        if weight == ZERO:
+            continue
+        share = weight / total
+        is_single_side = not (lower_offset < 0 < upper_offset)
+        config.append([lower_offset, upper_offset, share * 2 if is_single_side else share])
+
+    return config
 
 
 class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
     def __init__(self, _utils: RemixDaoUtils, _params: TestParams, _gp: GlobalParams,
-                 usdc_prices: pd.Series | None = None):
+                 usdc_prices: pd.Series | None = None, shape: str = "triangle"):
         super().__init__(_utils, _params, _gp)
 
         self.last_rescale_tick = 0
@@ -105,17 +185,9 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.starting_tick: int | None = None
         self.rescale_left_too_much_count: int = 0
         self.positions: List[PositionInfo] = []
-        self.valley_shape_config: List[List[Decimal]] = [
-            # [lower price range, upper price range, liquidity ratio]
-            # the liquidity ratio need to be double if it's single side liquidity
-            [Decimal(-0.05), Decimal(-0.0357), Decimal(0.39) * 2],
-            [Decimal(-0.0357), Decimal(-0.0214), Decimal(0.06) * 2],
-            [Decimal(-0.0214), Decimal(-0.0071), Decimal(0.04) * 2],
-            [Decimal(-0.0071), Decimal(0.0071), Decimal(0.02)],
-            [Decimal(0.0071), Decimal(0.0214), Decimal(0.04) * 2],
-            [Decimal(0.0214), Decimal(0.0357), Decimal(0.06) * 2],
-            [Decimal(0.0357), Decimal(0.05), Decimal(0.39) * 2],
-        ]
+        # [lower tick offset, upper tick offset, share of the balance to place]
+        self.shape = shape
+        self.shape_config: List[List] = build_shape_config(shape)
 
 
     def initialize(self):
@@ -136,27 +208,17 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         pass
 
 
-    def calculate_range(self, lp_market: UniLpMarketV2, current_tick: int, lower_range_ratio: Decimal, upper_range_ratio: Decimal) -> tuple[Decimal, Decimal, int, int]:
-        tick_spread = self.utils.params.init_tick_spread
+    def calculate_range(self, lp_market: UniLpMarketV2, current_tick: int, lower_tick_offset: int, upper_tick_offset: int) -> tuple[Decimal, Decimal, int, int]:
+        """
+        Place a band at [current tick + lower_tick_offset, current tick + upper_tick_offset], both
+        snapped to tick spacing. Adjacent bands share a boundary offset, so they stay contiguous
+        even when tick spacing does not divide the offsets evenly.
+        """
+        tick_spacing = self.utils.params.tick_spacing
+        center_tick = self.utils.round_tick(current_tick, tick_spacing)
 
-        if self.starting_tick is None:
-            # Fallback if starting_tick is not set yet (should only happen during first_lp if called before setting it)
-            starting_tick = current_tick
-        else:
-            starting_tick = self.starting_tick
-
-        center_tick = self.utils.round_tick(current_tick, self.utils.params.tick_spacing)
-
-        lower_range_ratio_to_tick = math.log(1 + lower_range_ratio) / math.log(1.0001)
-        upper_range_ratio_to_tick = math.log(1 + upper_range_ratio) / math.log(1.0001)
-
-        lower_range_ratio_to_tick_rounded = round(lower_range_ratio_to_tick / self.utils.params.tick_spacing) * self.utils.params.tick_spacing
-        upper_range_ratio_to_tick_rounded = round(upper_range_ratio_to_tick / self.utils.params.tick_spacing) * self.utils.params.tick_spacing
-
-        lower_tick = center_tick + lower_range_ratio_to_tick_rounded
-        upper_tick = center_tick + upper_range_ratio_to_tick_rounded
-        
-        # print(f"current_tick: {current_tick}, starting_tick: {starting_tick}, tick_spread: {tick_spread},  self.utils.params.tick_spread_lower: {self.utils.params.tick_spread_lower}, self.utils.params.tick_spread_upper: {self.utils.params.tick_spread_upper}")
+        lower_tick = center_tick + round(lower_tick_offset / tick_spacing) * tick_spacing
+        upper_tick = center_tick + round(upper_tick_offset / tick_spacing) * tick_spacing
 
         lower_price = lp_market.tick_to_price(lower_tick)
         upper_price = lp_market.tick_to_price(upper_tick)
@@ -212,25 +274,30 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
                 self.lower_rescale_count += 1
 
 
+            base_fee, quote_fee = ZERO, ZERO
+            base_removed, quote_removed = ZERO, ZERO
             for position_info in self.positions:
-                base_fee, quote_fee = lp_market.collect_fee(position_info, collect_to_user=True)
+                position_base_fee, position_quote_fee = lp_market.collect_fee(position_info, collect_to_user=True)
 
                 try:
                     base, quote = lp_market.remove_liquidity(position_info, collect=True)
-                    base_removed, quote_removed = base, quote
+                    base_removed += base
+                    quote_removed += quote
                 except Exception as e:
                     print(f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} => failed to remove liquidity: {position_info}")
                     print(f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} => current tick: {current_tick}, positions: {lp_market.positions}")
                     raise e
 
-                self.total_base_fee += base_fee
-                self.total_quote_fee += quote_fee
+                base_fee += position_base_fee
+                quote_fee += position_quote_fee
+                self.total_base_fee += position_base_fee
+                self.total_quote_fee += position_quote_fee
 
             self.positions = []
             print("collect fee success")
             rebalance_base_fee, rebalance_quote_fee = ZERO, ZERO
 
-            lowest, highest = self.valley_shape_config[0][0], self.valley_shape_config[-1][1]
+            lowest, highest = self.shape_config[0][0], self.shape_config[-1][1]
             (_lower_price, _upper_price, lower_boundary, upper_boundary) = self.calculate_range(lp_market, current_tick, lowest, highest)
             try:
 
@@ -263,7 +330,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
                 #         new_tick_lower, new_tick_upper, tick=current_tick)
                 # else:
                 total_base_used, total_quote_used = ZERO, ZERO
-                for config in self.valley_shape_config:
+                for config in self.shape_config:
                     lower_price, upper_price, lower_tick, upper_tick = self.calculate_range(lp_market, current_tick, config[0], config[1])
                     position, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(lower_tick, upper_tick, base * config[2], quote * config[2], tick=current_tick) # tick=current_tick
                     total_base_used += base_used
@@ -296,11 +363,11 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
             # current_tick = lp_market.price_to_raw_tick(current_price)
 
-            if base_used == ZERO and quote_used == ZERO:
+            if total_base_used == ZERO and total_quote_used == ZERO:
                 self.out_of_fund_date = row_data.timestamp
                 print(
-                    f"\nno position place ({row_data.timestamp.strftime("%Y-%m-%d %H:%M:%S")}): {self.utils.current_position_info}, old_position_info: {old_position_infos}, "
-                    f"current_tick: {current_tick}, new_tick_lower: {new_tick_lower}, new_tick_upper: {new_tick_upper}, "
+                    f"\nno position place ({row_data.timestamp.strftime("%Y-%m-%d %H:%M:%S")}): {self.positions}, old_position_info: {old_position_infos}, "
+                    f"current_tick: {current_tick}, new_tick_lower: {lower_boundary}, new_tick_upper: {upper_boundary}, "
                     f"positions: {lp_market.positions}, base: {base}, quote: {quote}, "
                     f"rebalance_base_fee: {rebalance_base_fee}, rebalance_quote_fee: {rebalance_quote_fee}, balance_data: {self.balance_data}")
 
@@ -309,7 +376,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             ed.price = current_price
             ed.tick = current_tick
 
-            ed.tick_lower, ed.tick_upper = old_position_infos[0][0], old_position_infos[1][1]
+            ed.tick_lower, ed.tick_upper = old_position_infos[0][0], old_position_infos[-1][1]
 
             # pos = lp_market.positions[self.utils.current_position_info]
             ed.price_lower, ed.price_upper = lp_market.positions[self.positions[0]].lower_price, lp_market.positions[self.positions[-1]].upper_price
@@ -319,7 +386,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
             ed.base_fee, ed.quote_fee = base_fee, quote_fee
             ed.base_removed, ed.quote_removed = base_removed, quote_removed
-            ed.base_added, ed.quote_added = base_used, quote_used
+            ed.base_added, ed.quote_added = total_base_used, total_quote_used
             ed.was_in_range = self.was_in_range
             ed.total_base_fee, ed.total_quote_fee = self.total_base_fee, self.total_quote_fee
 
@@ -379,7 +446,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         current_price = row_data.prices[self.gp.base_token.name]
 
 
-        lowest, highest = self.valley_shape_config[0][0], self.valley_shape_config[-1][1]
+        lowest, highest = self.shape_config[0][0], self.shape_config[-1][1]
         (_lower_price, _upper_price, lower_boundary, upper_boundary) = self.calculate_range(lp_market, current_tick, lowest, highest)
         self.starting_tick = current_tick
 
@@ -397,7 +464,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         total_base_used = 0
         total_quote_used = 0
 
-        for config in self.valley_shape_config:
+        for config in self.shape_config:
             lower_price, upper_price, lower_tick, upper_tick = self.calculate_range(lp_market, current_tick, config[0], config[1])
             position, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(lower_tick, upper_tick, final_base * config[2], final_quote * config[2], tick=current_tick) # tick=current_tick
             total_base_used += base_used
@@ -536,7 +603,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
 
 def run_test(bull_params: RemixDAOParams, bear_params: RemixDAOParams, params: TestParams, gp: GlobalParams,
-             processed_data: pd.DataFrame | None, usdc_price_data: pd.DataFrame | None = None) -> Dict[str, Decimal]:
+             processed_data: pd.DataFrame | None, usdc_price_data: pd.DataFrame | None = None,
+             shape: str = "triangle") -> Dict[str, Decimal]:
     try:
 
         usdc_prices: pd.Series | None = None
@@ -561,7 +629,7 @@ def run_test(bull_params: RemixDAOParams, bear_params: RemixDAOParams, params: T
         broker.set_balance(gp.base_token, 0)
 
         utils = RemixDaoUtils(market, market_key, bull_params, bear_params, params.start_with_bull_param)
-        strat = RemixDaoDcaWeekStratStrategy(utils, params, gp, usdc_prices=usdc_prices)
+        strat = RemixDaoDcaWeekStratStrategy(utils, params, gp, usdc_prices=usdc_prices, shape=shape)
         actuator.strategy = strat
         market.data_path = f"../real-data/{gp.contract_address}"
         if processed_data is not None:
@@ -656,7 +724,7 @@ def run_test(bull_params: RemixDAOParams, bear_params: RemixDAOParams, params: T
 
         return metrics
     except Exception as e:
-        print(f"error for {params.range_strategy.value}, {str(bull_params)}, {str(bear_params)}")
+        print(f"error for {params.range_strategy.value}, shape: {shape}, {str(bull_params)}, {str(bear_params)}")
         raise e
     # plot_position_return_decomposition(actuator.account_status_df, actuator.token_prices[_base_token.name], market_key)
 
@@ -725,7 +793,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     _tick_spacing = 1 if _is_stable else int(fee * 200)  # 10  # should simply be fee * 200
     _aggressive = True
     _compound = False
-    _folder_prefix = f"ISAO-valley-shape-{token0.name.lower()}{token1.name.lower()}-{quote_token.name.lower()}"
+    _folder_prefix = f"ISAO-shape-{token0.name.lower()}{token1.name.lower()}-{quote_token.name.lower()}"
     _dca_add_if_non_empty = False
     _dca_timing = DcaTiming.none
     _dca_addon_price_percent = ZERO  # Decimal(0.5)
@@ -751,6 +819,10 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     l: List[int] = [140]
     _remix_spreads = list(map(lambda i: RescaleParam(init_tick_spread=i, bull_lower_spread=i, bull_upper_spread=i,
                                                      bear_lower_spread=i, bear_upper_spread=i, ), l))
+
+    # liquidity shapes to backtest, one entry per column of the shape sheet
+    _shapes: List[str] = ["triangle", "gaussian", "exponential", "camel"]
+    # _shapes: List[str] = ["triangle"]
 
     # _rescale_frequencies = [RescaleFrequency.minute5, RescaleFrequency.minute15, RescaleFrequency.minute30, RescaleFrequency.hourly]  # RescaleFrequency.hourly,
     _rescale_frequencies = [RescaleFrequency.hourly, RescaleFrequency.hour4, RescaleFrequency.hour8, RescaleFrequency.hour12, RescaleFrequency.daily]
@@ -792,7 +864,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
 
     folder = f"result/{_folder_prefix}-{init_quote}-{csd.strftime("%Y%m%d")}-{ded.strftime("%Y%m%d")}"
     Path(folder).mkdir(parents=True, exist_ok=True)
-    parameters: List[Tuple[RemixDAOParams, RemixDAOParams, TestParams]] = []
+    parameters: List[Tuple[RemixDAOParams, RemixDAOParams, TestParams, str]] = []
 
     for rescale_frequency in _rescale_frequencies:
         for spread in _remix_spreads:
@@ -842,19 +914,21 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
             #                               initial_swap=spread.initial_swap(), flip_param_dates=flip_param_dates,
             #                               start_with_bull_param=start_with_bull_param)
             #                    ))
-            parameters.append((bull_no_offset, bear_no_offset,
-                               TestParams(range_strategy=RangeStrategy.remix_dao, indicator_mult=1,
-                                          # report_name=f"{"agg" if _aggressive else "cons"}-{init_quote}{quote_token.name}_{RangeStrategy.remix_dao.name}_no_offset_{bull_no_offset.init_tick_spread}_{bull_no_offset.tick_spread_lower}-{bull_no_offset.tick_spread_upper}_{bear_no_offset.tick_spread_lower}-{bear_no_offset.tick_spread_upper}_{rescale_frequency.name}-{gp.dca_add_if_non_empty}",
-                                          report_name=f"{"agg" if _aggressive else "cons"}-{init_quote}{quote_token.name}_{RangeStrategy.remix_dao.name}_no_offset_{bear_no_offset.init_tick_spread}_{rescale_frequency}",
-                                          indicator_length_hr=1, to_swap=False,
-                                          aggressive=_aggressive, compound=_compound,
-                                          rescale_frequency=rescale_frequency,
-                                          cal_start_datetime=csd, data_start_date=dsd, data_end_date=ded, folder=folder,
-                                          initial_swap=spread.initial_swap(), flip_param_dates=flip_param_dates,
-                                          start_with_bull_param=start_with_bull_param,
-                                          initial_type=_init_type,
-                                          starting_mark_price=_starting_mark_price,)
-                               ))
+            for shape in _shapes:
+                parameters.append((bull_no_offset, bear_no_offset,
+                                   TestParams(range_strategy=RangeStrategy.remix_dao, indicator_mult=1,
+                                              # report_name=f"{"agg" if _aggressive else "cons"}-{init_quote}{quote_token.name}_{RangeStrategy.remix_dao.name}_no_offset_{bull_no_offset.init_tick_spread}_{bull_no_offset.tick_spread_lower}-{bull_no_offset.tick_spread_upper}_{bear_no_offset.tick_spread_lower}-{bear_no_offset.tick_spread_upper}_{rescale_frequency.name}-{gp.dca_add_if_non_empty}",
+                                              report_name=f"{"agg" if _aggressive else "cons"}-{init_quote}{quote_token.name}_{RangeStrategy.remix_dao.name}_{shape}_no_offset_{bear_no_offset.init_tick_spread}_{rescale_frequency}",
+                                              indicator_length_hr=1, to_swap=False,
+                                              aggressive=_aggressive, compound=_compound,
+                                              rescale_frequency=rescale_frequency,
+                                              cal_start_datetime=csd, data_start_date=dsd, data_end_date=ded, folder=folder,
+                                              initial_swap=spread.initial_swap(), flip_param_dates=flip_param_dates,
+                                              start_with_bull_param=start_with_bull_param,
+                                              initial_type=_init_type,
+                                              starting_mark_price=_starting_mark_price,),
+                                   shape
+                                   ))
             # parameters.append((no_offset,
             #                    TestParams(range_strategy=RangeStrategy.remix_dao, indicator_mult=1,
             #                               report_name=f"{"agg" if _aggressive else "cons"}-{init_quote}{quote_token.name}_{RangeStrategy.remix_dao.name}_rebalance_{no_offset.init_tick_spread}_{no_offset.tick_spread_lower}_{no_offset.tick_spread_upper}_{rescale_frequency.name}{_cmp}",
@@ -975,7 +1049,8 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
 
     # result = list(map(lambda p: (p[2].report_name, run_test(p[0], p[1], p[2], gp, market.data, market_usdc.data)), parameters))
     result = list(
-        map(lambda p: (p[2].report_name, run_test(p[0], p[1], p[2], gp, market.data, usdc_price_data)), parameters))
+        map(lambda p: (p[2].report_name, run_test(p[0], p[1], p[2], gp, market.data, usdc_price_data, shape=p[3])),
+            parameters))
     export_stable_apr_results(f"{folder}/apr_remix_{init_quote}_results.csv", result)
     pass
 
