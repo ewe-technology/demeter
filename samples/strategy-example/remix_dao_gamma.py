@@ -294,7 +294,6 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
                 self.total_quote_fee += position_quote_fee
 
             self.positions = []
-            print("collect fee success")
             rebalance_base_fee, rebalance_quote_fee = ZERO, ZERO
 
             lowest, highest = self.shape_config[0][0], self.shape_config[-1][1]
@@ -340,9 +339,9 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
                 base_left_ratio = (base - total_base_used)/base
                 quote_left_ratio = (quote - total_quote_used)/quote
 
-                if base_left_ratio > 0.001 or quote_left_ratio > 0.001:
-                    self.rescale_left_too_much_count += 1
-                    print("rescale_work left too much: left_base", base_left_ratio, "left_quote", quote_left_ratio)
+                # if base_left_ratio > 0.001 or quote_left_ratio > 0.001:
+                #     self.rescale_left_too_much_count += 1
+                #     print("rescale_work left too much: left_base", base_left_ratio, "left_quote", quote_left_ratio)
 
                 left_base = lp_market.broker.get_token_balance(self.gp.base_token) - self.total_base_fee
                 left_quote = lp_market.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
@@ -793,7 +792,12 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     _tick_spacing = 1 if _is_stable else int(fee * 200)  # 10  # should simply be fee * 200
     _aggressive = True
     _compound = False
-    _folder_prefix = f"ISAO-shape-{token0.name.lower()}{token1.name.lower()}-{quote_token.name.lower()}"
+    # liquidity shape to backtest, one column of the shape sheet. switch it by hand
+    _shape: str = "triangle"
+    # _shape: str = "gaussian"
+    # _shape: str = "exponential"
+    # _shape: str = "camel"
+    _folder_prefix = f"ISAO-gamma-{_shape}-{token0.name.lower()}{token1.name.lower()}-{quote_token.name.lower()}"
     _dca_add_if_non_empty = False
     _dca_timing = DcaTiming.none
     _dca_addon_price_percent = ZERO  # Decimal(0.5)
@@ -819,10 +823,6 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     l: List[int] = [140]
     _remix_spreads = list(map(lambda i: RescaleParam(init_tick_spread=i, bull_lower_spread=i, bull_upper_spread=i,
                                                      bear_lower_spread=i, bear_upper_spread=i, ), l))
-
-    # liquidity shapes to backtest, one entry per column of the shape sheet
-    _shapes: List[str] = ["triangle", "gaussian", "exponential", "camel"]
-    # _shapes: List[str] = ["triangle"]
 
     # _rescale_frequencies = [RescaleFrequency.minute5, RescaleFrequency.minute15, RescaleFrequency.minute30, RescaleFrequency.hourly]  # RescaleFrequency.hourly,
     _rescale_frequencies = [RescaleFrequency.hourly, RescaleFrequency.hour4, RescaleFrequency.hour8, RescaleFrequency.hour12, RescaleFrequency.daily]
@@ -864,7 +864,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
 
     folder = f"result/{_folder_prefix}-{init_quote}-{csd.strftime("%Y%m%d")}-{ded.strftime("%Y%m%d")}"
     Path(folder).mkdir(parents=True, exist_ok=True)
-    parameters: List[Tuple[RemixDAOParams, RemixDAOParams, TestParams, str]] = []
+    parameters: List[Tuple[RemixDAOParams, RemixDAOParams, TestParams]] = []
 
     for rescale_frequency in _rescale_frequencies:
         for spread in _remix_spreads:
@@ -914,21 +914,19 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
             #                               initial_swap=spread.initial_swap(), flip_param_dates=flip_param_dates,
             #                               start_with_bull_param=start_with_bull_param)
             #                    ))
-            for shape in _shapes:
-                parameters.append((bull_no_offset, bear_no_offset,
-                                   TestParams(range_strategy=RangeStrategy.remix_dao, indicator_mult=1,
-                                              # report_name=f"{"agg" if _aggressive else "cons"}-{init_quote}{quote_token.name}_{RangeStrategy.remix_dao.name}_no_offset_{bull_no_offset.init_tick_spread}_{bull_no_offset.tick_spread_lower}-{bull_no_offset.tick_spread_upper}_{bear_no_offset.tick_spread_lower}-{bear_no_offset.tick_spread_upper}_{rescale_frequency.name}-{gp.dca_add_if_non_empty}",
-                                              report_name=f"{"agg" if _aggressive else "cons"}-{init_quote}{quote_token.name}_{RangeStrategy.remix_dao.name}_{shape}_no_offset_{bear_no_offset.init_tick_spread}_{rescale_frequency}",
-                                              indicator_length_hr=1, to_swap=False,
-                                              aggressive=_aggressive, compound=_compound,
-                                              rescale_frequency=rescale_frequency,
-                                              cal_start_datetime=csd, data_start_date=dsd, data_end_date=ded, folder=folder,
-                                              initial_swap=spread.initial_swap(), flip_param_dates=flip_param_dates,
-                                              start_with_bull_param=start_with_bull_param,
-                                              initial_type=_init_type,
-                                              starting_mark_price=_starting_mark_price,),
-                                   shape
-                                   ))
+            parameters.append((bull_no_offset, bear_no_offset,
+                               TestParams(range_strategy=RangeStrategy.remix_dao, indicator_mult=1,
+                                          # report_name=f"{"agg" if _aggressive else "cons"}-{init_quote}{quote_token.name}_{RangeStrategy.remix_dao.name}_no_offset_{bull_no_offset.init_tick_spread}_{bull_no_offset.tick_spread_lower}-{bull_no_offset.tick_spread_upper}_{bear_no_offset.tick_spread_lower}-{bear_no_offset.tick_spread_upper}_{rescale_frequency.name}-{gp.dca_add_if_non_empty}",
+                                          report_name=f"{"agg" if _aggressive else "cons"}-{init_quote}{quote_token.name}_{RangeStrategy.remix_dao.name}_{_shape}_no_offset_{bear_no_offset.init_tick_spread}_{rescale_frequency}",
+                                          indicator_length_hr=1, to_swap=False,
+                                          aggressive=_aggressive, compound=_compound,
+                                          rescale_frequency=rescale_frequency,
+                                          cal_start_datetime=csd, data_start_date=dsd, data_end_date=ded, folder=folder,
+                                          initial_swap=spread.initial_swap(), flip_param_dates=flip_param_dates,
+                                          start_with_bull_param=start_with_bull_param,
+                                          initial_type=_init_type,
+                                          starting_mark_price=_starting_mark_price,)
+                               ))
             # parameters.append((no_offset,
             #                    TestParams(range_strategy=RangeStrategy.remix_dao, indicator_mult=1,
             #                               report_name=f"{"agg" if _aggressive else "cons"}-{init_quote}{quote_token.name}_{RangeStrategy.remix_dao.name}_rebalance_{no_offset.init_tick_spread}_{no_offset.tick_spread_lower}_{no_offset.tick_spread_upper}_{rescale_frequency.name}{_cmp}",
@@ -1049,7 +1047,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
 
     # result = list(map(lambda p: (p[2].report_name, run_test(p[0], p[1], p[2], gp, market.data, market_usdc.data)), parameters))
     result = list(
-        map(lambda p: (p[2].report_name, run_test(p[0], p[1], p[2], gp, market.data, usdc_price_data, shape=p[3])),
+        map(lambda p: (p[2].report_name, run_test(p[0], p[1], p[2], gp, market.data, usdc_price_data, shape=_shape)),
             parameters))
     export_stable_apr_results(f"{folder}/apr_remix_{init_quote}_results.csv", result)
     pass
@@ -1082,11 +1080,11 @@ if __name__ == "__main__":
         (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2022, 12, 31), "", []),
         # (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2022, 7, 1), "", []),
         #  2023/01/01~2023/12/31
-        (datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2023, 12, 31), "", []),
+        # (datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2023, 12, 31), "", []),
          # 2024/01/01~2024/09/30
-        (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2024, 12, 31), "", []),
-        (datetime(2025, 1, 1, 0, 0, 0), date(2025, 1, 1), date(2025, 12, 31), "", []),
-        (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2025, 12, 31), "", []),
+        # (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2024, 12, 31), "", []),
+        # (datetime(2025, 1, 1, 0, 0, 0), date(2025, 1, 1), date(2025, 12, 31), "", []),
+        # (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2025, 12, 31), "", []),
 
 
         # (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2025, 1, 1), "", []),
