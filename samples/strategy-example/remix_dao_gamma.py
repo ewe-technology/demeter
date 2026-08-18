@@ -76,8 +76,8 @@ SHAPE_TICK_BANDS: List[Tuple[int, int]] = [
 ]
 
 # Share of TOTAL portfolio value each band holds. One entry per column of the shape sheet,
-# in the same order as SHAPE_TICK_BANDS. Each column sums to 1 (camel is 1.0001 because of
-# sheet rounding, build_shape_config normalises it away).
+# in the same order as SHAPE_TICK_BANDS. Columns are meant to sum to 1; sheet rounding leaves some
+# of them a little off (camel 1.0001, uniform 0.9996), which build_shape_config normalises away.
 SHAPE_WEIGHTS: Dict[str, List[Decimal]] = {
     "triangle": [Decimal(w) for w in
                  ["0", "0.0088", "0.0263", "0.0439", "0.0614", "0.0789", "0.0965", "0.1140",
@@ -95,6 +95,28 @@ SHAPE_WEIGHTS: Dict[str, List[Decimal]] = {
               ["0.0343", "0.0383", "0.0467", "0.0608", "0.0781", "0.0924", "0.0939", "0.0391",
                "0.0329",
                "0.0391", "0.0939", "0.0924", "0.0781", "0.0608", "0.0467", "0.0383", "0.0343"]],
+    # flat: every band holds the same 5.88% (1/17) of total value
+    "uniform": [Decimal("0.0588")] * len(SHAPE_TICK_BANDS),
+    # The inverted shapes put their trough at the money: the centre band is 0, so
+    # build_shape_config drops it and liquidity starts one band out on either side.
+    "inverted_triangle": [Decimal(w) for w in
+                          ["0.110315", "0.096815", "0.083234", "0.069570", "0.055823", "0.041993",
+                           "0.028080", "0.014082",
+                           "0",
+                           "0.014087", "0.028089", "0.042008", "0.055843", "0.069595", "0.083263",
+                           "0.096850", "0.110354"]],
+    "inverted_gaussian": [Decimal(w) for w in
+                          ["0.096979", "0.094757", "0.089643", "0.079964", "0.064624", "0.044438",
+                           "0.023057", "0.0063597",
+                           "0",  # centre band, absent from the source sheet (its 16 values sum to 100)
+                           "0.0063642", "0.023073", "0.044470", "0.064670", "0.080020", "0.089707",
+                           "0.094825", "0.097048"]],
+    "inverted_exponential": [Decimal(w) for w in
+                             ["0.080287", "0.078469", "0.075739", "0.071697", "0.065765", "0.057112",
+                              "0.044542", "0.026332",
+                              "0",
+                              "0.026338", "0.044552", "0.057125", "0.065780", "0.071713", "0.075756",
+                              "0.078487", "0.080306"]],
 }
 
 
@@ -103,11 +125,16 @@ def build_shape_config(shape: str) -> List[List]:
     Turn one column of the shape sheet into the [lower tick offset, upper tick offset, share] rows
     the strategy places liquidity with.
 
-    The sheet weights are shares of total value. A band sitting entirely on one side of the current
-    tick only consumes one of the two tokens, so its share of that token's balance is doubled; the
-    band straddling the current tick uses both tokens and keeps its share as is. With the portfolio
-    swapped to a 50/50 value split (which a tick symmetric range wants), that allocates exactly 100%
-    of both balances.
+    The sheet weights are shares of total value, and the portfolio is swapped to a 50/50 value split
+    (which a tick symmetric range wants) before the bands are placed.
+
+    The band straddling the current tick uses both tokens, so it takes its own share of each balance.
+    Every other band consumes only one of the two tokens, so its share is rescaled against the side
+    it sits on: the bands below the price must together use all the quote the centre band leaves, and
+    the bands above must use all the base. For a column whose halves are exactly equal that works out
+    to simply doubling the weight; columns that are only nearly symmetric (the inverted shapes, whose
+    halves differ in the fourth decimal) would otherwise ask for more than 100% of one token and
+    overdraw the balance on the last band.
 
     Zero weight bands are dropped: an empty position would earn nothing while still widening the
     range that check_rebalance treats as in range.
@@ -124,13 +151,23 @@ def build_shape_config(shape: str) -> List[List]:
     if total <= ZERO:
         raise ValueError(f"shape {shape} weights sum to {total}")
 
+    shares = [w / total for w in weights]
+    straddles = [lower < 0 < upper for lower, upper in SHAPE_TICK_BANDS]
+
+    centre_share = sum(s for s, straddle in zip(shares, straddles) if straddle)
+    below_share = sum(s for s, (lower, upper) in zip(shares, SHAPE_TICK_BANDS) if upper <= 0)
+    above_share = sum(s for s, (lower, upper) in zip(shares, SHAPE_TICK_BANDS) if lower >= 0)
+
     config: List[List] = []
-    for (lower_offset, upper_offset), weight in zip(SHAPE_TICK_BANDS, weights):
-        if weight == ZERO:
+    for (lower_offset, upper_offset), share, straddle in zip(SHAPE_TICK_BANDS, shares, straddles):
+        if share == ZERO:
             continue
-        share = weight / total
-        is_single_side = not (lower_offset < 0 < upper_offset)
-        config.append([lower_offset, upper_offset, share * 2 if is_single_side else share])
+        if straddle:
+            band_share = share
+        else:
+            side_share = below_share if upper_offset <= 0 else above_share
+            band_share = share / side_share * (ONE - centre_share)
+        config.append([lower_offset, upper_offset, band_share])
 
     return config
 
@@ -793,10 +830,14 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     _aggressive = True
     _compound = False
     # liquidity shape to backtest, one column of the shape sheet. switch it by hand
-    _shape: str = "triangle"
+    # _shape: str = "triangle"
     # _shape: str = "gaussian"
     # _shape: str = "exponential"
     # _shape: str = "camel"
+    _shape: str = "uniform"
+    # _shape: str = "inverted_triangle"
+    # _shape: str = "inverted_gaussian"
+    # _shape: str = "inverted_exponential"
     _folder_prefix = f"ISAO-gamma-{_shape}-{token0.name.lower()}{token1.name.lower()}-{quote_token.name.lower()}"
     _dca_add_if_non_empty = False
     _dca_timing = DcaTiming.none
@@ -917,7 +958,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
             parameters.append((bull_no_offset, bear_no_offset,
                                TestParams(range_strategy=RangeStrategy.remix_dao, indicator_mult=1,
                                           # report_name=f"{"agg" if _aggressive else "cons"}-{init_quote}{quote_token.name}_{RangeStrategy.remix_dao.name}_no_offset_{bull_no_offset.init_tick_spread}_{bull_no_offset.tick_spread_lower}-{bull_no_offset.tick_spread_upper}_{bear_no_offset.tick_spread_lower}-{bear_no_offset.tick_spread_upper}_{rescale_frequency.name}-{gp.dca_add_if_non_empty}",
-                                          report_name=f"{"agg" if _aggressive else "cons"}-{init_quote}{quote_token.name}_{RangeStrategy.remix_dao.name}_{_shape}_no_offset_{bear_no_offset.init_tick_spread}_{rescale_frequency}",
+                                          report_name=f"{"agg" if _aggressive else "cons"}-{init_quote}{quote_token.name}_{RangeStrategy.remix_dao.name}_{_shape}_{bear_no_offset.init_tick_spread}_{rescale_frequency}",
                                           indicator_length_hr=1, to_swap=False,
                                           aggressive=_aggressive, compound=_compound,
                                           rescale_frequency=rescale_frequency,
@@ -1080,11 +1121,11 @@ if __name__ == "__main__":
         (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2022, 12, 31), "", []),
         # (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2022, 7, 1), "", []),
         #  2023/01/01~2023/12/31
-        # (datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2023, 12, 31), "", []),
+        (datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2023, 12, 31), "", []),
          # 2024/01/01~2024/09/30
-        # (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2024, 12, 31), "", []),
-        # (datetime(2025, 1, 1, 0, 0, 0), date(2025, 1, 1), date(2025, 12, 31), "", []),
-        # (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2025, 12, 31), "", []),
+        (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2024, 12, 31), "", []),
+        (datetime(2025, 1, 1, 0, 0, 0), date(2025, 1, 1), date(2025, 12, 31), "", []),
+        (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2025, 12, 31), "", []),
 
 
         # (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2025, 1, 1), "", []),
