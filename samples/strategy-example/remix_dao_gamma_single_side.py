@@ -53,6 +53,22 @@ from demeter.uniswap.helper import (
 
 conservative_fluctuation = CONSERVATIVE_FLUCTUATION
 
+# Single side variant of remix_dao_gamma.
+#
+# The centred version re-centres the shape on the price at every rescale, which means swapping back
+# to a 50/50 split and paying the pool fee on the swap. Here the positions are only ever rebuilt
+# once the price has left them, at which point every band holds a single token, and the whole shape
+# is re-laid on that token's side of the price. Nothing is swapped, so no swap fee is paid: if the
+# base price rises out of the range we are all quote and the stack goes back below the price, and if
+# the price keeps rising the stack follows it up, still one sided.
+#
+# Only the first LP still swaps, to get the starting capital into a two sided shape.
+
+# Which side of the current tick a single sided stack sits on. Above the current tick a position
+# holds only token0, below it only token1, so the side follows from the token we are left holding.
+STACK_ABOVE = 1
+STACK_BELOW = -1
+
 # Number of liquidity bands a shape is cut into: one per weight in each SHAPE_WEIGHTS column.
 BAND_COUNT = 17
 
@@ -193,6 +209,25 @@ def build_shape_config(shape: str, ratio: Decimal, tick_spacing: int) -> List[Li
     return config
 
 
+def build_single_side_shares(shape: str) -> List[Decimal]:
+    """
+    Share of ONE token's balance each band takes when the whole stack sits on one side of the price.
+
+    The centred layout has to split the balances between the two sides and double the single sided
+    bands. A one sided stack has no such split: every band consumes the same token, so each simply
+    takes its own weight, normalised so the stack deploys the whole balance.
+    """
+    if shape not in SHAPE_WEIGHTS:
+        raise ValueError(f"unknown shape {shape}, expected one of {list(SHAPE_WEIGHTS.keys())}")
+
+    weights = SHAPE_WEIGHTS[shape]
+    total = sum(weights)
+    if total <= ZERO:
+        raise ValueError(f"shape {shape} weights sum to {total}")
+
+    return [w / total for w in weights]
+
+
 class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
     def __init__(self, _utils: RemixDaoUtils, _params: TestParams, _gp: GlobalParams,
@@ -248,6 +283,14 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.shape = shape
         self.ratio = ratio
         self.shape_config: List[List] = build_shape_config(shape, ratio, _utils.params.tick_spacing)
+        # single side rescale state
+        tick_bands = build_tick_bands(ratio, _utils.params.tick_spacing)
+        self.band_width: int = tick_bands[0][1] - tick_bands[0][0]
+        self.single_side_shares: List[Decimal] = build_single_side_shares(shape)
+        # which side of the price the stack sits on, and the tick it was anchored at. Stays None
+        # while the centred first LP is still standing.
+        self.stack_side: int | None = None
+        self.stack_anchor: int | None = None
 
 
     def initialize(self):
@@ -289,14 +332,68 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
         return lower_price, upper_price, lower_tick, upper_tick
 
-    def check_rebalance(self, lp_market: UniLpMarketV2, current_tick: int) -> bool:
-        # Check if the current price is outside the current LP range
-        rebalance = False
-        if not (self.positions[0][0] <= current_tick < self.positions[-1][1]):
-            rebalance = True
-            print("allow rescale", self.positions[0][0], current_tick, self.positions[-1][1])
+    def stack_anchor_tick(self, current_tick: int, side: int) -> int:
+        """
+        The tick a stack on `side` starts from: the nearest usable tick clear of the current one, so
+        every band stays strictly on that side and needs only the token we are already holding.
+        """
+        tick_spacing = self.utils.params.tick_spacing
+        if side == STACK_ABOVE:
+            return self.utils.ceiling_tick(current_tick + 1, tick_spacing)
+        return self.utils.floor_tick(current_tick, tick_spacing)
 
-        return rebalance
+    def single_side_bands(self, current_tick: int, side: int) -> tuple[int, List[List]]:
+        """
+        Lay the whole shape out on one side of the price with its near end against the current tick,
+        band order preserved. Returns the anchor tick and the [lower tick, upper tick, share] rows.
+
+        All BAND_COUNT bands now sit on the same side, so the stack reaches twice as far from the
+        price as the centred layout does, and the heaviest part of the shape sits around half a span
+        away rather than at the money.
+        """
+        anchor = self.stack_anchor_tick(current_tick, side)
+        width = self.band_width
+        count = len(self.single_side_shares)
+
+        bands: List[List] = []
+        for index, share in enumerate(self.single_side_shares):
+            if share == ZERO:
+                continue
+            if side == STACK_ABOVE:
+                lower_tick = anchor + index * width
+            else:
+                lower_tick = anchor - (count - index) * width
+            bands.append([lower_tick, lower_tick + width, share])
+
+        return anchor, bands
+
+    def check_rebalance(self, lp_market: UniLpMarketV2, current_tick: int) -> tuple[bool, int | None]:
+        """
+        Decide whether to rescale and, if so, which side of the price the new stack belongs on.
+
+        While the price is inside the positions they hold both tokens and are left alone. Once it
+        leaves, every band holds a single token and the stack can be rebuilt on that token's side
+        without swapping. A price that has left on a new side is followed at once, since the whole
+        stack is stranded on the wrong side; a price drifting further away on the side it already
+        left is followed only after a full band has opened up, so we do not re-place every trigger.
+        """
+        stack_lower, stack_upper = self.positions[0][0], self.positions[-1][1]
+        if stack_lower <= current_tick < stack_upper:
+            return False, None
+
+        # below the stack every band is token0, so the replacement stack goes above the price
+        side = STACK_ABOVE if current_tick < stack_lower else STACK_BELOW
+
+        if side != self.stack_side:
+            print("allow rescale, new side", side, stack_lower, current_tick, stack_upper)
+            return True, side
+
+        drift = abs(self.stack_anchor_tick(current_tick, side) - self.stack_anchor)
+        if drift < self.band_width:
+            return False, None
+
+        print("allow rescale, follow", side, "drift", drift, stack_lower, current_tick, stack_upper)
+        return True, side
 
     def get_balance_base_quote_amounts(self) -> tuple[Decimal, Decimal]:
         base = self.broker.get_token_balance(self.gp.base_token)
@@ -319,7 +416,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         current_price = row_data.prices[self.gp.base_token.name]
         try:
             current_tick = lp_market.price_to_raw_tick(current_price)
-            allow_rescale = self.check_rebalance(lp_market, current_tick)
+            allow_rescale, side = self.check_rebalance(lp_market, current_tick)
 
             # Check if rescaling is allowed
             if not allow_rescale:
@@ -356,52 +453,24 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             self.positions = []
             rebalance_base_fee, rebalance_quote_fee = ZERO, ZERO
 
-            lowest, highest = self.shape_config[0][0], self.shape_config[-1][1]
-            (_lower_price, _upper_price, lower_boundary, upper_boundary) = self.calculate_range(lp_market, current_tick, lowest, highest)
+            anchor, bands = self.single_side_bands(current_tick, side)
+            lower_boundary, upper_boundary = bands[0][0], bands[-1][1]
             try:
-
-                # to_swap_base = lp_market.broker.get_token_balance(self.gp.base_token) - self.total_base_fee
-                # to_swap_quote = lp_market.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
-
-                # # base_to_swap, quote_to_swap = self.calculate_swap_amount(current_tick, new_tick_lower, new_tick_upper, to_swap_base, to_swap_quote)
-                # # swapped_base, swapped_quote, base_used_fee, quote_used_fee = self.execute_swap(lp_market, base_to_swap, quote_to_swap)
-                # base, quote, rebalance_base_fee, rebalance_quote_fee = self.even_rebalance(lp_market, to_swap_base,
-                #                                                                                     to_swap_quote)
-
-                # self.total_base_swap_fee += rebalance_base_fee if rebalance_base_fee is not None else ZERO
-                # self.total_quote_swap_fee += rebalance_quote_fee if rebalance_quote_fee is not None else ZERO
-
-                to_swap_base = lp_market.broker.get_token_balance(self.gp.base_token) - self.total_base_fee
-                to_swap_quote = lp_market.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
-
-                base_to_swap, quote_to_swap = self.calculate_swap_amount(current_tick, lower_boundary, upper_boundary, to_swap_base, to_swap_quote)
-                swapped_base, swapped_quote, rebalance_base_fee, rebalance_quote_fee = self.execute_swap(lp_market, base_to_swap, quote_to_swap)
-
-                self.total_base_swap_fee += rebalance_base_fee if rebalance_base_fee is not None else ZERO
-                self.total_quote_swap_fee += rebalance_quote_fee if rebalance_quote_fee is not None else ZERO
-
+                # No swap. Every band sits on one side of the price and takes only the token the old
+                # positions were just converted into, which is the whole point of this variant, so
+                # the balance goes straight back to work and no pool fee is paid on a rebalance.
                 base = lp_market.broker.get_token_balance(self.gp.base_token) - self.total_base_fee
                 quote = lp_market.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
 
-
-                # if self.params.compound:
-                #     self.utils.current_position_info, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(
-                #         new_tick_lower, new_tick_upper, tick=current_tick)
-                # else:
                 total_base_used, total_quote_used = ZERO, ZERO
-                for config in self.shape_config:
-                    lower_price, upper_price, lower_tick, upper_tick = self.calculate_range(lp_market, current_tick, config[0], config[1])
-                    position, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(lower_tick, upper_tick, base * config[2], quote * config[2], tick=current_tick) # tick=current_tick
+                for lower_tick, upper_tick, share in bands:
+                    position, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(
+                        lower_tick, upper_tick, base * share, quote * share, tick=current_tick)
                     total_base_used += base_used
                     total_quote_used += quote_used
                     self.positions.append(position)
 
-                base_left_ratio = (base - total_base_used)/base
-                quote_left_ratio = (quote - total_quote_used)/quote
-
-                # if base_left_ratio > 0.001 or quote_left_ratio > 0.001:
-                #     self.rescale_left_too_much_count += 1
-                #     print("rescale_work left too much: left_base", base_left_ratio, "left_quote", quote_left_ratio)
+                self.stack_side, self.stack_anchor = side, anchor
 
                 left_base = lp_market.broker.get_token_balance(self.gp.base_token) - self.total_base_fee
                 left_quote = lp_market.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
@@ -874,7 +943,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     # _ratio: Decimal = Decimal("0.40")
     # _ratio: Decimal = Decimal("0.45")
     _ratio: Decimal = Decimal("0.50")
-    _folder_prefix = (f"ISAO-gamma-{_shape}-{ratio_label(_ratio)}-"
+    _folder_prefix = (f"ISAO-gamma-single-side-{_shape}-{ratio_label(_ratio)}-"
                       f"{token0.name.lower()}{token1.name.lower()}-{quote_token.name.lower()}")
     _dca_add_if_non_empty = False
     _dca_timing = DcaTiming.none
