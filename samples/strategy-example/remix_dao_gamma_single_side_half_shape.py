@@ -63,6 +63,12 @@ conservative_fluctuation = CONSERVATIVE_FLUCTUATION
 # the price keeps rising the stack follows it up, still one sided.
 #
 # Only the first LP still swaps, to get the starting capital into a two sided shape.
+#
+# Half shape variant: a rescale lays the shape out exactly as the centred layout would, centred on
+# the new price, but only places the half on the side of the token we are holding, at double weight.
+# The centre band straddles the price and would need both tokens, so it is left out, and the half
+# we do place is renormalised to deploy the whole balance. The near band therefore starts half a band
+# away from the price, where the centre band's edge would have been.
 
 # Which side of the current tick a single sided stack sits on. Above the current tick a position
 # holds only token0, below it only token1, so the side follows from the token we are left holding.
@@ -209,23 +215,36 @@ def build_shape_config(shape: str, ratio: Decimal, tick_spacing: int) -> List[Li
     return config
 
 
-def build_single_side_shares(shape: str) -> List[Decimal]:
+def build_half_shape_config(shape: str, ratio: Decimal, tick_spacing: int) -> Dict[int, List[List]]:
     """
-    Share of ONE token's balance each band takes when the whole stack sits on one side of the price.
+    [lower tick offset, upper tick offset, share] rows for each half of the centred shape, keyed by
+    the side of the price it sits on.
 
-    The centred layout has to split the balances between the two sides and double the single sided
-    bands. A one sided stack has no such split: every band consumes the same token, so each simply
-    takes its own weight, normalised so the stack deploys the whole balance.
+    The offsets are the centred layout's own, so the price stays at the centre of the shape. Each half
+    consumes one token only, and since we hold nothing else after leaving the range, its bands share
+    the whole balance: every weight is divided by its half's total. For a symmetric column that is
+    double the weight (a little more when the centre band had weight, since it is left out).
+
+    Zero weight bands are dropped, as in build_shape_config.
     """
     if shape not in SHAPE_WEIGHTS:
         raise ValueError(f"unknown shape {shape}, expected one of {list(SHAPE_WEIGHTS.keys())}")
 
+    bands = build_tick_bands(ratio, tick_spacing)
     weights = SHAPE_WEIGHTS[shape]
-    total = sum(weights)
-    if total <= ZERO:
-        raise ValueError(f"shape {shape} weights sum to {total}")
+    if len(weights) != len(bands):
+        raise ValueError(f"shape {shape} has {len(weights)} weights, expected {len(bands)}")
 
-    return [w / total for w in weights]
+    halves: Dict[int, List[List]] = {}
+    for side in (STACK_ABOVE, STACK_BELOW):
+        rows = [(lower, upper, w) for (lower, upper), w in zip(bands, weights)
+                if (lower >= 0 if side == STACK_ABOVE else upper <= 0)]
+        total = sum(w for _, _, w in rows)
+        if total <= ZERO:
+            raise ValueError(f"shape {shape} has no weight {'above' if side == STACK_ABOVE else 'below'} the price")
+        halves[side] = [[lower, upper, w / total] for lower, upper, w in rows if w != ZERO]
+
+    return halves
 
 
 class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
@@ -286,9 +305,9 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         # single side rescale state
         tick_bands = build_tick_bands(ratio, _utils.params.tick_spacing)
         self.band_width: int = tick_bands[0][1] - tick_bands[0][0]
-        self.single_side_shares: List[Decimal] = build_single_side_shares(shape)
-        # which side of the price the stack sits on, and the tick it was anchored at. Stays None
-        # while the centred first LP is still standing.
+        self.half_shape_config: Dict[int, List[List]] = build_half_shape_config(shape, ratio, _utils.params.tick_spacing)
+        # which side of the price the stack sits on, and the centre tick of the shape it is half of.
+        # Stays None while the centred first LP is still standing.
         self.stack_side: int | None = None
         self.stack_anchor: int | None = None
 
@@ -332,39 +351,25 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
         return lower_price, upper_price, lower_tick, upper_tick
 
-    def stack_anchor_tick(self, current_tick: int, side: int) -> int:
+    def stack_anchor_tick(self, current_tick: int) -> int:
         """
-        The tick a stack on `side` starts from: the nearest usable tick clear of the current one, so
-        every band stays strictly on that side and needs only the token we are already holding.
+        The centre of the shape a stack is laid out around: the current tick rounded to tick spacing,
+        the same centre calculate_range uses for the centred layout.
         """
-        tick_spacing = self.utils.params.tick_spacing
-        if side == STACK_ABOVE:
-            return self.utils.ceiling_tick(current_tick + 1, tick_spacing)
-        return self.utils.floor_tick(current_tick, tick_spacing)
+        return self.utils.round_tick(current_tick, self.utils.params.tick_spacing)
 
     def single_side_bands(self, current_tick: int, side: int) -> tuple[int, List[List]]:
         """
-        Lay the whole shape out on one side of the price with its near end against the current tick,
-        band order preserved. Returns the anchor tick and the [lower tick, upper tick, share] rows.
+        Lay the shape out centred on the price and keep only the half on `side`, at double weight.
+        Returns the centre tick and the [lower tick, upper tick, share] rows.
 
-        All BAND_COUNT bands now sit on the same side, so the stack reaches twice as far from the
-        price as the centred layout does, and the heaviest part of the shape sits around half a span
-        away rather than at the money.
+        The centre is at most half a tick spacing from the current tick and the near band starts half
+        a band width (a whole multiple of the tick spacing) from the centre, so every band sits
+        strictly on `side` and needs only the token we are already holding.
         """
-        anchor = self.stack_anchor_tick(current_tick, side)
-        width = self.band_width
-        count = len(self.single_side_shares)
-
-        bands: List[List] = []
-        for index, share in enumerate(self.single_side_shares):
-            if share == ZERO:
-                continue
-            if side == STACK_ABOVE:
-                lower_tick = anchor + index * width
-            else:
-                lower_tick = anchor - (count - index) * width
-            bands.append([lower_tick, lower_tick + width, share])
-
+        anchor = self.stack_anchor_tick(current_tick)
+        bands = [[anchor + lower_offset, anchor + upper_offset, share]
+                 for lower_offset, upper_offset, share in self.half_shape_config[side]]
         return anchor, bands
 
     def check_rebalance(self, lp_market: UniLpMarketV2, current_tick: int) -> tuple[bool, int | None]:
@@ -376,6 +381,9 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         without swapping. A price that has left on a new side is followed at once, since the whole
         stack is stranded on the wrong side; a price drifting further away on the side it already
         left is followed only after a full band has opened up, so we do not re-place every trigger.
+
+        Right after a rescale the price sits in the empty centre band, outside the stack but on the
+        side it already left with no drift yet, so it is not rescaled again straight away.
         """
         stack_lower, stack_upper = self.positions[0][0], self.positions[-1][1]
         if stack_lower <= current_tick < stack_upper:
@@ -388,7 +396,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             print("allow rescale, new side", side, stack_lower, current_tick, stack_upper)
             return True, side
 
-        drift = abs(self.stack_anchor_tick(current_tick, side) - self.stack_anchor)
+        drift = abs(self.stack_anchor_tick(current_tick) - self.stack_anchor)
         if drift < self.band_width:
             return False, None
 
@@ -943,7 +951,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     # _ratio: Decimal = Decimal("0.40")
     # _ratio: Decimal = Decimal("0.45")
     # _ratio: Decimal = Decimal("0.50")
-    _folder_prefix = (f"ISAO-gamma-single-side-{_shape}-{ratio_label(_ratio)}-"
+    _folder_prefix = (f"ISAO-gamma-single-side-half-shape-{_shape}-{ratio_label(_ratio)}-"
                       f"{token0.name.lower()}{token1.name.lower()}-{quote_token.name.lower()}")
     _dca_add_if_non_empty = False
     _dca_timing = DcaTiming.none
