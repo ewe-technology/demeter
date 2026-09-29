@@ -1,0 +1,17 @@
+[package]
+name = "demeter-py"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Python bindings (PyO3) for demeter-core"
+
+[lib]
+name = "_rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+demeter-core = { path = "../demeter-core" }
+pyo3 = { workspace = true, features = ["extension-module", "chrono"] }
+chrono = { workspace = true }
+ruint = { workspace = true }
+polars = { workspace = true }

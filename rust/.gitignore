@@ -1,0 +1,10 @@
+.venv/
+target/
+golden/out_rs/
+__pycache__/
+*.so
+# golden outputs: only the files the Rust tests read are kept (regenerate the rest with golden/make_golden.py)
+golden/out/*
+!golden/out/math_vectors.json
+!golden/out/market_data_eth_usdc_20220101_20220103.csv
+!golden/out/account_quick_start.csv

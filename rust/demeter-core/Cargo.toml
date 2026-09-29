@@ -1,0 +1,16 @@
+[package]
+name = "demeter-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Rust core of the demeter DeFi backtesting engine (Uniswap v3)"
+
+[dependencies]
+fastnum = { workspace = true }
+ruint = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+polars = { workspace = true }
+
+[dev-dependencies]
+serde_json = "1"
