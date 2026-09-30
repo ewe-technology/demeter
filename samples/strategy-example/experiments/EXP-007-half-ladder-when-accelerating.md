@@ -2,8 +2,8 @@
 
 - Version: v6.7 (Dino's idea: use the first / second difference as an indicator)
 - Jira: [QUAN-841](https://ewetechnology.atlassian.net/browse/QUAN-841)
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Status: dropped-at-dev
+- Pre-registration commit: 8ffecd2 · Result commit: see registry
 
 ## Hypothesis
 
@@ -54,10 +54,35 @@ when armed" and destroys F's value (F x ETH +426% → +46%).
 
 ## Result
 
-| test | v6 | this | gain |
-|---|---|---|---|
+Development, ETH/USDC 0.05%, yearly reset:
 
-Verdict:
+| test | v6 | this | gain | max DD v6 → this | half builds | fees v6 → this |
+|---|---|---|---|---|---|---|
+| 2022 | +7.6% | +7.5% | −0.1 | 21.5% → 21.5% | 4 of 41 | $20.1k → $20.0k |
+| 2023 | +32.2% | +28.0% | −4.2 | 13.9% → 15.7% | 14 of 24 | $23.3k → $3.2k |
+| 2024 | +36.4% | +26.1% | −10.3 | 26.7% → 33.7% | 9 of 29 | $30.9k → $12.8k |
+| 2025 | +16.3% | +33.2% | +16.9 | 26.9% → 29.4% | 10 of 32 | $20.8k → $11.3k |
+| 2026-01..09-17 | +18.7% | +18.3% | −0.4 | 12.0% → 12.0% | 2 of 24 | $6.2k → $5.8k |
+
+Wins 1/5, median gain −0.37 pts.
+
+Continuous runs (daily equity):
+
+| run | total | CAGR | max DD | Sharpe |
+|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | −22.8% | 0.73 |
+| ETH this | +130.2% | 19.4% | −27.9% | 0.81 |
+| WBTC/USDC v6 | +85.6% | 17.3% | −17.8% | 1.01 |
+| WBTC/USDC this | +104.1% | 20.2% | −24.3% | 0.90 |
+
+Why: a half build lasts until the next range exit, which in an uptrend is the whole rally, and during it the
+quote-side bands sit below the price and earn almost nothing (2023: 14 of 24 builds half, fees $23.3k → $3.2k).
+The upside IL saved does not pay for the fees lost except in 2025's straight rally. A follow-up check by trend x
+volatility regime gives the same picture: v6's builds in "up, low vol" net −$17.9k over 4.7 years (IL −$57.6k,
+fees +$39.7k), the other regimes are at break-even, so the whole upside-IL lever is worth at most ~$18k on
+$100k — less than the fees a half ladder gives up. The half-ladder line (EXP-006, 007) is closed.
+
+Verdict: **dropped at dev** — wins 1/5, median −0.4 pts; continuous max DD −27.9% (floor −27.8%). Holdout not run.
 
 ## Deviations
 
