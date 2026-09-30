@@ -1,9 +1,9 @@
 # EXP-011: v6 and v6.4 on the Base cbBTC pool (go-live condition 5)
 
 - Version: v6 / v6.4 on Base USDC/cbBTC 0.05% (validation, no new variant)
-- Jira: QUAN-___
+- Jira: [QUAN-859](https://ewetechnology.atlassian.net/browse/QUAN-859)
 - Status: holdout-pass (both rules)
-- Pre-registration commit: 024436c · Result commit: see registry
+- Pre-registration commit: 024436c · Result commit: 10011a7
 
 ## Hypothesis
 

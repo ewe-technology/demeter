@@ -113,6 +113,7 @@ strong rallies and loses in slow grinds up (whipsaw of the EMA exits).
 4. Parameters untouched in all eleven experiments (structural changes only). One version passed dev and holdout:
    **v6.4, idle USDC in Aave** (EXP-004: ETH dev +101% vs +85%, Base holdout +63.2% vs +55.9%, drawdown shallower).
    Seven structural variants of the signal / ladder failed (EXP-001..003, 005..007, 009, 010; see `experiments/`).
-5. In progress: EXP-011 runs v6, v6.4 and the plain LP on Base USDC/cbBTC 0.05%. A 50/50 ETH+BTC portfolio of
+5. **Done** (EXP-011): on Base USDC/cbBTC 0.05% (2025..2026-09) v6 +22.3%, Calmar 0.80, vs plain LP +6.8%, 0.15;
+   v6.4 +25.8%, Calmar 1.03. The Growth pool is a valid venue. A 50/50 ETH+BTC portfolio of
    v6 books (EXP-008, dev seen: Sharpe 0.78 → 0.98, max DD −22.8% → −18.7%) waits for its forward holdout
    (2026-09-18..12-31, run in Jan 2027).
