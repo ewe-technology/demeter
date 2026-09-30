@@ -6,3 +6,4 @@ EXP-003,2026-09-30,sleeve stop whose high survives rebuilds (v6.3),,dropped-at-d
 EXP-004,2026-09-30,idle USDC earns the Aave supply rate (v6.4),,dev-done,1.46,5/5,,,1.010,0.160,-0.207,58d94b1,70d58bc,EXP-004-idle-cash-yield.md
 EXP-005,2026-09-30,refills as quote-only range orders instead of market buys (v6.5),,dropped-at-dev,-2.34,1/5,,,0.265,0.051,-0.158,fd0cbb1,cd2991d,EXP-005-refill-range-order.md
 EXP-006,2026-09-30,half ladder: base side held as spot; only the quote side LPd (v6.6),,pre-registered,,,,,,,,,,EXP-006-half-ladder.md
+EXP-007,2026-09-30,half ladder only when EMA100 1st and 2nd differences > 0 (v6.7),,pre-registered,,,,,,,,,,EXP-007-half-ladder-when-accelerating.md

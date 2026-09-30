@@ -122,6 +122,9 @@ REFILL_ORDER = False
 # EXP-006 (v6.6): place only the ladder's quote side; the base the upper bands would hold stays spot, so a rally
 # does not sell it (upside IL). Exits are judged on the full ladder span v6 would have built. False = v6.
 HALF_LADDER = False
+# EXP-007 (v6.7): half ladder only for builds judged in an accelerating uptrend: EMA100's first difference > 0 and its
+# second difference > 0 on the last completed day. Otherwise the full v6 ladder. False = v6.
+HALF_WHEN_ACCEL = False
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -208,6 +211,16 @@ def ema_share_for(daily: pd.DataFrame, timestamp: datetime) -> tuple[Decimal, pd
     day, row = daily_row_for(daily, timestamp)
     share = SHARE_ABOVE_EMA if row["close"] > row["ema"] else SHARE_BELOW_EMA
     return share, day, float(row["close"]), float(row["ema"])
+
+
+def ema_accelerating(daily: pd.DataFrame, timestamp: datetime) -> bool:
+    """EMA100's first and second daily differences both > 0 on the last completed day (EXP-007)."""
+    day = daily_row_for(daily, timestamp)[0]
+    ema = daily["ema"].loc[:day].tail(3)
+    if len(ema) < 3:
+        return False
+    d1, d0 = ema.iloc[2] - ema.iloc[1], ema.iloc[1] - ema.iloc[0]
+    return bool(d1 > 0 and d1 - d0 > 0)
 
 
 def target_fraction_for(daily: pd.DataFrame, timestamp: datetime) -> Decimal:
@@ -415,6 +428,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.total_interest = ZERO       # CASH_APR: lending interest earned on idle quote
         self.refill_orders = 0           # REFILL_ORDER: F increases placed as quote-only range orders
         self.ladder_span: tuple[int, int] | None = None   # (lowest, highest) tick of the last built ladder
+        self.half_now = False            # HALF_WHEN_ACCEL: the latest build placed only the quote side
+        self.half_builds = 0
         self.force_rebuild = False       # set by follow_work to push rescale_work past its range check
         self.follow_rebuild_count = 0
         self.fee_log: List[dict] = []    # daily: collected fees (quote) + pending fees still in the positions
@@ -556,6 +571,9 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         fraction = target_fraction_for(self.daily_ema, timestamp) if self.signal_deploy else ONE
         self.deployed_at_build = fraction
         sleeve = ZERO if self.sleeve_stopped else SPOT_SLEEVE
+        if HALF_WHEN_ACCEL:
+            self.half_now = ema_accelerating(self.daily_ema, timestamp)
+            self.half_builds += self.half_now
         # a stopped sleeve's share stays in quote with the reserve
         self.reserve_quote = (ONE - fraction + (SPOT_SLEEVE - sleeve) * fraction) * (base * price + quote)
         self.reserve_base = sleeve * fraction * (base * price + quote) / price
@@ -595,7 +613,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         if equity <= ZERO:
             return
         # with a spot sleeve the free base is deployed capital too
-        current = (lp_value + (free_base * price if (SPOT_SLEEVE > ZERO or HALF_LADDER) else ZERO)) / equity
+        current = (lp_value + (free_base * price if (SPOT_SLEEVE > ZERO or HALF_LADDER or HALF_WHEN_ACCEL) else ZERO)) / equity
         target = target_fraction_for(self.daily_ema, row_data.timestamp)
         if SLEEVE_STOP is not None:
             self.sleeve_stop_work(row_data, target, free_base)
@@ -622,7 +640,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
     def ladder_configs(self) -> List[List]:
         """The bands a (re)build places: all of them, or with HALF_LADDER only the quote side (a range above the
         current tick holds token0, below it token1)."""
-        if not HALF_LADDER:
+        if not (HALF_LADDER or (HALF_WHEN_ACCEL and self.half_now)):
             return self.shape_config
         quote_is_0 = self.utils.lp_market.pool_info.is_token0_quote
         return [c for c in self.shape_config if (c[1] > 0 if quote_is_0 else c[0] < 0)]
@@ -742,7 +760,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         # Check if the current price is outside the current LP range
         rebalance = False
         # REFILL_ORDER: range orders sit off the price on purpose; judge exits on the ladder span of the last build
-        lo, hi = self.ladder_span if ((REFILL_ORDER or HALF_LADDER) and self.ladder_span) else (self.positions[0][0], self.positions[-1][1])
+        lo, hi = self.ladder_span if ((REFILL_ORDER or HALF_LADDER or HALF_WHEN_ACCEL) and self.ladder_span) else (self.positions[0][0], self.positions[-1][1])
         if not (lo <= current_tick < hi):
             rebalance = True
             print("allow rescale", self.positions[0][0], current_tick, self.positions[-1][1])
