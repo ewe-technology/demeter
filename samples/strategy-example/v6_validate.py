@@ -54,6 +54,11 @@ RATE_CSV = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": "../aave_usdc_ethereum
             "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": "../aave_usdc_ethereum_daily.csv",
             "0xd0b53d9277642d899df5c87a3966a349a798f224": "../aave_usdc_base_daily.csv",
             "0xfbb6eed8e7aa03b138556eedaf5d271a5e1e43ef": "../aave_usdc_base_daily.csv"}
+# EXP-014: Binance USDT-M 8h funding of the pool's base asset (samples/fetch_binance_funding.py)
+FUNDING_CSV = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": "../binance_funding_ETHUSDT.csv",
+               "0xd0b53d9277642d899df5c87a3966a349a798f224": "../binance_funding_ETHUSDT.csv",
+               "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": "../binance_funding_BTCUSDT.csv",
+               "0xfbb6eed8e7aa03b138556eedaf5d271a5e1e43ef": "../binance_funding_BTCUSDT.csv"}
 INIT_QUOTE = Decimal(100000)
 INIT_BY_POOL = {"0x4585fe77225b41b697c938b018e2ac67ac5a20c0": Decimal(2)}  # quote units; default INIT_QUOTE
 G_REMOVE, G_ADD, G_SWAP = 260_000, 450_000, 150_000
@@ -84,11 +89,12 @@ OPT = {"A": Variant("A_v6"),
        "G": Variant("G_half_ladder", {"HALF_LADDER": True}),   # EXP-006
        "H": Variant("H_half_when_accel", {"HALF_WHEN_ACCEL": True}),   # EXP-007
        "I": Variant("I_lvr_gate", {"LVR_GATE": True}),   # EXP-012: F = 0 while 7-day pool fees / LVR < 1
-       "J": Variant("J_trend_skew", {"SKEW": Decimal("0.05")})}   # EXP-013: -15/+25 above EMA100, -25/+15 below
+       "J": Variant("J_trend_skew", {"SKEW": Decimal("0.05")}),   # EXP-013: -15/+25 above EMA100, -25/+15 below
+       "K": Variant("K_perp_hedge", {"HEDGE": Decimal("0.6"), "HEDGE_FUNDING": "pool"})}   # EXP-014: short 60% of the ladder's delta
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING"]}
 
 
 def sens_grid():
@@ -246,6 +252,8 @@ def run_variant(args):
     for k, v in {**ENGINE_DEFAULTS, **variant.engine}.items():
         if k == "CASH_APR" and v == "pool":
             v = pd.read_csv(RATE_CSV[POOL], parse_dates=["date"]).set_index("date")["apr"].sort_index()
+        if k == "HEDGE_FUNDING" and v == "pool":
+            v = pd.read_csv(FUNDING_CSV[POOL], parse_dates=["timestamp"]).set_index("timestamp")["rate"].sort_index()
         setattr(V, k, v)
     daily = daily_frame()
     window = daily.loc[pd.Timestamp(start):]
@@ -275,6 +283,9 @@ def run_variant(args):
             "gate_closed_days": int(((window["F_raw"] > 0) & (window["F"] == 0)).sum()) if "F_raw" in window else 0,
             "median_R": float(window["R"].median()) if "R" in window else float("nan"),
             "skew_up_builds": s.skew_builds["up"], "skew_down_builds": s.skew_builds["down"],
+            "hedge_pnl": float(s.hedge_pnl), "hedge_funding": float(s.hedge_funding), "hedge_fees": float(s.hedge_fees),
+            "hedge_trades": s.hedge_trades, "hedge_max_ratio": s.hedge_max_ratio,
+            "hedge_min_cash": float(s.hedge_min_cash) if s.hedge_min_cash is not None else float("nan"),
             "benchmark_return": float(m["benchmark_rate"]), "secs": round(time.time() - t0)}
 
 

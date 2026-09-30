@@ -32,11 +32,16 @@ history (`samples/fetch_binance_funding.py`, committed CSV; ETHUSDT for the ETH 
 - The short is set to target right after every build / rebuild and once a day at 00:00 UTC (the follow check's
   time), trading the difference at the pool price (perp basis ignored) and paying `HEDGE_FEE` on the traded
   notional. No band constant: daily to target.
-- Mark-to-market daily: the short's PnL (entry vs current pool price on the open size) and each 8h funding payment
-  (`rate × notional`, positive rate = the short receives) are booked as USDC income like the fees (added to the
-  quote balance and to the fee bucket), so F sizing and the ladder are unchanged, as in EXP-004.
-- Margin: the USDC reserve is the collateral. Max short notional ≈ 0.6 × 0.7 × equity, i.e. under 0.5x of equity,
-  so liquidation is not modelled; the max notional / equity ratio is reported.
+- Settled daily: the short's price PnL (mark vs current pool price on the open size) and each 8h funding payment
+  (`rate × notional`, positive rate = the short receives) go to the USDC balance. The margin account is part of the
+  book: hedge losses reduce the deployable capital F × equity and gains add to it (unlike EXP-004's interest, which
+  was kept out of the ladder — a hedge loss cannot be, it is paid from the reserve).
+- Margin: `HEDGE_LEVERAGE = 5`: at every build the short's initial margin (notional / 5 ≈ 0.6 × s × F / 5 of equity,
+  at most 8.4%) is held back in USDC outside the ladder, so the ladder deploys F × (1 − 0.6 s / 5) of equity. The
+  follow check still targets the raw F (the ~8% gap is inside its 12.5% threshold, so no extra rebuilds).
+  Settlements are paid from the USDC balance; if a loss between two builds exceeds it the balance goes negative
+  (margin call territory) and the lowest balance is reported. Liquidation is not modelled; max notional / equity is
+  reported.
 - Not modelled: perp-pool basis, funding on intraday size changes between settlements (the settlement-time size is
   used), exchange counterparty risk, slippage (a $100k book is negligible on ETHUSDT).
 - Everything else identical to v6.
@@ -67,4 +72,10 @@ Verdict:
 
 ## Deviations
 
-None yet.
+- Accounting refinement after the pre-registration commit and before any pre-registered window ran: the first text
+  said hedge flows are booked "like the fees" (outside the deployable capital, as EXP-004's interest). That cannot
+  hold for losses — a short that loses in a rally is paid from the reserve, and booking it outside the book would let
+  the fee bucket go negative and the ladder overdraw. Hedge flows now go to the USDC balance (deployable), and the
+  first smoke run (ETH 2021-11..12, outside every pre-registered window) showed why margin must be explicit: with
+  F = 1 the whole reserve is in the bands and a $21 settlement found 0 USDC. `HEDGE_LEVERAGE = 5` (initial margin
+  held back at each build) was added before any pre-registered window ran. Same hedge ratio, same rule.

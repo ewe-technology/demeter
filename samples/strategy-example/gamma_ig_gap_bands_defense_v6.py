@@ -134,6 +134,14 @@ LVR_GATE_DAYS, LVR_GATE_MIN = 7, 1.0
 # EXP-013 (v6.10): at every build shift the ladder's reaches SKEW toward the EMA100 trend: last daily close > EMA100
 # -> lower reach - SKEW, upper reach + SKEW; otherwise the mirror. Read once per build (resolve_skew). 0 = v6.
 SKEW = Decimal("0")
+# EXP-014 (v6.11): short HEDGE x the base held inside the bands on a USDT-M perpetual. Set to target once a day at
+# 00:00 UTC after the builds (all builds happen at 00:00), taker fee HEDGE_FEE on the traded notional, daily
+# settlement of the price PnL, 8h funding from HEDGE_FUNDING (rate per settlement time, positive = the short
+# receives). Every hedge cash flow goes to the quote balance: the margin account is part of the book. 0 = v6.
+HEDGE = Decimal("0")
+HEDGE_FEE = Decimal("0.0005")
+HEDGE_LEVERAGE = Decimal("5")   # initial margin = notional / leverage, held in quote outside the ladder at each build
+HEDGE_FUNDING: pd.Series | None = None
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -497,6 +505,15 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.total_base_swap_fee = ZERO
         self.total_quote_swap_fee = ZERO
         self.total_swap_fee = ZERO
+        # EXP-014 hedge ledger
+        self.hedge_size = ZERO        # base units short
+        self.hedge_entry = ZERO       # mark of the open size (settled daily)
+        self.hedge_pnl = ZERO         # settled price PnL of the short
+        self.hedge_fees = ZERO
+        self.hedge_funding = ZERO
+        self.hedge_trades = 0
+        self.hedge_max_ratio = 0.0    # max short notional / equity
+        self.hedge_min_cash = None    # lowest quote balance after a hedge debit (negative = margin call territory)
         # self.pa_upper: List[PriceActionLog] = []
         # self.pa_lower: List[PriceActionLog] = []
         self.total_invested: Decimal = ZERO
@@ -588,6 +605,10 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         if self.signal_deploy:  # spec sheet 2.3: judged once a day on the previous close
             self.triggers.append(PeriodTrigger(time_delta=timedelta(days=1), do=self.follow_work))
         self.triggers.append(PeriodTrigger(time_delta=timedelta(days=1), do=self.log_fees))
+        if HEDGE > ZERO:   # EXP-014: after every 00:00 build; funding at 00:00 / 08:00 / 16:00
+            self.broker.allow_negative_balance = True   # a settlement past the margin shows as negative cash (reported)
+            self.triggers.append(PeriodTrigger(time_delta=timedelta(days=1), do=self.hedge_rebalance))
+            self.triggers.append(PeriodTrigger(time_delta=timedelta(hours=8), do=self.hedge_funding_work))
         dt = datetime(self.params.data_end_date.year, self.params.data_end_date.month, self.params.data_end_date.day,
                       23, 59, 0)
         end_trigger = AtTimeTrigger(time=dt, do=self.calculate_final_result)
@@ -643,6 +664,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         price = lp_market.tick_to_price(current_tick)
         fraction = target_fraction_for(self.daily_ema, timestamp) if self.signal_deploy else ONE
         self.deployed_at_build = fraction
+        if HEDGE > ZERO and share is not None:   # EXP-014: the short's initial margin stays in quote, outside the ladder
+            fraction = fraction * (ONE - HEDGE * share / HEDGE_LEVERAGE)
         sleeve = ZERO if self.sleeve_stopped else SPOT_SLEEVE
         if HALF_WHEN_ACCEL:
             self.half_now = ema_accelerating(self.daily_ema, timestamp)
@@ -775,6 +798,74 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             self.broker.add_to_balance(self.gp.quote_token, interest)
             self.total_quote_fee += interest
             self.total_interest += interest
+
+    # ---- EXP-014: perp delta hedge ----
+    def ladder_base(self, lp_market: UniLpMarketV2) -> Decimal:
+        """Base tokens held inside the bands = the ladder's delta (dV/dP = x for a v3 position)."""
+        total = ZERO
+        for pos in self.positions:
+            a0, a1 = lp_market.get_position_amount(pos)
+            total += a1 if lp_market.pool_info.is_token0_quote else a0
+        return total
+
+    def hedge_book(self, amount: Decimal) -> None:
+        """A hedge cash flow (PnL, funding, fee) to the quote balance; the margin account is part of the book."""
+        if amount >= ZERO:
+            self.broker.add_to_balance(self.gp.quote_token, amount)
+        else:
+            self.broker.subtract_from_balance(self.gp.quote_token, -amount)
+            cash = self.broker.get_token_balance(self.gp.quote_token)
+            self.hedge_min_cash = cash if self.hedge_min_cash is None else min(self.hedge_min_cash, cash)
+
+    def hedge_settle(self, price: Decimal) -> None:
+        """Settle the open short against `price` and re-mark it there (daily settlement)."""
+        if self.hedge_size > ZERO:
+            pnl = (self.hedge_entry - price) * self.hedge_size
+            self.hedge_pnl += pnl
+            self.hedge_book(pnl)
+        self.hedge_entry = price
+
+    def hedge_rebalance(self, row_data: Snapshot) -> None:
+        """Settle, then set the short to HEDGE x the ladder's base; taker fee on the traded notional."""
+        if HEDGE <= ZERO or self.starting_tick is None:
+            return
+        lp_market: UniLpMarketV2 = self.broker.markets[self.utils.market_key]
+        price = row_data.prices[self.gp.base_token.name]
+        self.hedge_settle(price)
+        target = HEDGE * self.ladder_base(lp_market)
+        diff = target - self.hedge_size
+        if abs(diff) * price >= Decimal(1):   # under $1 of notional: leave it
+            fee = abs(diff) * price * HEDGE_FEE
+            self.hedge_fees += fee
+            self.hedge_book(-fee)
+            self.hedge_size = target
+            self.hedge_trades += 1
+        lp_value = lp_market.get_market_balance().net_value if len(lp_market.positions) > 0 else ZERO
+        equity = lp_value + self.broker.get_token_balance(self.gp.base_token) * price + self.broker.get_token_balance(self.gp.quote_token)
+        if equity > ZERO:
+            self.hedge_max_ratio = max(self.hedge_max_ratio, float(self.hedge_size * price / equity))
+
+    def hedge_funding_work(self, row_data: Snapshot) -> None:
+        """8h funding on the open short: rate x notional, positive rate = the short receives."""
+        if HEDGE <= ZERO or self.hedge_size <= ZERO or HEDGE_FUNDING is None:
+            return
+        rate = HEDGE_FUNDING.get(pd.Timestamp(row_data.timestamp))
+        if rate is None or pd.isna(rate):
+            return
+        pay = Decimal(str(rate)) * self.hedge_size * row_data.prices[self.gp.base_token.name]
+        self.hedge_funding += pay
+        self.hedge_book(pay)
+
+    def hedge_close(self, price: Decimal) -> None:
+        """End of the run: settle and close the short, paying the taker fee."""
+        if HEDGE <= ZERO or self.hedge_size <= ZERO:
+            return
+        self.hedge_settle(price)
+        fee = self.hedge_size * price * HEDGE_FEE
+        self.hedge_fees += fee
+        self.hedge_book(-fee)
+        self.hedge_size = ZERO
+        self.hedge_trades += 1
 
     def sleeve_stop_work(self, row_data: Snapshot, target: Decimal, free_base: Decimal):
         """EXP-002: trailing stop on the spot sleeve, and its re-arm (refill above the post-stop low F, or a new high)."""
@@ -1124,6 +1215,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         # _, current_tick, _, _ = self.utils.get_tick_info(row_data)
         current_tick = self.utils.get_raw_tick(row_data)
         current_price = row_data.prices[self.gp.base_token.name]
+        self.hedge_close(current_price)   # EXP-014: the short is closed into the final equity
         ed = ExportData()
         ed.time = row_data.timestamp
         ed.price = current_price
