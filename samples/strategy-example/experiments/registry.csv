@@ -17,4 +17,4 @@ EXP-014,2026-09-30,partial perp delta hedge: short 60% of the ladder ETH delta o
 EXP-015,2026-09-30,fee tier: v6 on Base WETH/USDC 0.3% and a 0.05%/0.3% rotation estimate (v6.12),QUAN-861,fail,-2.45,0/3,,,,,,599f492,f195bb5,EXP-015-fee-tier-rotation.md
 EXP-016,2026-09-30,toxicity pause: pull the ladder 30 min after a 1% five-minute move (v6.13),QUAN-862,dropped-at-dev,-1.90,2/5,,,1.203,0.183,-0.281,599f492,d0f2df3,EXP-016-toxicity-pause.md
 EXP-017,2026-09-30,v6.13 toxicity pause re-registered under a Calmar rule on the Base holdout (v6.13r),QUAN-863,holdout-fail,-1.90,2/5,1/3,-2.70,1.203,0.183,-0.281,57c40f5,2fccf26,EXP-017-toxicity-pause-calmar.md
-EXP-018,2026-10-01,bear-phase short leg: short 0.5 x equity perp while F=0 below all EMAs and 12m return < 0 (v6.14),QUAN-865,holdout-fail,6.47,4/5,1/2,,2.193,0.280,-0.234,759afa7,,EXP-018-bear-short-leg.md
+EXP-018,2026-10-01,bear-phase short leg: short 0.5 x equity perp while F=0 below all EMAs and 12m return < 0 (v6.14),QUAN-865,holdout-fail,6.47,4/5,1/2,,2.193,0.280,-0.234,759afa7,b568c44,EXP-018-bear-short-leg.md

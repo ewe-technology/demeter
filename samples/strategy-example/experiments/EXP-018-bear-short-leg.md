@@ -3,7 +3,7 @@
 - Version: v6.14
 - Jira: [QUAN-865](https://ewetechnology.atlassian.net/browse/QUAN-865)
 - Status: holdout-fail
-- Pre-registration commit: 759afa7 · Result commit: ______
+- Pre-registration commit: 759afa7 · Result commit: b568c44
 
 ## Hypothesis
 
