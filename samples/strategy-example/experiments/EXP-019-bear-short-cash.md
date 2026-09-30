@@ -1,9 +1,9 @@
 # EXP-019: bear-phase short leg plus idle-cash yield (v6.14 + v6.4), judged on the Base USDC/WETH holdout (v6.15)
 
 - Version: v6.15
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: [QUAN-866](https://ewetechnology.atlassian.net/browse/QUAN-866)
+- Status: holdout-pass
+- Pre-registration commit: 6ae6426 · Result commit: ______
 - Parents: `EXP-004-idle-cash-yield.md` (v6.4, holdout-pass), `EXP-018-bear-short-leg.md` (v6.14, dev pass,
   holdout-fail on WBTC). Same code: variant `N` of EXP-018 (commit 39d04ac).
 
@@ -50,9 +50,43 @@ funding from Binance ETHUSDT, plus EXP-004's `CASH_APR = "pool"` (Base Aave v3 U
 
 ## Result
 
-Pending.
+Holdout, Base USDC/WETH 0.05%, 100,000 USDC, Base Aave v3 USDC rates, run once (A, E, M, N per invocation):
+
+| test | v6 | v6.15 (N) | gain | max DD v6 → this | v6.4 (E) | v6.14 (M) | short days |
+|---|---|---|---|---|---|---|---|
+| 2024 | +19.4% | +21.3% | +1.9 | 30.3% → 29.2% | +21.3% | +19.4% | 0 |
+| 2025 | +13.9% | +22.6% | +8.7 | 24.4% → 24.0% | +16.2% | +20.2% | 56 |
+| 2026-01..09-17 | +19.1% | +39.2% | +20.0 | 11.9% → 14.4% | +20.2% | +37.9% | 28 |
+
+Wins 3/3, median +8.71 pts.
+
+Continuous 2024-01-01..2026-09-17 (daily equity):
+
+| run | total | CAGR | max DD | Sharpe | Calmar | LP fees | interest | short PnL / funding / fees |
+|---|---|---|---|---|---|---|---|---|
+| v6 (A) | +55.9% | 17.8% | −28.1% | 0.76 | 0.63 | $43.1k | | |
+| v6.4 (E) | +63.2% | 19.8% | −27.0% | 0.83 | 0.73 | $50.4k | $7.3k | |
+| v6.14 (M) | +92.4% | 27.3% | −28.1% | 0.95 | 0.97 | $46.0k | | +$31.4k / +$0.2k / −$0.7k |
+| **v6.15 (N)** | **+101.4%** | **29.5%** | **−27.0%** | **1.02** | **1.09** | $53.8k | $7.7k | +$32.4k / +$0.2k / −$0.7k |
+
+Rule: CAGR 29.5% > 17.8%, Calmar 1.09 ≥ 0.63, max DD 1.1 pts *shallower*, yearly wins 3/3 → **holdout-pass**.
+v6.15 also beats v6.4 on every column (not deciding).
+
+All pools, continuous, v6 → v6.15 (Calmar): ETH mainnet 0.61 → 1.41, Base USDC/WETH 0.63 → 1.09, WBTC mainnet
+0.97 → 1.04, Base cbBTC 0.79 → 1.51; max DD shallower on all four. Sharpe: 0.73 → 1.12, 0.76 → 1.02, 1.01 → 1.00,
+0.93 → 1.13.
+
+Verdict: **holdout-pass** — the first version since v6.4 that passes a holdout, and the first to double v6's
+full-history ETH result (+245.7% vs +85.4%, CAGR 30.1% vs 14.0%, max DD −21.3% vs −22.8%). Caveats: the short leg's
+edge comes from bear phases (2022, 2025, 2026); in a bull-only window it is idle (2024: 0 short days), and its
+losing entries are one-day crashes that revert (FTX, SVB). Base shares mainnet's ETH price path; the clean test is
+the forward window (2026-09-18..12-31, January 2027). Perp counterparty / margin (min quote balance $98.9k here) and
+CEX access are operational requirements v6 did not have.
 
 ## Deviations
 
 - Registered after the dev numbers were seen (they are EXP-018's reported variant); only the Base holdout is unseen
   for this variant.
+- The holdout ran once: continuous first, then the three yearly segments, one invocation each (4 workers). No reruns.
+  The 2024 segment is a tie between N and E and between M and A (short never on); N's 2024 win over v6 is the cash
+  yield.
