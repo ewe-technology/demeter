@@ -1,9 +1,9 @@
 # EXP-016: toxicity pause — pull the ladder for 30 minutes after a 1% five-minute move (v6.13)
 
 - Version: v6.13
-- Jira: QUAN-___
+- Jira: [QUAN-862](https://ewetechnology.atlassian.net/browse/QUAN-862)
 - Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Pre-registration commit: 599f492 · Result commit: ______
 - Literature: `RESEARCH-2026-09-30-lp-literature.md` §5.
 
 ## Hypothesis

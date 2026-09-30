@@ -15,6 +15,7 @@ import multiprocessing
 import os
 import sys
 import time
+import traceback
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -90,11 +91,12 @@ OPT = {"A": Variant("A_v6"),
        "H": Variant("H_half_when_accel", {"HALF_WHEN_ACCEL": True}),   # EXP-007
        "I": Variant("I_lvr_gate", {"LVR_GATE": True}),   # EXP-012: F = 0 while 7-day pool fees / LVR < 1
        "J": Variant("J_trend_skew", {"SKEW": Decimal("0.05")}),   # EXP-013: -15/+25 above EMA100, -25/+15 below
-       "K": Variant("K_perp_hedge", {"HEDGE": Decimal("0.6"), "HEDGE_FUNDING": "pool"})}   # EXP-014: short 60% of the ladder's delta
+       "K": Variant("K_perp_hedge", {"HEDGE": Decimal("0.6"), "HEDGE_FUNDING": "pool"}),   # EXP-014: short 60% of the ladder's delta
+       "L": Variant("L_tox_pause", {"PAUSE_RET": 0.01})}   # EXP-016: pull the ladder 30 min after a 1% five-minute move
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET"]}
 
 
 def sens_grid():
@@ -169,6 +171,14 @@ class Checked(V.RemixDaoDcaWeekStratStrategy):
         super().rescale_work(row_data)
         if len(self.export_actions) > n:
             self.charge(row_data, len(before), len(self.positions), *self.swapped_since(b0, q0))
+
+    def pause_ladder(self, row_data):   # EXP-016: burns, no swap
+        super().pause_ladder(row_data)
+        self.charge(row_data, len(self.paused_bands), 0, ZERO, ZERO)
+
+    def resume_ladder(self, row_data):   # EXP-016: mints, no swap
+        super().resume_ladder(row_data)
+        self.charge(row_data, 0, len(self.positions), ZERO, ZERO)
 
     def sleeve_stop_work(self, row_data, target, free_base):
         b0, q0 = self.total_base_swap_fee, self.total_quote_swap_fee
@@ -267,7 +277,7 @@ def run_variant(args):
                            lower_ratio=ratio, half_gap=0, eth_share=variant.eth_share, daily_ema=daily,
                            deploy=variant.deploy)
     except Exception as e:
-        return {"variant": variant.name, "error": repr(e)[:300]}
+        return {"variant": variant.name, "error": repr(e)[:200] + " @ " + " | ".join(l.strip() for l in traceback.format_exc().splitlines()[-7:-1])[:600]}
     s = CURRENT
     c = pd.DataFrame(s.cost_log, columns=["ts", "gas", "impact", "notional"])
     eq = EQUITY.resample("1D").last().dropna()
@@ -286,6 +296,7 @@ def run_variant(args):
             "hedge_pnl": float(s.hedge_pnl), "hedge_funding": float(s.hedge_funding), "hedge_fees": float(s.hedge_fees),
             "hedge_trades": s.hedge_trades, "hedge_max_ratio": s.hedge_max_ratio,
             "hedge_min_cash": float(s.hedge_min_cash) if s.hedge_min_cash is not None else float("nan"),
+            "pauses": s.pauses, "pause_minutes": s.pause_minutes,
             "benchmark_return": float(m["benchmark_rate"]), "secs": round(time.time() - t0)}
 
 

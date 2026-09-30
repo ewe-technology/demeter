@@ -1,9 +1,9 @@
 # EXP-015: fee tier — v6 on the Base WETH/USDC 0.3% pool, and a 0.05% / 0.3% rotation estimate (v6.12)
 
 - Version: v6.12 (deployment choice: which Base pool the unchanged v6 runs in)
-- Jira: QUAN-___
+- Jira: [QUAN-861](https://ewetechnology.atlassian.net/browse/QUAN-861)
 - Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Pre-registration commit: 599f492 · Result commit: ______
 - Literature: `RESEARCH-2026-09-30-lp-literature.md` §3.
 
 ## Hypothesis

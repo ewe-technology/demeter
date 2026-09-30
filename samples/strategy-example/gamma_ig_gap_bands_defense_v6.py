@@ -11,6 +11,7 @@ import copy
 
 from dataclasses import dataclass
 import math
+from collections import deque
 import multiprocessing
 import random
 import time
@@ -142,6 +143,11 @@ HEDGE = Decimal("0")
 HEDGE_FEE = Decimal("0.0005")
 HEDGE_LEVERAGE = Decimal("5")   # initial margin = notional / leverage, held in quote outside the ladder at each build
 HEDGE_FUNDING: pd.Series | None = None
+# EXP-016 (v6.13): when |ln(P_t / P_{t-PAUSE_WINDOW})| >= PAUSE_RET the whole ladder is pulled (fees collected) for
+# PAUSE_MINUTES, then the same tick ranges are re-added from the wallet at the current price. No swap, no F change;
+# the daily checks skip while paused. PAUSE_RET 0 = v6.
+PAUSE_RET = 0.0
+PAUSE_WINDOW, PAUSE_MINUTES = 5, 30
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -514,6 +520,12 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.hedge_trades = 0
         self.hedge_max_ratio = 0.0    # max short notional / equity
         self.hedge_min_cash = None    # lowest quote balance after a hedge debit (negative = margin call territory)
+        # EXP-016 pause state
+        self.price_hist: deque = deque(maxlen=PAUSE_WINDOW + 1)
+        self.paused_until: datetime | None = None
+        self.paused_bands: list = []   # (PositionInfo, base removed, quote removed) of the pulled ladder
+        self.pauses = 0
+        self.pause_minutes = 0
         # self.pa_upper: List[PriceActionLog] = []
         # self.pa_lower: List[PriceActionLog] = []
         self.total_invested: Decimal = ZERO
@@ -698,7 +710,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
     def follow_work(self, row_data: Snapshot):
         """Spec sheet 2.3 rule 3: rebuild to F x equity when the book drifted >= FOLLOW_THRESHOLD from F."""
-        if self.starting_tick is None or self.out_of_fund_date is not None:
+        if self.starting_tick is None or self.out_of_fund_date is not None or self.paused_until is not None:
             return
         lp_market: UniLpMarketV2 = self.broker.markets[self.utils.market_key]
         price = row_data.prices[self.gp.base_token.name]
@@ -801,6 +813,66 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             self.broker.add_to_balance(self.gp.quote_token, interest)
             self.total_quote_fee += interest
             self.total_interest += interest
+
+    # ---- EXP-016: toxicity pause ----
+    def pause_work(self, row_data: Snapshot) -> None:
+        """Every minute: track the PAUSE_WINDOW-minute return; pull the ladder on a spike, put it back after the pause."""
+        ts = row_data.timestamp
+        price = float(row_data.prices[self.gp.base_token.name])
+        self.price_hist.append(price)
+        if self.paused_until is not None:
+            self.pause_minutes += 1
+            if ts >= self.paused_until:
+                self.resume_ladder(row_data)
+            return
+        if len(self.price_hist) <= PAUSE_WINDOW or not self.positions or self.starting_tick is None:
+            return
+        if abs(math.log(price / self.price_hist[0])) < PAUSE_RET:
+            return
+        end = datetime(self.params.data_end_date.year, self.params.data_end_date.month, self.params.data_end_date.day, 23, 59)
+        if ts + timedelta(minutes=PAUSE_MINUTES) > end:
+            return
+        self.pause_ladder(row_data)
+
+    def pause_ladder(self, row_data: Snapshot) -> None:
+        """Remove every band (fees collected as in a rebuild), remember the ranges and the tokens that came out."""
+        lp_market: UniLpMarketV2 = self.broker.markets[self.utils.market_key]
+        bands = []
+        for position_info in self.positions:
+            self.collect_fee_as_quote(lp_market, position_info)
+            if position_info not in lp_market.positions:
+                continue
+            base, quote = lp_market.remove_liquidity(position_info, collect=True)
+            bands.append((position_info, base, quote))
+        self.paused_bands = bands
+        self.positions = []
+        self.paused_until = row_data.timestamp + timedelta(minutes=PAUSE_MINUTES)
+        self.pauses += 1
+        print(f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} pause: {len(bands)} bands pulled, "
+              f"{PAUSE_WINDOW}-min move {math.log(float(row_data.prices[self.gp.base_token.name]) / self.price_hist[0]):+.2%}")
+
+    def resume_ladder(self, row_data: Snapshot) -> None:
+        """Re-add the pulled ranges from what came out of them; what no longer fits a band stays idle."""
+        lp_market: UniLpMarketV2 = self.broker.markets[self.utils.market_key]
+        current_tick = self.utils.get_raw_tick(row_data)
+        positions = []
+        for position_info, base, quote in self.paused_bands:
+            if base <= ZERO and quote <= ZERO:
+                continue
+            free_base = self.broker.get_token_balance(self.gp.base_token) - self.total_base_fee
+            free_quote = self.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
+            base_amt, quote_amt = max(ZERO, min(base, free_base)), max(ZERO, min(quote, free_quote))
+            if base_amt <= ZERO and quote_amt <= ZERO:
+                continue
+            pos, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(position_info.lower_tick, position_info.upper_tick,
+                                                                            base_amt, quote_amt, tick=current_tick)
+            if base_used == ZERO and quote_used == ZERO:
+                lp_market.positions.pop(pos, None)   # dry band (as the build loop does)
+                continue
+            positions.append(pos)
+        self.positions = positions
+        self.paused_bands = []
+        self.paused_until = None
 
     # ---- EXP-014: perp delta hedge ----
     def ladder_base(self, lp_market: UniLpMarketV2) -> Decimal:
@@ -949,7 +1021,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
     def rescale_work(self, row_data: Snapshot):
         lp_market: UniLpMarketV2 = self.broker.markets[self.utils.market_key]
 
-        if (len(lp_market.positions) == 0 and not self.force_rebuild) or self.out_of_fund_date is not None:
+        if (len(lp_market.positions) == 0 and not self.force_rebuild) or self.out_of_fund_date is not None \
+                or self.paused_until is not None:
             return
 
         current_price = row_data.prices[self.gp.base_token.name]
@@ -1286,6 +1359,9 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         :param row_data: data in this iteration, include current timestamp, price, all columns data, and indicators(such as simple moving average)
         :type row_data: Snapshot
         """
+        if PAUSE_RET > 0:   # EXP-016
+            self.pause_work(row_data)
+
         pos_info = self.utils.current_position_info
         if pos_info is None:
             return

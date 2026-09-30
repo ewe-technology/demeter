@@ -1,9 +1,9 @@
 # EXP-014: partial perp delta hedge — short 60% of the ladder's ETH delta on Binance USDT-M (v6.11)
 
 - Version: v6.11
-- Jira: QUAN-___
+- Jira: [QUAN-860](https://ewetechnology.atlassian.net/browse/QUAN-860)
 - Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Pre-registration commit: 599f492 (implementation e81b196, 9e66e97) · Result commit: ______
 - Literature: `RESEARCH-2026-09-30-lp-literature.md` §2.
 
 ## Hypothesis
