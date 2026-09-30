@@ -1,9 +1,9 @@
 # EXP-017: v6.13 toxicity pause re-registered under a Calmar rule, decided on the Base holdout (v6.13r)
 
 - Version: v6.13r
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: [QUAN-863](https://ewetechnology.atlassian.net/browse/QUAN-863)
+- Status: holdout-fail
+- Pre-registration commit: 57c40f5 · Result commit: ______
 - Parent: `EXP-016-toxicity-pause.md` (same variant, same constants, same code: variant `L`).
 
 ## Hypothesis
@@ -46,13 +46,34 @@ top-up pass; no swap; daily checks skip while paused. v6 (A) in the same invocat
 
 ## Result
 
-| test | v6 | this | gain | max DD v6 → this | pauses |
-|---|---|---|---|---|---|
+Holdout, Base USDC/WETH 0.05%, yearly reset, 100,000 USDC, run once:
 
-Continuous run: total / CAGR / max DD / Sharpe / Calmar / pauses / fees / LP principal.
+| test | v6 | this | gain | max DD v6 → this | fees v6 → this | LP principal v6 → this | pauses |
+|---|---|---|---|---|---|---|---|
+| 2024 | +19.4% | +9.7% | −9.7 | 30.3% → 33.3% | $17.6k → $10.3k | $105.4k → $103.6k | 267 |
+| 2025 | +13.9% | +24.8% | +10.9 | 24.4% → 20.3% | $18.2k → $10.9k | $96.1k → $114.3k | 314 |
+| 2026-01..09-17 | +19.1% | +16.4% | −2.7 | 11.9% → 11.4% | $6.6k → $3.7k | $112.6k → $112.9k | 212 |
 
-Verdict:
+Wins 1/3, median −2.7 pts.
+
+Continuous 2024-01-01..2026-09-17 (daily equity):
+
+| run | total | CAGR | max DD | Sharpe | Calmar | fees | LP principal | pauses |
+|---|---|---|---|---|---|---|---|---|
+| v6 | +55.9% | 17.8% | −28.1% | 0.76 | 0.63 | $43.1k | $114.5k | |
+| this | +56.1% | 17.9% | −31.7% | 0.74 | 0.56 | $25.6k | $133.0k | 793 |
+
+Base cost of the pauses: 793 × 16 transactions × $0.01–$0.10 ≈ $130–$1,270 over 2.7 years (mainnet: $470k).
+
+Verdict: **holdout-fail** — all three conditions fail: Calmar 0.56 < 0.63, max DD 3.6 pts deeper (floor 3), yearly
+wins 1/3. The pattern is EXP-016's exactly: the pause halves the fees ($43k → $26k) and protects principal
+($114k → $133k), so it wins the choppy year (2025 +10.9, DD 24.4% → 20.3%) and loses the trend years; over the
+whole window the two cancel (+56.1% vs +55.9%) and the drawdown is deeper, because the protected principal sits in
+a thinner ladder when the 2024 fall comes. The ETH/WBTC continuous improvement in EXP-016 did not carry over: on
+the deployment pool the toxicity pause is a wash at best. Idea closed; the principal-protection effect is real but
+it is paid for in fees one for one.
 
 ## Deviations
 
-None yet.
+- Holdout ran once, v6 + this in the same invocation (two workers per segment, segments in sequence). No reruns.
+- No ETH mainnet curve for the dashboard: this experiment has no new continuous ETH run (EXP-016's curve stands).
