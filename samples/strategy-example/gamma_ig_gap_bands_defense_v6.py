@@ -108,6 +108,8 @@ LOWER_STOP, UPPER_REBUILD = 0.80, 1.20
 REFILL_CONFIRM_DAYS = 3                                   # stage 1 needs this many consecutive closes
 REFILL_STAGES = ((1, 1.05), (2, 1.0833), (3, 1.1167), (4, 1.15))  # (stage, close / low), stage k -> k/4 deployed
 FOLLOW_THRESHOLD = Decimal("0.125")
+# EXP-001 (v6.1): share of the deployed F x equity held as spot base outside the bands (0 = v6)
+SPOT_SLEEVE = Decimal("0")
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -393,6 +395,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             raise ValueError("deploy=signal needs an explicit eth_share; sgeo sizes by range geometry")
         self.deployed_at_build = ONE     # F used by the latest (re)build
         self.reserve_quote = ZERO        # quote parked outside the bands by the latest (re)build
+        self.reserve_base = ZERO         # spot base held outside the bands by the latest (re)build (SPOT_SLEEVE)
         self.force_rebuild = False       # set by follow_work to push rescale_work past its range check
         self.follow_rebuild_count = 0
         self.fee_log: List[dict] = []    # daily: collected fees (quote) + pending fees still in the positions
@@ -532,10 +535,12 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         fraction = target_fraction_for(self.daily_ema, timestamp) if self.signal_deploy else ONE
         self.deployed_at_build = fraction
         self.reserve_quote = (ONE - fraction) * (base * price + quote)
+        self.reserve_base = SPOT_SLEEVE * fraction * (base * price + quote) / price
         if share is None:  # sgeo, only reachable with fraction 1 (constructor check)
             return self.calculate_swap_amount(current_tick, lower_boundary, upper_boundary, base, quote)
-        # bands get share x F of total value in base and (1 - share) x F in quote; the reserve stays quote
-        return swap_to_value_share(base, quote, price, share * fraction)
+        # bands get share x F of total value in base and (1 - share) x F in quote; the reserve stays quote.
+        # With a spot sleeve k the bands get (1 - k) x F and the sleeve k x F, all of it base.
+        return swap_to_value_share(base, quote, price, fraction * (SPOT_SLEEVE + share * (ONE - SPOT_SLEEVE)))
 
     def log_fees(self, row_data: Snapshot):
         """Daily fee snapshot for the monthly income breakdown: collected so far, plus fees accrued in the
@@ -562,7 +567,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         equity = lp_value + free_base * price + free_quote
         if equity <= ZERO:
             return
-        current = lp_value / equity
+        # with a spot sleeve the free base is deployed capital too
+        current = (lp_value + (free_base * price if SPOT_SLEEVE > ZERO else ZERO)) / equity
         target = target_fraction_for(self.daily_ema, row_data.timestamp)
         due = (abs(target - current) >= FOLLOW_THRESHOLD
                or (target == ZERO and current > FULL_TOLERANCE)
@@ -708,9 +714,10 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
                 # else:
                 total_base_used, total_quote_used = ZERO, ZERO
                 quote_for_bands = max(ZERO, quote - self.reserve_quote)
+                base_for_bands = max(ZERO, base - self.reserve_base)
                 for config in (self.shape_config if self.deployed_at_build > ZERO else []):
                     lower_price, upper_price, lower_tick, upper_tick = self.calculate_range(lp_market, current_tick, config[0], config[1])
-                    base_amt, quote_amt = self.band_amounts(base, quote_for_bands, config[2])
+                    base_amt, quote_amt = self.band_amounts(base_for_bands, quote_for_bands, config[2])
                     position, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(lower_tick, upper_tick, base_amt, quote_amt, tick=current_tick)
                     if base_used == ZERO and quote_used == ZERO:
                         lp_market.positions.pop(position, None)  # ponytail: drop the dry band instead of tracking it
@@ -719,7 +726,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
                     total_quote_used += quote_used
                     self.positions.append(position)
 
-                base_left_ratio = (base - total_base_used) / base if base > ZERO else ZERO
+                base_left_ratio = (base_for_bands - total_base_used) / base_for_bands if base_for_bands > ZERO else ZERO
                 quote_left_ratio = (quote_for_bands - total_quote_used) / quote_for_bands if quote_for_bands > ZERO else ZERO
                 print(f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} rescale placed base share "
                       f"{float(self.placed_base_share(lp_market, current_tick, total_base_used, total_quote_used)):.3f} "
@@ -851,9 +858,10 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         total_quote_used = 0
 
         quote_for_bands = max(ZERO, final_quote - self.reserve_quote)
+        base_for_bands = max(ZERO, final_base - self.reserve_base)
         for config in (self.shape_config if self.deployed_at_build > ZERO else []):
             lower_price, upper_price, lower_tick, upper_tick = self.calculate_range(lp_market, current_tick, config[0], config[1])
-            base_amt, quote_amt = self.band_amounts(final_base, quote_for_bands, config[2])
+            base_amt, quote_amt = self.band_amounts(base_for_bands, quote_for_bands, config[2])
             position, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(lower_tick, upper_tick, base_amt, quote_amt, tick=current_tick)
             if base_used == ZERO and quote_used == ZERO:
                 lp_market.positions.pop(position, None)

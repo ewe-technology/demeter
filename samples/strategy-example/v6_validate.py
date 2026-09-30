@@ -34,10 +34,14 @@ from rm_types import RescaleFrequency, TestParams, GlobalParams, RangeStrategy, 
 POOLS = {
     "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": (("usdc", 6), ("eth", 18), 1, 0.05, "../real-data"),
     "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": (("btc", 8), ("usdc", 6), 0, 0.3, "../holdout-data"),
+    # EXP-001 holdout: WBTC/WETH 0.05%, ETH is the base, WBTC the quote (numeraire and reserve)
+    "0x4585fe77225b41b697c938b018e2ac67ac5a20c0": (("btc", 8), ("eth", 18), 1, 0.05, "../holdout-data"),
 }
 FIRST_DATA = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": date(2021, 5, 6),
-              "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": date(2021, 11, 2)}
+              "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": date(2021, 11, 2),
+              "0x4585fe77225b41b697c938b018e2ac67ac5a20c0": date(2021, 11, 2)}
 INIT_QUOTE = Decimal(100000)
+INIT_BY_POOL = {"0x4585fe77225b41b697c938b018e2ac67ac5a20c0": Decimal(2)}  # quote units; default INIT_QUOTE
 G_REMOVE, G_ADD, G_SWAP = 260_000, 450_000, 150_000
 GAS_CSV = "../gas_ethereum_hourly.csv"
 ETH_USD_CSV = "../eth_usd_hourly.csv"
@@ -56,11 +60,12 @@ class Variant:
 
 
 # experiment candidates for "opt:A,<key>,..." runs; A is always v6 itself. Add one entry per EXP (see experiments/).
-OPT = {"A": Variant("A_v6")}
+OPT = {"A": Variant("A_v6"),
+       "B": Variant("B_spot_sleeve", {"SPOT_SLEEVE": Decimal("0.5")})}   # EXP-001
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE"]}
 
 
 def sens_grid():
@@ -166,10 +171,11 @@ def tokens():
 def inputs(variant: Variant, start: date, end: date, folder: str):
     token0, token1, base, quote, fee = tokens()
     spacing = int(fee * 200)
-    gp = GlobalParams(token0=token0, token1=token1, fee=fee, init_quote=INIT_QUOTE, quote_token=quote, base_token=base,
+    init = INIT_BY_POOL.get(POOL, INIT_QUOTE)
+    gp = GlobalParams(token0=token0, token1=token1, fee=fee, init_quote=init, quote_token=quote, base_token=base,
                       chain_name=ChainType.ethereum.name, contract_address=POOL, swap_fee=False,
                       dca_usdc_amount=Decimal(10000), dca_add_if_non_empty=False, dca_add_timing=DcaTiming.none,
-                      init_quote_usdc=INIT_QUOTE * INIT_PRICE, dca_addon_price_percent=ZERO,
+                      init_quote_usdc=init * INIT_PRICE, dca_addon_price_percent=ZERO,
                       dca_addon_amount_percent=ZERO, dca_addition=DcaAddition.none)
     p = RemixDAOParams(tick_spread_upper=410, tick_spread_lower=410, tick_upper_boundary_offset=0,
                        tick_lower_boundary_offset=0, rescale_tick_upper_boundary_offset=0,
@@ -224,7 +230,7 @@ def run_variant(args):
     eq.to_csv(os.path.join(folder, f"equity_{variant.name}.csv"), header=["net_value"])
     net = float(eq.iloc[-1])
     return {"variant": variant.name, "pool": POOL[:6], "start": start.isoformat(), "end": end.isoformat(),
-            "net_return": net / float(INIT_QUOTE) - 1, "max_draw_down": float(m["max_draw_down"]),
+            "net_return": net / float(INIT_BY_POOL.get(POOL, INIT_QUOTE)) - 1, "max_draw_down": float(m["max_draw_down"]),
             "sharpe_ratio": float(m["sharpe_ratio"]), "impact": float(c["impact"].sum()),
             "gas_if_mainnet": float(c["gas"].sum()), "swap_notional": float(c["notional"].sum()),
             "max_swap_notional": float(c["notional"].max()), "rebuilds": len(c),
