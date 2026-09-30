@@ -18,7 +18,17 @@ EMA 90–120 four-account engine. Every change is an experiment, recorded in thr
 State as of 2026-09-30: only EXP-000 (v6 baseline): ETH continuous 2022-01..2026-09 +85.4%, CAGR 14.0%,
 max DD −22.8%; WBTC continuous +85.6%. Earlier trials (momentum width, fee compounding, EMA exit band) were
 discarded on purpose — numbering restarts at EXP-001. Background: `V6_VALIDATION.md` (PBO 0.56, DSR < 0.95,
-regimes, capacity). Never modify other branches (`defense_v6`, `remix`, `master`, ...).
+regimes, capacity).
+
+## Git workflow (Dino's standing instruction)
+
+- `feat/dino-v6-opt` is the only branch Dino uses in this repo. Commit to it and push it directly — no pull
+  requests, no feature branches, no need to ask before committing or pushing to it.
+- Never create, modify, rebase or delete any other branch (`defense_v6`, `remix`, `master`, `feat/*`, ...).
+- The main checkout `/Users/dinohuang/Desktop/demeter-momentum` stays on `feat/dino-v6-opt`. When a session has
+  to work in a worktree, use a detached one (`git worktree add --detach <path> origin/feat/dino-v6-opt`), push
+  with `git push origin HEAD:feat/dino-v6-opt`, then fast-forward the main checkout (`git merge --ff-only`) and
+  remove the worktree — never leave a second branch behind.
 
 ## Rules for experiments
 
@@ -50,5 +60,6 @@ Run (from `samples/strategy-example`, `PYTHONPATH=../..`):
 - Several processes loading the same data range at once can crash on demeter's `~/.demeter` cache
   (`pickle EOFError`) before any backtest runs: rerun that segment alone.
 - A continuous ETH run takes ~8 min and several GB per worker; yearly segments take ~2 min.
-- `git fetch` here only fetches `master` (narrow refspec); fetch other branches by name.
+- `git fetch` here only fetches `master` and `feat/dino-v6-opt` (narrow refspec in the local config); fetch any
+  other branch by name.
 - Pushing needs the `dinohuang102` GitHub account (write access to `ewe-technology/demeter`).
