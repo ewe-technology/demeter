@@ -90,6 +90,21 @@ Base against about +86% on the mainnet pool for the same three segments chained 
 +18.7%). In 2024 Base fees were $17.6k vs $30.9k on mainnet and price impact $3.6k vs $0.07k: the Base pool is much
 thinner, so the F-switch swaps cost far more. Mainnet gas is still what the gas column prices.
 
+The gap is almost all 2024, the Base pool's first year: per year v6 makes Base +19.4% / +13.9% / +19.1% against
+mainnet +36.4% / +16.3% / +18.7% (2024 / 2025 / 2026-01..09-17), and Base's price impact falls from $3.6k (2024) to
+$0.3k (2025) and $0.06k (2026). A direct check of fee income per unit of in-range liquidity (Σ amount_in x fee /
+L_active, USD, same ETH price on every chain so directly comparable; one day each) agrees:
+
+| day | mainnet 0.05% | Base 0.05% | Base 0.3% | Arbitrum 0.05% |
+|---|---|---|---|---|
+| 2026-09-27 | 0.0023 | 0.0023 | 0.0017 | 0.0017 |
+| 2026-08-01 | 0.0037 | 0.0036 | 0.0031 | 0.0050 |
+| 2026-03-14 | 0.0176 | 0.0125 | 0.0127 | 0.0124 |
+
+Today Base 0.05% earns about what mainnet does per unit of liquidity on quiet days and less on volatile ones; the
+Base 0.3% pool is no better and charges 6x on every rebuild swap. Deploy on Base 0.05%; expect results closer to
+the 2025–2026 Base years than to the mainnet backtest.
+
 ## Deviations
 
 - The holdout was paused after dev (2026-09-30 13:1x, Dino redirected to strategy logic) and resumed the same day
