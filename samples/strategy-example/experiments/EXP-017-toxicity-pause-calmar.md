@@ -3,7 +3,7 @@
 - Version: v6.13r
 - Jira: [QUAN-863](https://ewetechnology.atlassian.net/browse/QUAN-863)
 - Status: holdout-fail
-- Pre-registration commit: 57c40f5 · Result commit: ______
+- Pre-registration commit: 57c40f5 · Result commit: 2fccf26
 - Parent: `EXP-016-toxicity-pause.md` (same variant, same constants, same code: variant `L`).
 
 ## Hypothesis
