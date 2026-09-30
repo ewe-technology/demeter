@@ -853,27 +853,32 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
               f"{PAUSE_WINDOW}-min move {math.log(float(row_data.prices[self.gp.base_token.name]) / self.price_hist[0]):+.2%}")
 
     def resume_ladder(self, row_data: Snapshot) -> None:
-        """Re-add the pulled ranges from what came out of them; what no longer fits a band stays idle."""
+        """Re-add the pulled ladder: the build loop again at the build's tick (same ranges, same side-rescaled band
+        shares) from the wallet's free tokens at the current price. A second pass tops the bands up with what the
+        first pass left (the price moved, so the band straddling it wants a different token mix); whatever still
+        does not fit stays idle until the next rebuild, as v6's leftovers do."""
         lp_market: UniLpMarketV2 = self.broker.markets[self.utils.market_key]
         current_tick = self.utils.get_raw_tick(row_data)
-        positions = []
-        # the build loop again, at the build's tick (same ranges, same side-rescaled band shares) with the wallet's free
-        # tokens at the current price; band_amounts clamps to what is free, what no longer fits stays idle until the
-        # next rebuild, as v6's leftovers do
-        free_base = self.broker.get_token_balance(self.gp.base_token) - self.total_base_fee
-        free_quote = self.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
-        for config in self.ladder_configs():
-            _, _, lower_tick, upper_tick = self.calculate_range(lp_market, self.build_tick, config[0], config[1])
-            base_amt, quote_amt = self.band_amounts(free_base, free_quote, config[2])
-            if base_amt <= ZERO and quote_amt <= ZERO:
-                continue
-            pos, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(lower_tick, upper_tick, base_amt, quote_amt,
-                                                                            tick=current_tick)
-            if base_used == ZERO and quote_used == ZERO:
-                lp_market.positions.pop(pos, None)   # dry band (as the build loop does)
-                continue
-            positions.append(pos)
-        self.positions = positions
+        price = row_data.prices[self.gp.base_token.name]
+        placed: Dict[PositionInfo, bool] = {}
+        for _pass in range(2):
+            free_base = self.broker.get_token_balance(self.gp.base_token) - self.total_base_fee
+            free_quote = self.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
+            if free_base * price + free_quote < Decimal(1):
+                break
+            for config in self.ladder_configs():
+                _, _, lower_tick, upper_tick = self.calculate_range(lp_market, self.build_tick, config[0], config[1])
+                base_amt, quote_amt = self.band_amounts(free_base, free_quote, config[2])
+                if base_amt <= ZERO and quote_amt <= ZERO:
+                    continue
+                pos, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(lower_tick, upper_tick, base_amt, quote_amt,
+                                                                                tick=current_tick)
+                if base_used == ZERO and quote_used == ZERO:
+                    if pos not in placed:
+                        lp_market.positions.pop(pos, None)   # dry band (as the build loop does)
+                    continue
+                placed[pos] = True
+        self.positions = list(placed)
         self.paused_bands = []
         self.paused_until = None
 

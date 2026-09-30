@@ -72,8 +72,17 @@ Verdict:
   the corrected code, ETH 2021-11..12: v6 −4.8%, this −6.8%, 50 pauses, fees $3.26k → $2.45k. Those 1,500 paused
   minutes are 1.7% of the time and carry 7.3% of the pool's swap volume (3.5x an average minute), yet 25% of the
   ladder's fees: a 1% move pushes the price toward the valley's dense outer bands, where our share of the pool's
-  liquidity is highest, so the toxic minutes are also the valley's best-paid minutes. The dev chains were rerun in
-  full with the corrected code.
+  liquidity is highest, so the toxic minutes are also the valley's best-paid minutes.
+- **Second dev run discarded too** (ETH yearly 2022 −4.7, 2023 −7.5, 2024 −12.4, 2025 +10.7, 2026 −2.7 pts, wins 1/5;
+  continuous ETH +110.1%, WBTC +99.9%): its resume used each band's *value* share, and the build's shares are
+  side-rescaled, so one-sided bands got half their tokens. The final resume runs the build loop itself at the
+  build's tick (per-band liquidity within 1–2% of what was pulled, checked band by band on 2023-01) and adds a
+  second top-up pass for what the first pass leaves. What still cannot be placed is real: after a 1.5% move the
+  same ranges want a different ETH/USDC mix than came out of them, and the design swaps nothing, so 2–10% of the
+  book sits idle until v6's own follow check ("not fully deployed" below 0.98 F) rebuilds — those rebuilds re-centre
+  the valley on the price, where it is thinnest, and that is where the fee loss comes from (2023-01: fees $4.7k v6
+  vs $1.5k this, two extra follow rebuilds). That is the pre-registered design's consequence, not an implementation
+  error, so it stands. The dev chains were rerun in full with the final code.
 - Pause / resume burns and mints are logged in the cost ledger, so the `rebuilds` column of these runs counts pause
   events too (v6's rebuild count is unchanged); the follow / range rebuild count is in the strategy log.
 - The WBTC continuous run of the discarded code was killed before finishing.

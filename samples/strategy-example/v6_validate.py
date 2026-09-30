@@ -277,7 +277,7 @@ def run_variant(args):
                                                   freq="min"), data={"price": ONE})
     ratio = Decimal(variant.ratio)
     try:
-        with contextlib.redirect_stdout(io.StringIO()):
+        with contextlib.redirect_stdout(open(os.environ["DEBUG_LOG"], "w") if os.environ.get("DEBUG_LOG") else io.StringIO()):
             m = V.run_test(bull, bear, tp, gp, DATA, usdc_price, shape="inverted_gaussian", upper_ratio=ratio,
                            lower_ratio=ratio, half_gap=0, eth_share=variant.eth_share, daily_ema=daily,
                            deploy=variant.deploy)
