@@ -38,17 +38,22 @@ POOLS = {
     "0x4585fe77225b41b697c938b018e2ac67ac5a20c0": (("btc", 8), ("eth", 18), 1, 0.05, "../holdout-data"),
     # Base USDC/WETH 0.05% (the deck's target pool; token0 is WETH here). Gas is still priced as mainnet.
     "0xd0b53d9277642d899df5c87a3966a349a798f224": (("eth", 18), ("usdc", 6), 0, 0.05, "../base-data"),
+    # EXP-011: Base USDC/cbBTC 0.05% (the deck's "Growth" pool)
+    "0xfbb6eed8e7aa03b138556eedaf5d271a5e1e43ef": (("usdc", 6), ("btc", 8), 1, 0.05, "../base-data"),
 }
 # the EMA warm-up needs a year of history before the pool existed: read ETH/USD from the mainnet pool
-WARM_POOL = {"0xd0b53d9277642d899df5c87a3966a349a798f224": "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"}
+WARM_POOL = {"0xd0b53d9277642d899df5c87a3966a349a798f224": "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
+             "0xfbb6eed8e7aa03b138556eedaf5d271a5e1e43ef": "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35"}
 FIRST_DATA = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": date(2021, 5, 6),
               "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": date(2021, 11, 2),
               "0x4585fe77225b41b697c938b018e2ac67ac5a20c0": date(2021, 11, 2),
-              "0xd0b53d9277642d899df5c87a3966a349a798f224": date(2023, 12, 1)}
+              "0xd0b53d9277642d899df5c87a3966a349a798f224": date(2023, 12, 1),
+              "0xfbb6eed8e7aa03b138556eedaf5d271a5e1e43ef": date(2024, 10, 1)}
 # EXP-004: daily Aave USDC supply APR per pool's chain (samples/fetch_aave_rates.py)
 RATE_CSV = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": "../aave_usdc_ethereum_daily.csv",
             "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": "../aave_usdc_ethereum_daily.csv",
-            "0xd0b53d9277642d899df5c87a3966a349a798f224": "../aave_usdc_base_daily.csv"}
+            "0xd0b53d9277642d899df5c87a3966a349a798f224": "../aave_usdc_base_daily.csv",
+            "0xfbb6eed8e7aa03b138556eedaf5d271a5e1e43ef": "../aave_usdc_base_daily.csv"}
 INIT_QUOTE = Decimal(100000)
 INIT_BY_POOL = {"0x4585fe77225b41b697c938b018e2ac67ac5a20c0": Decimal(2)}  # quote units; default INIT_QUOTE
 G_REMOVE, G_ADD, G_SWAP = 260_000, 450_000, 150_000

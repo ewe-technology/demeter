@@ -1,12 +1,12 @@
 #!/bin/bash
-# Base USDC/WETH 0.05% minute data, month by month (keeps memory bounded), into $OUT.
+# Base pool minute data (POOL env, default USDC/WETH 0.05%), month by month (keeps memory bounded), into $OUT.
 # usage: fetch_base_monthly.sh <first month YYYY-MM> <last day YYYY-MM-DD> <out dir = samples/base-data/<pool>>
 # (v6_validate reads samples/base-data/<pool>/). tenderly rate-limits hard; ETH_RPC=https://developer-access-mainnet.base.org
 # STEP=2000 worked for the whole range.
 set -o pipefail
 cd "$(dirname "$0")"
 export ETH_RPC=${ETH_RPC:-https://base.gateway.tenderly.co} STEP=${STEP:-1000} THREADS=${THREADS:-8}
-POOL=0xd0b53d9277642d899df5c87a3966a349a798f224
+POOL=${POOL:-0xd0b53d9277642d899df5c87a3966a349a798f224}
 m=$1; last=$2; out=$3
 while [[ "$m-01" < "$last" || "$m-01" == "$last" ]]; do
   s="$m-01"
