@@ -3,7 +3,7 @@
 - Version: v6.13
 - Jira: [QUAN-862](https://ewetechnology.atlassian.net/browse/QUAN-862)
 - Status: dropped-at-dev
-- Pre-registration commit: 599f492 · Result commit: ______
+- Pre-registration commit: 599f492 (implementation b683381, e13ddb9, b8f3c14) · Result commit: d0f2df3
 - Literature: `RESEARCH-2026-09-30-lp-literature.md` §5.
 
 ## Hypothesis
