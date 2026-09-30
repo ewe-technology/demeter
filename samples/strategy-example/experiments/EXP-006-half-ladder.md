@@ -3,7 +3,7 @@
 - Version: v6.6
 - Jira: [QUAN-840](https://ewetechnology.atlassian.net/browse/QUAN-840)
 - Status: dropped-at-dev
-- Pre-registration commit: 639a09c · Result commit: see registry
+- Pre-registration commit: 639a09c · Result commit: 53defd9
 
 ## Hypothesis
 
