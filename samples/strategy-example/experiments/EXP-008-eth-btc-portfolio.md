@@ -1,9 +1,9 @@
 # EXP-008: v6 on ETH and BTC as one 50/50 portfolio (v6.8)
 
 - Version: v6.8
-- Jira: QUAN-___
+- Jira: [QUAN-842](https://ewetechnology.atlassian.net/browse/QUAN-842)
 - Status: dev-done (dev seen before registration; forward holdout pending)
-- Pre-registration commit: ______ · Result commit: ______
+- Registration commit: 94fc1fa · Result commit: pending (Jan 2027)
 
 ## Hypothesis
 
