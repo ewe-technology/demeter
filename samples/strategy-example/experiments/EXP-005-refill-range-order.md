@@ -2,8 +2,8 @@
 
 - Version: v6.5
 - Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Status: dropped-at-dev
+- Pre-registration commit: fd0cbb1 · Result commit: see registry
 
 ## Hypothesis
 
@@ -46,12 +46,39 @@ Exits stay market sells, so the defence is unchanged.
 
 ## Result
 
-| test | v6 | this | gain |
-|---|---|---|---|
+Development, ETH/USDC 0.05%, yearly reset:
 
-Verdict:
+| test | v6 | this | gain | max DD v6 → this |
+|---|---|---|---|---|
+| 2022 | +7.6% | +5.3% | −2.3 | 21.5% → 23.4% |
+| 2023 | +32.2% | +11.4% | −20.8 | 13.9% → 18.0% |
+| 2024 | +36.4% | +36.5% | +0.1 | 26.7% → 19.5% |
+| 2025 | +16.3% | +1.7% | −14.6 | 26.9% → 28.9% |
+| 2026-01..09-17 | +18.7% | +16.5% | −2.2 | 12.0% → 8.7% |
+
+Wins 1/5, median gain −2.34 pts.
+
+Continuous runs (daily equity):
+
+| run | total | CAGR | max DD | Sharpe |
+|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | −22.8% | 0.73 |
+| ETH this | +26.5% | 5.1% | −15.8% | 0.39 |
+| WBTC/USDC v6 | +85.6% | 17.3% | −17.8% | 1.01 |
+| WBTC/USDC this | +39.9% | 9.0% | −20.3% | 0.66 |
+
+Why: the refill orders only fill when the price comes back down, so every refill that is followed by a rally
+leaves the increment in quote until the price leaves the old ladder's +20% edge. 2023 shows it: LP principal
+$94.7k vs v6 $108.9k, fees $16.7k vs $23.3k. This is EXP-003's finding again from the execution side: F's value
+is buying the bounce at market; waiting for a pullback throws it away.
+
+Verdict: **dropped at dev** — wins 1/5, median −2.3 pts. Holdout not run.
 
 ## Deviations
+
+- The first WBTC/USDC continuous run crashed (`KeyError` on a PositionInfo): two refill orders on the same ticks
+  merged into one Uniswap position but were listed twice. Fixed (list a merged order once) and rerun; the ETH
+  runs never hit it (they would have crashed the same way). The fix is in the EXP-006 pre-registration commit.
 
 - Designed after EXP-001..003's dev results and drawdown analysis (all dev data in-sample).
 - The holdout pool's daily closes (other orientation) were looked at before EXP-001; see EXP-001 Deviations.
