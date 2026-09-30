@@ -3,7 +3,7 @@
 - Version: v6.9
 - Jira: [QUAN-856](https://ewetechnology.atlassian.net/browse/QUAN-856)
 - Status: dropped-at-dev
-- Pre-registration commit: ddae178 (implementation dd150b6) · Result commit: ______
+- Pre-registration commit: ddae178 (implementation dd150b6) · Result commit: 32ef30c
 - Literature: `RESEARCH-2026-09-30-lp-literature.md` §1 (this direction), the whole file for the alternatives.
 
 ## Hypothesis
