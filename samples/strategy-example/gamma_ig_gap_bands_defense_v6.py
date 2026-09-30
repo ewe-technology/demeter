@@ -19,6 +19,7 @@ from enum import Enum
 from pathlib import Path
 from typing import List, Tuple, Dict
 
+import numpy as np
 import pandas as pd
 from pandas import Series
 
@@ -125,6 +126,11 @@ HALF_LADDER = False
 # EXP-007 (v6.7): half ladder only for builds judged in an accelerating uptrend: EMA100's first difference > 0 and its
 # second difference > 0 on the last completed day. Otherwise the full v6 ladder. False = v6.
 HALF_WHEN_ACCEL = False
+# EXP-012 (v6.9): deploy only while the pool pays its liquidity. The daily frame's F is zeroed on days whose trailing
+# LVR_GATE_DAYS fee income per unit of in-range liquidity is below LVR_GATE_MIN x that unit's LVR (fee_lvr_ratio).
+# Applied to the frame by the caller (v6_validate.daily_frame); the strategy itself reads the gated F. False = v6.
+LVR_GATE = False
+LVR_GATE_DAYS, LVR_GATE_MIN = 7, 1.0
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -198,6 +204,37 @@ def daily_ema_frame(minute_price: pd.Series) -> pd.DataFrame:
             a.step(float(c), float(emas[a.span][day]))
         fractions.append(sum(a.deployed for a in accounts) / len(accounts))
     return pd.DataFrame({"close": close, "ema": emas[EMA_SPAN], "F": fractions})
+
+
+def fee_lvr_ratio(minute: pd.DataFrame, fee_pct: float, days: int | None = None) -> pd.Series:
+    """EXP-012: per UTC day, the pool's fee income per unit of in-range liquidity over that unit's LVR, both summed
+    over the trailing `days` completed days (fewer at the start of the data). Raw token1 per unit liquidity on
+    both sides, so the ratio is unit-free and the same for every band shape:
+      fee_m = fee x (inAmount1 + inAmount0 x P) / currentLiquidity,   P = 1.0001^closeTick
+      lvr_m = ln(P_m / P_{m-1})^2 x sqrt(P) / 4   (in-range v3 = constant product on virtual reserves L/sqrt(P),
+              L sqrt(P); LVR rate sigma^2 P^2 |x'(P)| / 2 = sigma^2 L sqrt(P) / 4, Milionis et al. 2022)
+    `fee_pct` is the pool fee in percent (0.05 -> 0.0005)."""
+    days = days or LVR_GATE_DAYS
+    p = np.power(1.0001, minute["closeTick"].astype(float))
+    liq = minute["currentLiquidity"].astype(float)
+    vol1 = minute["inAmount1"].astype(float) + minute["inAmount0"].astype(float) * p
+    fee = ((fee_pct / 100.0) * vol1 / liq.where(liq > 0)).fillna(0.0)
+    r = np.log(p).diff().fillna(0.0)
+    lvr = r * r * np.sqrt(p) / 4
+    daily = pd.DataFrame({"fee": fee, "lvr": lvr}).resample("1D").sum(min_count=1).dropna()
+    roll = daily.rolling(days, min_periods=1).sum()
+    return (roll["fee"] / roll["lvr"]).rename("R")
+
+
+def gate_fractions(daily: pd.DataFrame, ratio: pd.Series, minimum: float | None = None) -> pd.DataFrame:
+    """EXP-012: copy of the daily signal frame with F zeroed where `ratio` < `minimum`; the raw F is kept as
+    "F_raw" and the ratio as "R". Days without a ratio (no pool data yet) keep their F."""
+    minimum = LVR_GATE_MIN if minimum is None else minimum
+    out = daily.copy()
+    out["F_raw"] = out["F"]
+    out["R"] = ratio.reindex(out.index)
+    out["F"] = out["F"].where(out["R"].isna() | (out["R"] >= minimum), 0.0)
+    return out
 
 
 def daily_row_for(daily: pd.DataFrame, timestamp: datetime) -> tuple[pd.Timestamp, pd.Series]:

@@ -82,11 +82,12 @@ OPT = {"A": Variant("A_v6"),
        "E": Variant("E_cash_yield", {"CASH_APR": "pool"}),   # EXP-004: idle USDC earns the pool chain's Aave rate
        "F": Variant("F_refill_order", {"REFILL_ORDER": True}),   # EXP-005
        "G": Variant("G_half_ladder", {"HALF_LADDER": True}),   # EXP-006
-       "H": Variant("H_half_when_accel", {"HALF_WHEN_ACCEL": True})}   # EXP-007
+       "H": Variant("H_half_when_accel", {"HALF_WHEN_ACCEL": True}),   # EXP-007
+       "I": Variant("I_lvr_gate", {"LVR_GATE": True})}   # EXP-012: F = 0 while 7-day pool fees / LVR < 1
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE"]}
 
 
 def sens_grid():
@@ -113,6 +114,7 @@ def bench_grid():
 POOL = ""
 DATA: pd.DataFrame | None = None
 PRICE: pd.Series | None = None   # warm-up + window minute prices, for the daily engine
+GATE_MINUTES: pd.DataFrame | None = None   # EXP-012: the pool's own minutes, LVR_GATE_DAYS + 1 days before start .. end
 GAS: pd.Series | None = None
 ETH_USD: pd.Series | None = None
 CURRENT = None
@@ -222,14 +224,17 @@ def daily_frame() -> pd.DataFrame:
     """v6's daily frame; F from the (possibly overridden) EMA_SPANS, "ema" always EMA100 for the s rule.
     daily_ema_frame reads the EMA100 column out of EMA_SPANS, so a moved span set would drop it."""
     if V.EMA_SPAN in V.EMA_SPANS:
-        return V.daily_ema_frame(PRICE)
-    ema_span = V.EMA_SPAN
-    V.EMA_SPAN = V.EMA_SPANS[0]
-    try:
         daily = V.daily_ema_frame(PRICE)
-    finally:
-        V.EMA_SPAN = ema_span
-    daily["ema"] = daily["close"].ewm(span=ema_span, adjust=False).mean()
+    else:
+        ema_span = V.EMA_SPAN
+        V.EMA_SPAN = V.EMA_SPANS[0]
+        try:
+            daily = V.daily_ema_frame(PRICE)
+        finally:
+            V.EMA_SPAN = ema_span
+        daily["ema"] = daily["close"].ewm(span=ema_span, adjust=False).mean()
+    if V.LVR_GATE:   # EXP-012: zero F on days the pool did not pay its liquidity over the trailing week
+        daily = V.gate_fractions(daily, V.fee_lvr_ratio(GATE_MINUTES, POOLS[POOL][3]))
     return daily
 
 
@@ -266,6 +271,8 @@ def run_variant(args):
             "max_swap_notional": float(c["notional"].max()), "rebuilds": len(c),
             "fees": float(s.total_fee), "sleeve_stops": s.sleeve_stops, "interest": float(s.total_interest), "refill_orders": s.refill_orders, "half_builds": s.half_builds, "lp_net_value": float(s.final_lp_net_value),
             "mean_F": float(window["F"].mean()) if variant.deploy == V.DEPLOY_SIGNAL else 1.0,
+            "gate_closed_days": int(((window["F_raw"] > 0) & (window["F"] == 0)).sum()) if "F_raw" in window else 0,
+            "median_R": float(window["R"].median()) if "R" in window else float("nan"),
             "benchmark_return": float(m["benchmark_rate"]), "secs": round(time.time() - t0)}
 
 
@@ -279,7 +286,7 @@ def load_minutes(start: date, end: date, pool: str | None = None) -> pd.DataFram
 
 
 def main():
-    global POOL, DATA, PRICE, GAS, ETH_USD
+    global POOL, DATA, PRICE, GATE_MINUTES, GAS, ETH_USD
     POOL = sys.argv[1]
     start, end, grid = date.fromisoformat(sys.argv[2]), date.fromisoformat(sys.argv[3]), sys.argv[4]
     procs = int(sys.argv[5]) if len(sys.argv) > 5 else 4
@@ -295,6 +302,10 @@ def main():
     warm = load_minutes(max(start - timedelta(days=warm_days), FIRST_DATA[warm_pool]), start - timedelta(days=1),
                         warm_pool)
     PRICE = pd.concat([warm.price, DATA.price])
+    if any(v.engine.get("LVR_GATE") for v in variants):   # EXP-012: the gate needs the pool's own week before start
+        gate_start = max(start - timedelta(days=V.LVR_GATE_DAYS + 1), FIRST_DATA[POOL])
+        GATE_MINUTES = DATA if gate_start >= start else \
+            pd.concat([load_minutes(gate_start, start - timedelta(days=1)), DATA])
     tag = f"{POOL[:6]}-{grid}-{start}-{end}"
     folder = os.path.join("result", "v6_validate", tag)
     os.makedirs(folder, exist_ok=True)
