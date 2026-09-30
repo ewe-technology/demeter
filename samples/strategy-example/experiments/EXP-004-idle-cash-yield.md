@@ -3,7 +3,7 @@
 - Version: v6.4
 - Jira: QUAN-___
 - Status: dev-done (holdout paused)
-- Pre-registration commit: 58d94b1 · Result commit: see registry
+- Pre-registration commit: 58d94b1 · Result commit: 70d58bc
 
 ## Hypothesis
 
