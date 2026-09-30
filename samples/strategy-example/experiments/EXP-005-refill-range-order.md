@@ -3,7 +3,7 @@
 - Version: v6.5
 - Jira: QUAN-___
 - Status: dropped-at-dev
-- Pre-registration commit: fd0cbb1 · Result commit: see registry
+- Pre-registration commit: fd0cbb1 · Result commit: cd2991d
 
 ## Hypothesis
 
@@ -79,7 +79,6 @@ Verdict: **dropped at dev** — wins 1/5, median −2.3 pts. Holdout not run.
 - The first WBTC/USDC continuous run crashed (`KeyError` on a PositionInfo): two refill orders on the same ticks
   merged into one Uniswap position but were listed twice. Fixed (list a merged order once) and rerun; the ETH
   runs never hit it (they would have crashed the same way). The fix is in the EXP-006 pre-registration commit.
-
 - Designed after EXP-001..003's dev results and drawdown analysis (all dev data in-sample).
 - The holdout pool's daily closes (other orientation) were looked at before EXP-001; see EXP-001 Deviations.
 - Smoke test before the pre-registration commit, outside every pre-registered window: ETH 2021-05-10..06-30
