@@ -35,6 +35,9 @@ cost is not modelled). No change to v6 itself.
 - Holdout (fresh, run once): **forward data** 2026-09-18..2026-12-31 on both pools (fetched with
   `samples/fetch_uni_minute.py` in January 2027), v6 ETH alone vs the 50/50 portfolio, continuous from
   2022-11-01 so the engine and books carry over.
+- Second candidate on the same forward holdout (added 2026-09-30 after EXP-004 passed its Base holdout): the same
+  50/50 portfolio with EXP-004's cash yield in both books (dev, seen: Sharpe 1.10, max DD −17.0%, +90.1% on the
+  common window). Judged by the same rule against v6 ETH; count both candidates on this holdout.
 - Success rule on the holdout window: the portfolio's max DD shallower than v6 ETH's and its daily-return Sharpe
   ≥ v6 ETH's − 0.1 → `holdout-pass`, else `holdout-fail`. (Three months is short; the rule only guards against the
   diversification benefit disappearing, not for statistical significance.)
