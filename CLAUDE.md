@@ -30,6 +30,26 @@ regimes, capacity).
   with `git push origin HEAD:feat/dino-v6-opt`, then fast-forward the main checkout (`git merge --ff-only`) and
   remove the worktree — never leave a second branch behind.
 
+## A strategy version is done only when all of this is done
+
+Dino names versions `v6.1`, `v6.2`, ...; each is one experiment `EXP-NNN` (next free number in `registry.csv`,
+`version` field = his name). When asked to "make v6.x", carry it through every step without being reminded:
+
+1. Pre-register: copy `experiments/TEMPLATE.md` to `EXP-NNN-<slug>.md`, fill hypothesis, change and rule, add a
+   `pre-registered` row to `registry.csv`, commit and push.
+2. Implement the variant (add it to `OPT` in `v6_validate.py`), run dev, then the holdout once.
+3. Record: fill *Result* / *Deviations*, update the registry row (status, numbers, commits), commit and push.
+4. Jira: open a Subtask under QUAN-834 with the `jira-ticket` skill (summary `[Uniswap] v6.x: <change>`,
+   research template). **Show Dino the ticket in Chinese and wait for his OK before creating it**; ask who takes
+   it. Put the key in the registry `jira` column and the EXP file.
+5. Dashboard (https://claude.ai/artifact/ATZR3s2SqybzjQvMMsAZg5): build the documents with
+   `python experiments/dashboard_rows.py row ...` (and `curve ...` when a continuous ETH/WBTC run exists), then
+   `ArtifactData set experiments/<EXP-id>` and `ArtifactData update curves/eth|btc` (get first, pass `if_version`).
+   New curves take slot 2, 5, 6, 7, 8 in that order; at most five experiment lines, drop the oldest failed one
+   (`{"__delete__": true}` on its series/labels/slots keys) before adding a sixth. The page itself never needs
+   republishing; its source is `experiments/dashboard/index.html` (republish with `url` only for layout changes).
+6. Tell Dino the result in Chinese: pass/fail, the numbers vs v6, the Jira key, the dashboard link.
+
 ## Rules for experiments
 
 - Pre-register (hypothesis, fixed constants, dev data, holdout, success rule) and commit **before** running.

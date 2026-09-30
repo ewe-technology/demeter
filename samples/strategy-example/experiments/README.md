@@ -6,8 +6,12 @@ two layers mirror it:
 - Jira story [QUAN-834](https://ewetechnology.atlassian.net/browse/QUAN-834): one subtask per experiment (who, when).
 - Team dashboard https://claude.ai/artifact/ATZR3s2SqybzjQvMMsAZg5: leaderboard, log and equity curves. Its
   database holds `experiments/<EXP-id>` (same fields as a registry row plus `hypothesis`, `verdict`, `order`)
-  and `curves/eth`, `curves/btc` (weekly net value per variant). Ask Claude to "sync EXP-NNN to the dashboard";
-  only editors can write.
+  and `curves/eth`, `curves/btc` (`series`, `labels`, `slots` per key: weekly net value, legend name, palette slot).
+  `dashboard_rows.py` builds both documents; the page draws any new key without being republished. Page source:
+  `dashboard/index.html`. Only editors can write.
+
+Versions: Dino's `v6.1`, `v6.2`, ... map one-to-one to `EXP-NNN` (the `version` field on the dashboard). The full
+definition of done is in the repo's `CLAUDE.md`.
 
 ## Workflow
 

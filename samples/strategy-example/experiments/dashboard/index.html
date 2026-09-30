@@ -1,0 +1,380 @@
+<title>v6 Optimization Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root {
+  --ground: #f4f6f5;
+  --surface: #fcfcfb;
+  --ink: #14191b;
+  --ink-2: #4f595c;
+  --ink-3: #7b8588;
+  --rule: #dde2e0;
+  --rule-strong: #c5ccca;
+  --accent: #0d6b60;
+  --accent-soft: #e2efec;
+  --good: #1d7a3e; --good-bg: #e3f2e7;
+  --warn: #8a5a00; --warn-bg: #fbf0d9;
+  --bad: #b3261e;  --bad-bg: #fbe6e4;
+  --idle: #5b6468; --idle-bg: #eceff0;
+  --info: #1f5fb3; --info-bg: #e3edfa;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+  --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7; --s8: #e34948;
+  --grid: #e7ebe9;
+  --shadow: 0 1px 2px rgba(20, 25, 27, .06), 0 4px 16px rgba(20, 25, 27, .05);
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ground: #101315; --surface: #171b1e; --ink: #eef1f0; --ink-2: #b4bdbf; --ink-3: #87918f;
+    --rule: #262c2f; --rule-strong: #353d40; --accent: #43b7a5; --accent-soft: #16302c;
+    --good: #5fcf86; --good-bg: #14301f; --warn: #e5b04a; --warn-bg: #33270f;
+    --bad: #f07b72; --bad-bg: #3a1a18; --idle: #a2abad; --idle-bg: #22282b; --info: #7fb0f2; --info-bg: #162a44;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --grid: #22282b;
+    --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ground: #101315; --surface: #171b1e; --ink: #eef1f0; --ink-2: #b4bdbf; --ink-3: #87918f;
+  --rule: #262c2f; --rule-strong: #353d40; --accent: #43b7a5; --accent-soft: #16302c;
+  --good: #5fcf86; --good-bg: #14301f; --warn: #e5b04a; --warn-bg: #33270f;
+  --bad: #f07b72; --bad-bg: #3a1a18; --idle: #a2abad; --idle-bg: #22282b; --info: #7fb0f2; --info-bg: #162a44;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --grid: #22282b;
+  --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+}
+* { box-sizing: border-box; }
+body { background: var(--ground); color: var(--ink); font: 15px/1.55 var(--body); padding-inline: 20px; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-block: 28px 56px; display: grid; gap: 28px; }
+h1, h2 { font-family: var(--display); font-weight: 600; margin: 0; text-wrap: balance; letter-spacing: -0.005em; }
+h1 { font-size: clamp(28px, 4vw, 38px); line-height: 1.1; }
+h2 { font-size: 20px; }
+.eyebrow { font: 500 11.5px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.mono, .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+header { display: grid; gap: 10px; }
+.lede { color: var(--ink-2); max-width: 68ch; margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font: 13px/1.4 var(--mono); color: var(--ink-3); }
+.meta b { color: var(--ink-2); font-weight: 500; }
+.meta a { color: var(--accent); text-decoration: none; }
+.meta a:hover, .meta a:focus-visible { text-decoration: underline; }
+.protocol { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; color: var(--ink-2); }
+.protocol span.step { padding: 3px 9px; border: 1px solid var(--rule-strong); border-radius: 999px; background: var(--surface); }
+.protocol span.arrow { color: var(--ink-3); }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; display: grid; gap: 4px; }
+.kpi .label { font-size: 12.5px; color: var(--ink-3); }
+.kpi .value { font: 500 26px/1.15 var(--mono); font-variant-numeric: tabular-nums; }
+.kpi .sub { font-size: 12.5px; color: var(--ink-2); }
+.kpi.lead { border-color: var(--accent); background: linear-gradient(0deg, var(--surface), var(--surface)); box-shadow: inset 3px 0 0 var(--accent); }
+
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; box-shadow: var(--shadow); padding: 18px 18px 14px; display: grid; gap: 14px; min-width: 0; }
+.panel-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+.panel-head p { margin: 0; color: var(--ink-3); font-size: 13px; }
+.seg { display: inline-flex; border: 1px solid var(--rule-strong); border-radius: 8px; overflow: hidden; }
+.seg button { font: 500 13px/1 var(--body); padding: 7px 14px; background: transparent; color: var(--ink-2); border: 0; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--rule-strong); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink-2); }
+.legend .item { display: inline-flex; align-items: center; gap: 7px; }
+.legend .swatch { width: 14px; height: 3px; border-radius: 2px; }
+.legend .val { font-family: var(--mono); color: var(--ink); }
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart text { font: 11.5px var(--mono); fill: var(--ink-3); }
+.chart .endlabel { font: 500 11.5px var(--mono); fill: var(--ink-2); }
+.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--rule-strong); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; box-shadow: var(--shadow); min-width: 170px; }
+.tip .d { font: 500 12px var(--mono); color: var(--ink-3); margin-bottom: 4px; }
+.tip .r { display: flex; justify-content: space-between; gap: 14px; align-items: center; }
+.tip .r span:first-child { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); }
+.tip .r .num { color: var(--ink); }
+.tip i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.note { font-size: 12.5px; color: var(--ink-3); margin: 0; }
+
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 13.5px; }
+th { text-align: left; font: 500 11.5px/1.2 var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); padding: 8px 10px; border-bottom: 1px solid var(--rule-strong); white-space: nowrap; }
+td { padding: 11px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+td.r, th.r { text-align: right; }
+td .name { font-weight: 600; }
+td .hyp { color: var(--ink-2); font-size: 13px; margin-top: 2px; max-width: 46ch; }
+.chip { display: inline-flex; align-items: center; gap: 5px; font: 500 12px/1 var(--body); padding: 4px 8px 4px 7px; border-radius: 999px; white-space: nowrap; }
+.chip.good { color: var(--good); background: var(--good-bg); }
+.chip.bad { color: var(--bad); background: var(--bad-bg); }
+.chip.warn { color: var(--warn); background: var(--warn-bg); }
+.chip.idle { color: var(--idle); background: var(--idle-bg); }
+.chip.info { color: var(--info); background: var(--info-bg); }
+.pos { color: var(--good); } .neg { color: var(--bad); } .dim { color: var(--ink-3); }
+
+.log { display: grid; gap: 0; }
+.entry { display: grid; grid-template-columns: 92px 1fr; gap: 4px 18px; padding: 14px 0; border-top: 1px solid var(--rule); }
+.entry:first-child { border-top: 0; padding-top: 4px; }
+.entry .id { font: 500 13px/1.5 var(--mono); color: var(--accent); }
+.entry .when { font: 12px/1.4 var(--mono); color: var(--ink-3); }
+.entry h3 { margin: 0 0 4px; font: 600 15.5px/1.35 var(--body); display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.entry p { margin: 0; color: var(--ink-2); max-width: 78ch; }
+.entry p + p { margin-top: 4px; }
+.entry .k { font: 500 11.5px var(--mono); color: var(--ink-3); text-transform: uppercase; letter-spacing: .05em; margin-right: 6px; }
+.empty, .banner { padding: 14px 16px; border: 1px dashed var(--rule-strong); border-radius: 10px; color: var(--ink-2); background: var(--surface); font-size: 14px; }
+@media (max-width: 560px) {
+  .entry { grid-template-columns: 1fr; }
+  body { padding-inline: 16px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .chart path.line { transition: opacity .15s; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Uniswap v3 · defense v6 · strategy research</span>
+    <h1>v6 Optimization Lab</h1>
+    <p class="lede">Every structural change tried on the defense v6 valley LP, judged against v6 itself under a rule written down before the run. Net of pool fee and price impact; gas reported separately until the deployment chain is fixed.</p>
+    <div class="meta">
+      <span>Story <a href="https://ewetechnology.atlassian.net/browse/QUAN-834" target="_blank" rel="noopener">QUAN-834</a></span>
+      <span>Branch <b>feat/dino-v6-opt</b></span>
+      <span>Log <b>samples/strategy-example/experiments/</b></span>
+      <span id="updated">Loading…</span>
+    </div>
+    <div class="protocol" aria-label="Protocol">
+      <span class="step">Pre-register rule</span><span class="arrow">→</span>
+      <span class="step">Development years</span><span class="arrow">→</span>
+      <span class="step">One pick</span><span class="arrow">→</span>
+      <span class="step">Holdout, run once</span>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <section class="kpis" id="kpis" aria-label="Summary"></section>
+
+  <section class="panel" aria-labelledby="curve-title">
+    <div class="panel-head">
+      <div>
+        <h2 id="curve-title">Equity, $100k start</h2>
+        <p id="curve-label">—</p>
+      </div>
+      <div class="seg" role="group" aria-label="Pool">
+        <button type="button" id="btn-eth" aria-pressed="true">ETH/USDC</button>
+        <button type="button" id="btn-btc" aria-pressed="false">WBTC/USDC</button>
+      </div>
+    </div>
+    <div class="legend" id="legend"></div>
+    <div class="chart" id="chart"></div>
+    <p class="note">Continuous runs; v6 pays fees out in USDC. Passing experiments add their own line here. WBTC is out of sample for v6's parameters.</p>
+  </section>
+
+  <section class="panel" aria-labelledby="board-title">
+    <div class="panel-head">
+      <h2 id="board-title">Leaderboard</h2>
+      <p>Gain = variant minus v6, net return points</p>
+    </div>
+    <div class="tablewrap" id="board"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="log-title">
+    <div class="panel-head">
+      <h2 id="log-title">Experiment log</h2>
+      <p>Newest first</p>
+    </div>
+    <div class="log" id="log"></div>
+  </section>
+</div>
+
+<script>
+(function () {
+  const STATUS = {
+    "baseline":       { cls: "idle", icon: "◆", label: "Baseline" },
+    "pre-registered": { cls: "info", icon: "○", label: "Pre-registered" },
+    "dev-done":       { cls: "warn", icon: "◐", label: "Dev done" },
+    "holdout-pass":   { cls: "good", icon: "✓", label: "Holdout pass" },
+    "holdout-fail":   { cls: "bad",  icon: "✕", label: "Holdout fail" },
+    "fail":           { cls: "bad",  icon: "✕", label: "Failed" },
+    "dropped-at-dev": { cls: "idle", icon: "–", label: "Dropped at dev" },
+  };
+  // Series come from the curve document: series.<key> = weekly values, labels.<key> = legend name,
+  // slots.<key> = palette slot 1-8. A slot is fixed per series (color follows the entity, never its rank);
+  // keys without a slot take the next free one. Built-ins keep their slots when a document omits them.
+  const BUILTIN = { v6: { label: "v6", slot: 1 }, plain_lp: { label: "Plain valley LP", slot: 3 }, hold: { label: "Hold", slot: 4 } };
+  function seriesOf(c, holdLabel) {
+    const labels = c.labels || {}, slots = { ...c.slots };
+    Object.keys(BUILTIN).forEach((k) => { if (c.series[k] && slots[k] == null) slots[k] = BUILTIN[k].slot; });
+    const free = [2, 5, 6, 7, 8, 1, 3, 4].filter((s) => !Object.values(slots).includes(s));
+    return Object.keys(c.series).map((k) => {
+      const slot = slots[k] ?? free.shift() ?? 8;
+      const label = k === "hold" ? holdLabel : (labels[k] || (BUILTIN[k] && BUILTIN[k].label) || k);
+      return { key: k, label, slot, color: "--s" + slot, values: c.series[k] };
+    }).sort((a, b) => a.slot - b.slot);
+  }
+  let experiments = [], curves = {}, asset = "eth";
+
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const pct = (x, d = 1) => (x == null ? "—" : (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x * 100).toFixed(d) + "%");
+  const pts = (x) => (x == null ? "—" : (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x).toFixed(2));
+  const money = (v) => "$" + Math.round(v / 1000) + "k";
+  const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+  function chip(status) {
+    const s = STATUS[status] || { cls: "idle", icon: "·", label: status || "Unknown" };
+    return `<span class="chip ${s.cls}"><span aria-hidden="true">${s.icon}</span>${esc(s.label)}</span>`;
+  }
+
+  function renderKpis() {
+    const base = experiments.find((e) => e.id === "EXP-000");
+    const scored = experiments.filter((e) => e.id !== "EXP-000" && e.eth_cagr != null && e.status === "holdout-pass");
+    const best = scored.sort((a, b) => b.eth_cagr - a.eth_cagr)[0];
+    const run = experiments.filter((e) => e.id !== "EXP-000");
+    const passed = run.filter((e) => e.status === "holdout-pass");
+    $("kpis").innerHTML = [
+      `<div class="kpi"><span class="label">v6 baseline · ETH CAGR</span><span class="value">${base ? pct(base.eth_cagr) : "—"}</span><span class="sub">max DD ${base ? pct(base.eth_maxdd) : "—"}</span></div>`,
+      `<div class="kpi lead"><span class="label">Best passing variant · ETH CAGR</span><span class="value">${best ? pct(best.eth_cagr) : "—"}</span><span class="sub">${best ? esc(best.id + " " + best.name) + " · max DD " + pct(best.eth_maxdd) : "None yet"}</span></div>`,
+      `<div class="kpi"><span class="label">Variants tested</span><span class="value">${run.length}</span><span class="sub">${passed.length} passed holdout</span></div>`,
+      `<div class="kpi"><span class="label">Plain valley LP · ETH</span><span class="value">−5.8%</span><span class="sub">CAGR, same period, for scale</span></div>`,
+    ].join("");
+  }
+
+  function renderBoard() {
+    if (!experiments.length) { $("board").innerHTML = `<div class="empty">No experiments recorded yet.</div>`; return; }
+    const rows = experiments.map((e) => {
+      const dev = e.dev ? `<span class="num ${e.dev.median > 0 ? "pos" : "neg"}">${pts(e.dev.median)}</span> <span class="dim num">${esc(e.dev.wins)}</span>` : `<span class="dim">—</span>`;
+      const ho = e.holdout ? `<span class="num ${e.holdout.median > 0 ? "pos" : "neg"}">${pts(e.holdout.median)}</span> <span class="dim num">${esc(e.holdout.wins)}</span>` : `<span class="dim">—</span>`;
+      return `<tr>
+        <td class="mono">${esc(e.id)}</td>
+        <td><div class="name">${e.version ? esc(e.version) + " · " : ""}${esc(e.name)}</div><div class="hyp">${esc(e.hypothesis)}</div></td>
+        <td>${chip(e.status)}</td>
+        <td class="r">${dev}</td>
+        <td class="r">${ho}</td>
+        <td class="r num">${pct(e.eth_cagr)}</td>
+        <td class="r num">${pct(e.eth_maxdd)}</td>
+        <td class="mono dim">${esc(e.commit)}</td>
+      </tr>`;
+    }).join("");
+    $("board").innerHTML = `<table><thead><tr><th>ID</th><th>Variant</th><th>Status</th><th class="r">Dev gain · wins</th><th class="r">Holdout gain · wins</th><th class="r">ETH CAGR</th><th class="r">ETH max DD</th><th>Commit</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  function renderLog() {
+    if (!experiments.length) { $("log").innerHTML = `<div class="empty">No experiments recorded yet.</div>`; return; }
+    $("log").innerHTML = [...experiments].reverse().map((e) => `
+      <div class="entry">
+        <div><div class="id">${esc(e.id)}</div><div class="when">${esc(e.date)}</div></div>
+        <div>
+          <h3>${e.version ? esc(e.version) + " · " : ""}${esc(e.name)} ${chip(e.status)}</h3>
+          <p><span class="k">Hypothesis</span>${esc(e.hypothesis)}</p>
+          <p><span class="k">Verdict</span>${esc(e.verdict)}</p>
+          <p class="note mono">${esc(e.doc)}</p>
+        </div>
+      </div>`).join("");
+  }
+
+  function renderChart() {
+    const c = curves[asset];
+    const holdLabel = asset === "eth" ? "Hold ETH" : "Hold BTC";
+    $("curve-label").textContent = c ? c.label : "No curve recorded yet.";
+    if (!c) { $("chart").innerHTML = ""; $("legend").innerHTML = ""; return; }
+    const dates = c.dates.map((d) => new Date(d + "T00:00:00Z"));
+    const series = seriesOf(c, holdLabel);
+    $("legend").innerHTML = series.map((s) => `<span class="item"><span class="swatch" style="background:var(${s.color})"></span>${esc(s.label)} <span class="val">${money(s.values[s.values.length - 1])}</span></span>`).join("");
+
+    const W = 1000, H = 380, m = { l: 52, r: 150, t: 12, b: 28 };
+    const all = series.flatMap((s) => s.values);
+    const step = 50000;
+    const lo = Math.max(0, Math.floor(Math.min(...all) / step) * step), hi = Math.ceil(Math.max(...all) / step) * step;
+    const x = (i) => m.l + (i / (dates.length - 1)) * (W - m.l - m.r);
+    const y = (v) => m.t + (1 - (v - lo) / (hi - lo)) * (H - m.t - m.b);
+    let g = "";
+    for (let v = lo; v <= hi; v += step) {
+      g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)" stroke-width="1"/>`;
+      g += `<text x="${m.l - 8}" y="${y(v) + 4}" text-anchor="end">${money(v)}</text>`;
+    }
+    g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(100000)}" y2="${y(100000)}" stroke="var(--rule-strong)" stroke-width="1" stroke-dasharray="4 4"/>`;
+    const years = [...new Set(dates.map((d) => d.getUTCFullYear()))];
+    years.forEach((yr) => {
+      const i = dates.findIndex((d) => d.getUTCFullYear() === yr);
+      if (i > 0 || dates[0].getUTCMonth() === 0) g += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle">${yr}</text>`;
+    });
+    const lines = series.map((s) => `<path class="line" d="${s.values.map((v, i) => (i ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1)).join("")}" fill="none" stroke="var(${s.color})" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`).join("");
+    // end labels, nudged apart
+    const ends = series.map((s) => ({ s, y: y(s.values[s.values.length - 1]) })).sort((a, b) => a.y - b.y);
+    for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 15) ends[i].y = ends[i - 1].y + 15;
+    const labels = ends.map((e) => {
+      const last = e.s.values[e.s.values.length - 1];
+      return `<circle cx="${x(dates.length - 1)}" cy="${y(last)}" r="4" fill="var(${e.s.color})" stroke="var(--surface)" stroke-width="2"/>` +
+        `<text class="endlabel" x="${x(dates.length - 1) + 10}" y="${e.y + 4}">${esc(e.s.label)} ${money(last)}</text>`;
+    }).join("");
+    $("chart").innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Equity curves for ${esc(c.label)}">${g}${lines}${labels}
+      <line id="xh" x1="0" x2="0" y1="${m.t}" y2="${H - m.b}" stroke="var(--ink-3)" stroke-width="1" visibility="hidden"/>
+      <g id="dots"></g>
+      <rect x="${m.l}" y="${m.t}" width="${W - m.l - m.r}" height="${H - m.t - m.b}" fill="transparent" id="hit"/></svg>
+      <div class="tip" id="tip" hidden></div>`;
+
+    const svg = $("chart").querySelector("svg"), hit = $("hit"), tip = $("tip"), xh = $("xh"), dots = $("dots");
+    function show(evt) {
+      const pt = svg.createSVGPoint();
+      const src = evt.touches ? evt.touches[0] : evt;
+      pt.x = src.clientX; pt.y = src.clientY;
+      const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+      const i = Math.max(0, Math.min(dates.length - 1, Math.round(((p.x - m.l) / (W - m.l - m.r)) * (dates.length - 1))));
+      const cx = x(i);
+      xh.setAttribute("x1", cx); xh.setAttribute("x2", cx); xh.setAttribute("visibility", "visible");
+      dots.innerHTML = series.map((s) => `<circle cx="${cx}" cy="${y(s.values[i])}" r="4" fill="var(${s.color})" stroke="var(--surface)" stroke-width="2"/>`).join("");
+      const rows = [...series].sort((a, b) => b.values[i] - a.values[i]);
+      tip.innerHTML = `<div class="d">${dates[i].toISOString().slice(0, 10)}</div>` + rows.map((s) => `<div class="r"><span><i style="background:var(${s.color})"></i>${esc(s.label)}</span><span class="num">${money(s.values[i])}</span></div>`).join("");
+      tip.hidden = false;
+      const box = $("chart").getBoundingClientRect();
+      const px = (cx / W) * box.width;
+      const left = px + 14 + tip.offsetWidth > box.width ? px - tip.offsetWidth - 14 : px + 14;
+      tip.style.left = Math.max(0, left) + "px";
+      tip.style.top = "8px";
+    }
+    function hide() { tip.hidden = true; xh.setAttribute("visibility", "hidden"); dots.innerHTML = ""; }
+    hit.addEventListener("mousemove", show);
+    hit.addEventListener("touchstart", show, { passive: true });
+    hit.addEventListener("touchmove", show, { passive: true });
+    hit.addEventListener("mouseleave", hide);
+    hit.addEventListener("touchend", hide);
+  }
+
+  function setAsset(a) {
+    asset = a;
+    $("btn-eth").setAttribute("aria-pressed", String(a === "eth"));
+    $("btn-btc").setAttribute("aria-pressed", String(a === "btc"));
+    try { localStorage.setItem("v6lab-asset", a); } catch (e) {}
+    renderChart();
+  }
+  $("btn-eth").addEventListener("click", () => setAsset("eth"));
+  $("btn-btc").addEventListener("click", () => setAsset("btc"));
+  try { const a = localStorage.getItem("v6lab-asset"); if (a === "eth" || a === "btc") asset = a; } catch (e) {}
+  $("btn-eth").setAttribute("aria-pressed", String(asset === "eth"));
+  $("btn-btc").setAttribute("aria-pressed", String(asset === "btc"));
+
+  function renderAll() {
+    renderKpis(); renderBoard(); renderLog(); renderChart();
+    const dates = experiments.map((e) => e.date).filter(Boolean).sort();
+    $("updated").textContent = dates.length ? "Last experiment " + dates[dates.length - 1] : "No experiments yet";
+  }
+  renderAll();
+
+  function fail(msg) { const b = $("banner"); b.textContent = msg; b.hidden = false; $("updated").textContent = "Offline"; }
+
+  (async () => {
+    const db = window.claude && window.claude.use ? await window.claude.use("db") : null;
+    if (!db) { fail("Live data is unavailable in this view. Open the page signed in on claude.ai to see the experiment records."); return; }
+    db.collection("experiments").orderBy("order").onSnapshot(
+      (snap) => { experiments = snap.docs.map((d) => d.data()); renderAll(); },
+      () => fail("Lost the connection to the experiment records. Reload the page to reconnect."));
+    db.collection("curves").onSnapshot(
+      (snap) => { curves = {}; snap.docs.forEach((d) => { curves[d.id] = d.data(); }); renderChart(); },
+      () => fail("Lost the connection to the equity curves. Reload the page to reconnect."));
+  })();
+  window.addEventListener("resize", () => { if (!$("tip").hidden) $("tip").hidden = true; });
+})();
+</script>
