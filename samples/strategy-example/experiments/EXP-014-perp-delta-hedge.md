@@ -2,7 +2,7 @@
 
 - Version: v6.11
 - Jira: [QUAN-860](https://ewetechnology.atlassian.net/browse/QUAN-860)
-- Status: pre-registered
+- Status: dropped-at-dev
 - Pre-registration commit: 599f492 (implementation e81b196, 9e66e97) · Result commit: ______
 - Literature: `RESEARCH-2026-09-30-lp-literature.md` §2.
 
@@ -63,12 +63,42 @@ history (`samples/fetch_binance_funding.py`, committed CSV; ETHUSDT for the ETH 
 
 ## Result
 
-| test | v6 | this | gain | max DD v6 → this |
-|---|---|---|---|---|
+Development, ETH/USDC 0.05%, yearly reset, 100,000 USDC (hedge PnL = settled price PnL of the short; funding received):
 
-Continuous run: total / CAGR / max DD / Sharpe / Calmar / funding received / hedge fees.
+| test | v6 | this | gain | max DD v6 → this | rebuilds v6 → this | hedge PnL | funding | fees v6 → this |
+|---|---|---|---|---|---|---|---|---|
+| 2022 | +7.6% | +1.2% | −6.4 | 21.5% → 14.2% | 41 → 41 | −$8.5k | +$0.5k | $20.1k → $18.6k |
+| 2023 | +32.2% | +11.2% | −21.0 | 13.9% → 7.7% | 24 → 24 | −$19.3k | +$2.2k | $23.3k → $20.0k |
+| 2024 | +36.4% | +16.7% | −19.7 | 26.7% → 16.3% | 29 → 28 | −$18.4k | +$3.5k | |
+| 2025 | +16.3% | +3.4% | −12.8 | 26.9% → 22.5% | 32 → 31 | −$15.2k | +$1.0k | $20.8k → $17.6k |
+| 2026-01..09-17 | +18.7% | +5.9% | −12.8 | 12.0% → 7.6% | 24 → 24 | −$11.1k | +$0.3k | |
 
-Verdict:
+Wins 0/5 (reported, not deciding), median −12.8 pts. Max notional / equity peaked at 0.45; the USDC balance touched
+−$351 (2023) and −$1.7k (2025) between builds, i.e. a top-up would have been needed twice.
+
+Continuous runs (daily equity):
+
+| run | total | CAGR | max DD | Sharpe | Calmar | fees | hedge PnL | funding | hedge fees | trades |
+|---|---|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | −22.8% | 0.73 | 0.61 | $86.5k | | | | |
+| ETH this | +24.1% | 4.7% | −11.0% | 0.32 | 0.43 | $65.7k | −$51.3k | +$6.1k | $1.5k | 1,284 |
+| WBTC/USDC v6 | +85.6% | 17.3% | −17.8% | 1.01 | 0.97 | $61.7k | | | | |
+| WBTC/USDC this | +27.7% | 6.5% | −9.3% | 0.43 | 0.70 | $48.3k | −$44.3k | +$6.6k | $1.4k | |
+
+Verdict: **dropped at dev** — total +24.1% is below the +40% floor, Calmar 0.43 < 0.61, Sharpe 0.32 < 0.73; only the
+drawdown condition holds (−11.0% vs −22.8%, halved as the hedge should). The number that matters is the hedge's
+price PnL: **−$51k on ETH, −$44k on BTC**, in windows where ETH fell 68% in 2022 and BTC never had a down year. A
+short that loses in every single year — including 2022 — means the ladder's ETH was held almost only while the
+price rose: the F engine deploys into confirmed rebounds and exits on the 0.80 stop before the falls, so the delta
+it carries is *timed*, and that timing is worth ≈ −(−51k)/0.6 ≈ **+$85k over 2022–26, i.e. essentially all of v6's
++$85k gain**. Fees ($86k) pay for the IL; the return is the engine's timing of ETH exposure, not "fee income" as
+`V6_VALIDATION.md` §4 puts it (that line reads the fee ledger, not the attribution). Hedging the delta therefore
+removes the alpha and keeps the IL: fees − IL ≈ +$14k over 4.7 years, plus $6k funding, minus $1.5k fees.
+
+Consequences for the programme: (1) every idea that trades v6's ETH exposure for fees is starting from the wrong
+premise — the exposure is the product; (2) the deck's "fee income" framing should be corrected to "trend-timed
+concentrated LP: fees cover the IL, the engine's timing is the return"; (3) the hedge is the right tool only for
+an investor who wants the fee/IL residual with a −11% drawdown at ~5% a year — a different product. Holdout not run.
 
 ## Deviations
 
@@ -83,3 +113,7 @@ Verdict:
   check's "not fully deployed" branch fired daily; the follow target is now scaled by the same margin factor
   (third smoke run: 3 rebuilds, −1.6% vs v6 −4.8%, hedge PnL +$2.2k, funding +$116, fees $82). Same hedge ratio,
   same rule.
+- Funding CSVs (ETHUSDT 2021-12..2026-09, BTCUSDT 2022-10..2026-09) were fetched after the pre-registration commit.
+- Yearly segments and continuous runs ran as two parallel chains (yearly; ETH then WBTC continuous). No reruns.
+- The hedge run reports ~8% fewer fees than v6 in every window (margin held outside the ladder plus the 0.916 F
+  book): that is a cost of the design, counted in its return.
