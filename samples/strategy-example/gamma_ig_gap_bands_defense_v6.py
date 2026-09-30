@@ -109,6 +109,7 @@ REFILL_CONFIRM_DAYS = 3                                   # stage 1 needs this m
 REFILL_STAGES = ((1, 1.05), (2, 1.0833), (3, 1.1167), (4, 1.15))  # (stage, close / low), stage k -> k/4 deployed
 FOLLOW_THRESHOLD = Decimal("0.125")
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
+POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
 
 @dataclass
@@ -1487,7 +1488,9 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     if EMA_SHARE in _eth_shares or DEPLOY_SIGNAL in _deploy_modes:
         warm = UniLpMarketV2(MarketInfo("warm"), UniV3Pool(token0, token1, fee, quote_token))
         warm.data_path = market.data_path
-        warm.load_data(chain_name, contract_address, dsd - timedelta(days=EMA_WARMUP_DAYS), dsd - timedelta(days=1))
+        # the pool's minute data starts 2021-05-06, so a 2022 window gets ~240 warm-up days instead of 360
+        warm_start = max(dsd - timedelta(days=EMA_WARMUP_DAYS), POOL_FIRST_DATA_DATE)
+        warm.load_data(chain_name, contract_address, warm_start, dsd - timedelta(days=1))
         daily_ema = daily_ema_frame(pd.concat([warm.data.price, market.data.price]))
         first, last = daily_ema.loc[pd.Timestamp(dsd) - timedelta(days=1)], daily_ema.iloc[-1]
         print(f"ema{EMA_SPAN}: {len(daily_ema)} daily closes, day before window close {first['close']:.0f} ema {first['ema']:.0f} F {first['F']:.3f}, "
@@ -1618,12 +1621,12 @@ if __name__ == "__main__":
         #  2021/05/04~2021/12/31
         # (datetime(2021, 5, 13, 0, 0, 0), date(2021, 5, 13), date(2021, 12, 31), "dca", []),
         #  2022/01/01~2022/12/31
-        # (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2022, 12, 31), "", []),
+        (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2022, 12, 31), "", []),
         # (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2022, 7, 1), "", []),
         #  2023/01/01~2023/12/31
-        # (datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2023, 12, 31), "", []),
+        (datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2023, 12, 31), "", []),
          # 2024/01/01~2024/09/30
-        # (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2024, 12, 31), "", []),
+        (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2024, 12, 31), "", []),
         (datetime(2025, 1, 1, 0, 0, 0), date(2025, 1, 1), date(2025, 12, 31), "", []),
         # (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2025, 12, 31), "", []),
 
