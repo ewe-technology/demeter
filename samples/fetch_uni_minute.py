@@ -18,7 +18,7 @@ import pandas as pd
 
 RPC = os.environ.get("ETH_RPC", "https://gateway.tenderly.co/public/mainnet")
 SWAP = "0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67"
-STEP = 10000
+STEP = int(os.environ.get("STEP", "10000"))  # blocks per eth_getLogs; tenderly's public Base gateway caps at 1000
 COLUMNS = ["timestamp", "netAmount0", "netAmount1", "closeTick", "openTick", "lowestTick", "highestTick",
            "inAmount0", "inAmount1", "currentLiquidity"]
 

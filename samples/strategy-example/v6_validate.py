@@ -36,10 +36,15 @@ POOLS = {
     "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": (("btc", 8), ("usdc", 6), 0, 0.3, "../holdout-data"),
     # EXP-001 holdout: WBTC/WETH 0.05%, ETH is the base, WBTC the quote (numeraire and reserve)
     "0x4585fe77225b41b697c938b018e2ac67ac5a20c0": (("btc", 8), ("eth", 18), 1, 0.05, "../holdout-data"),
+    # Base USDC/WETH 0.05% (the deck's target pool; token0 is WETH here). Gas is still priced as mainnet.
+    "0xd0b53d9277642d899df5c87a3966a349a798f224": (("eth", 18), ("usdc", 6), 0, 0.05, "../base-data"),
 }
+# the EMA warm-up needs a year of history before the pool existed: read ETH/USD from the mainnet pool
+WARM_POOL = {"0xd0b53d9277642d899df5c87a3966a349a798f224": "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"}
 FIRST_DATA = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": date(2021, 5, 6),
               "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": date(2021, 11, 2),
-              "0x4585fe77225b41b697c938b018e2ac67ac5a20c0": date(2021, 11, 2)}
+              "0x4585fe77225b41b697c938b018e2ac67ac5a20c0": date(2021, 11, 2),
+              "0xd0b53d9277642d899df5c87a3966a349a798f224": date(2023, 12, 1)}
 INIT_QUOTE = Decimal(100000)
 INIT_BY_POOL = {"0x4585fe77225b41b697c938b018e2ac67ac5a20c0": Decimal(2)}  # quote units; default INIT_QUOTE
 G_REMOVE, G_ADD, G_SWAP = 260_000, 450_000, 150_000
@@ -171,8 +176,8 @@ V.performance_metrics_for_dca = _net_metrics
 V.RemixDaoDcaWeekStratStrategy = Checked
 
 
-def tokens():
-    t0, t1, base_i, fee, _ = POOLS[POOL]
+def tokens(pool: str | None = None):
+    t0, t1, base_i, fee, _ = POOLS[pool or POOL]
     token0, token1 = TokenInfo(name=t0[0], decimal=t0[1]), TokenInfo(name=t1[0], decimal=t1[1])
     base, quote = (token0, token1) if base_i == 0 else (token1, token0)
     return token0, token1, base, quote, fee
@@ -249,11 +254,12 @@ def run_variant(args):
             "benchmark_return": float(m["benchmark_rate"]), "secs": round(time.time() - t0)}
 
 
-def load_minutes(start: date, end: date) -> pd.DataFrame:
-    token0, token1, base, quote, fee = tokens()
+def load_minutes(start: date, end: date, pool: str | None = None) -> pd.DataFrame:
+    pool = pool or POOL
+    token0, token1, base, quote, fee = tokens(pool)
     market = UniLpMarketV2(MarketInfo("lp"), UniV3Pool(token0, token1, fee, quote))
-    market.data_path = f"{POOLS[POOL][4]}/{POOL}"
-    market.load_data(ChainType.ethereum.name, POOL, start, end)
+    market.data_path = f"{POOLS[pool][4]}/{pool}"
+    market.load_data(ChainType.ethereum.name, pool, start, end)
     return market.data
 
 
@@ -270,7 +276,9 @@ def main():
     ETH_USD = pd.read_csv(ETH_USD_CSV, parse_dates=["timestamp"]).set_index("timestamp")["usd"].sort_index()
     DATA = load_minutes(start, end)
     warm_days = 3 * max(max(v.engine.get("EMA_SPANS", V.EMA_SPANS)) for v in variants)
-    warm = load_minutes(max(start - timedelta(days=warm_days), FIRST_DATA[POOL]), start - timedelta(days=1))
+    warm_pool = WARM_POOL.get(POOL, POOL)
+    warm = load_minutes(max(start - timedelta(days=warm_days), FIRST_DATA[warm_pool]), start - timedelta(days=1),
+                        warm_pool)
     PRICE = pd.concat([warm.price, DATA.price])
     tag = f"{POOL[:6]}-{grid}-{start}-{end}"
     folder = os.path.join("result", "v6_validate", tag)
