@@ -61,11 +61,12 @@ class Variant:
 
 # experiment candidates for "opt:A,<key>,..." runs; A is always v6 itself. Add one entry per EXP (see experiments/).
 OPT = {"A": Variant("A_v6"),
-       "B": Variant("B_spot_sleeve", {"SPOT_SLEEVE": Decimal("0.5")})}   # EXP-001
+       "B": Variant("B_spot_sleeve", {"SPOT_SLEEVE": Decimal("0.5")}),   # EXP-001
+       "C": Variant("C_sleeve_stop", {"SPOT_SLEEVE": Decimal("0.5"), "SLEEVE_STOP": 0.80})}   # EXP-002
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP"]}
 
 
 def sens_grid():
@@ -139,6 +140,13 @@ class Checked(V.RemixDaoDcaWeekStratStrategy):
         super().rescale_work(row_data)
         if len(self.export_actions) > n:
             self.charge(row_data, len(before), len(self.positions), *self.swapped_since(b0, q0))
+
+    def sleeve_stop_work(self, row_data, target, free_base):
+        b0, q0 = self.total_base_swap_fee, self.total_quote_swap_fee
+        stops = self.sleeve_stops
+        super().sleeve_stop_work(row_data, target, free_base)
+        if self.sleeve_stops > stops:
+            self.charge(row_data, 0, 0, *self.swapped_since(b0, q0))
 
     def impact_series(self, index) -> pd.Series:
         if not self.cost_log:
@@ -234,7 +242,7 @@ def run_variant(args):
             "sharpe_ratio": float(m["sharpe_ratio"]), "impact": float(c["impact"].sum()),
             "gas_if_mainnet": float(c["gas"].sum()), "swap_notional": float(c["notional"].sum()),
             "max_swap_notional": float(c["notional"].max()), "rebuilds": len(c),
-            "fees": float(s.total_fee), "lp_net_value": float(s.final_lp_net_value),
+            "fees": float(s.total_fee), "sleeve_stops": s.sleeve_stops, "lp_net_value": float(s.final_lp_net_value),
             "mean_F": float(window["F"].mean()) if variant.deploy == V.DEPLOY_SIGNAL else 1.0,
             "benchmark_return": float(m["benchmark_rate"]), "secs": round(time.time() - t0)}
 

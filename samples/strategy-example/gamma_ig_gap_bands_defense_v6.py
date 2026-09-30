@@ -110,6 +110,8 @@ REFILL_STAGES = ((1, 1.05), (2, 1.0833), (3, 1.1167), (4, 1.15))  # (stage, clos
 FOLLOW_THRESHOLD = Decimal("0.125")
 # EXP-001 (v6.1): share of the deployed F x equity held as spot base outside the bands (0 = v6)
 SPOT_SLEEVE = Decimal("0")
+# EXP-002 (v6.2): sell the sleeve when the daily close < SLEEVE_STOP x its high since bought (None = no stop)
+SLEEVE_STOP: float | None = None
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -396,6 +398,10 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.deployed_at_build = ONE     # F used by the latest (re)build
         self.reserve_quote = ZERO        # quote parked outside the bands by the latest (re)build
         self.reserve_base = ZERO         # spot base held outside the bands by the latest (re)build (SPOT_SLEEVE)
+        self.sleeve_high: float | None = None   # SLEEVE_STOP: highest daily close since the sleeve was bought
+        self.sleeve_stopped = False
+        self.stop_low_f: Decimal | None = None  # lowest F since the stop; a rise above it re-arms
+        self.sleeve_stops = 0
         self.force_rebuild = False       # set by follow_work to push rescale_work past its range check
         self.follow_rebuild_count = 0
         self.fee_log: List[dict] = []    # daily: collected fees (quote) + pending fees still in the positions
@@ -534,13 +540,17 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         price = lp_market.tick_to_price(current_tick)
         fraction = target_fraction_for(self.daily_ema, timestamp) if self.signal_deploy else ONE
         self.deployed_at_build = fraction
-        self.reserve_quote = (ONE - fraction) * (base * price + quote)
-        self.reserve_base = SPOT_SLEEVE * fraction * (base * price + quote) / price
+        sleeve = ZERO if self.sleeve_stopped else SPOT_SLEEVE
+        # a stopped sleeve's share stays in quote with the reserve
+        self.reserve_quote = (ONE - fraction + (SPOT_SLEEVE - sleeve) * fraction) * (base * price + quote)
+        self.reserve_base = sleeve * fraction * (base * price + quote) / price
+        if SLEEVE_STOP is not None and self.reserve_base > ZERO:
+            self.sleeve_high = float(price)
         if share is None:  # sgeo, only reachable with fraction 1 (constructor check)
             return self.calculate_swap_amount(current_tick, lower_boundary, upper_boundary, base, quote)
         # bands get share x F of total value in base and (1 - share) x F in quote; the reserve stays quote.
         # With a spot sleeve k the bands get (1 - k) x F and the sleeve k x F, all of it base.
-        return swap_to_value_share(base, quote, price, fraction * (SPOT_SLEEVE + share * (ONE - SPOT_SLEEVE)))
+        return swap_to_value_share(base, quote, price, fraction * (sleeve + share * (ONE - SPOT_SLEEVE)))
 
     def log_fees(self, row_data: Snapshot):
         """Daily fee snapshot for the monthly income breakdown: collected so far, plus fees accrued in the
@@ -570,6 +580,11 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         # with a spot sleeve the free base is deployed capital too
         current = (lp_value + (free_base * price if SPOT_SLEEVE > ZERO else ZERO)) / equity
         target = target_fraction_for(self.daily_ema, row_data.timestamp)
+        if SLEEVE_STOP is not None:
+            self.sleeve_stop_work(row_data, target, free_base)
+            if self.sleeve_stopped:
+                target = target * (ONE - SPOT_SLEEVE)   # the ladder half only; the sleeve's share stays quote
+                current = lp_value / equity
         due = (abs(target - current) >= FOLLOW_THRESHOLD
                or (target == ZERO and current > FULL_TOLERANCE)
                or (target >= ONE - FULL_TOLERANCE and current < ONE - FULL_TOLERANCE))
@@ -583,6 +598,29 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             self.rescale_work(row_data)
         finally:
             self.force_rebuild = False
+
+    def sleeve_stop_work(self, row_data: Snapshot, target: Decimal, free_base: Decimal):
+        """EXP-002: trailing stop on the spot sleeve, and its re-arm (refill above the post-stop low F, or a new high)."""
+        close = float(daily_row_for(self.daily_ema, row_data.timestamp)[1]["close"])
+        if self.sleeve_stopped:
+            if target > self.stop_low_f or close > self.sleeve_high:
+                self.sleeve_stopped, self.stop_low_f = False, None
+                print(f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} sleeve re-armed: F {float(target):.4f} close {close:.4f}")
+            else:
+                self.stop_low_f = min(self.stop_low_f, target)
+            return
+        if self.reserve_base <= ZERO or self.sleeve_high is None:
+            return
+        self.sleeve_high = max(self.sleeve_high, close)
+        if close < SLEEVE_STOP * self.sleeve_high and free_base > ZERO:
+            lp_market: UniLpMarketV2 = self.broker.markets[self.utils.market_key]
+            _, _, fee_base, fee_quote = self.execute_swap(lp_market, free_base, ZERO)
+            self.total_base_swap_fee += fee_base if fee_base is not None else ZERO
+            self.total_quote_swap_fee += fee_quote if fee_quote is not None else ZERO
+            self.reserve_base, self.sleeve_stopped, self.stop_low_f = ZERO, True, target
+            self.sleeve_stops += 1
+            print(f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} sleeve stop: close {close:.4f} < "
+                  f"{SLEEVE_STOP} x high {self.sleeve_high:.4f}, sold {float(free_base):.4f} base")
 
     def placed_base_share(self, lp_market: UniLpMarketV2, current_tick: int,
                           base_used: Decimal, quote_used: Decimal) -> Decimal:

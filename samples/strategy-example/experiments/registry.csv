@@ -1,3 +1,4 @@
 id,date,name,jira,status,dev_median_gain_pts,dev_wins,holdout_wins,holdout_median_gain_pts,eth_cont_total,eth_cont_cagr,eth_cont_maxdd,prereg_commit,result_commit,doc
 EXP-000,2026-09-29,v6 baseline (defense_v6 as is),QUAN-834,baseline,,,,,0.854,0.140,-0.228,,,../V6_VALIDATION.md
 EXP-001,2026-09-30,spot trend sleeve: half of F x equity as spot ETH (v6.1),,dropped-at-dev,8.54,4/5,,,1.980,0.261,-0.336,78cc9af,535c505,EXP-001-spot-sleeve.md
+EXP-002,2026-09-30,spot sleeve with a 0.80 trailing stop (v6.2),,pre-registered,,,,,,,,,,EXP-002-sleeve-trailing-stop.md
