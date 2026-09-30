@@ -1,9 +1,9 @@
 # EXP-013: trend-skewed range — the ±20% valley shifts 5 pts in the direction of the EMA100 trend (v6.10)
 
 - Version: v6.10
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: [QUAN-858](https://ewetechnology.atlassian.net/browse/QUAN-858)
+- Status: dropped-at-dev
+- Pre-registration commit: 124d383 (implementation 0816abd) · Result commit: ______
 - Literature: `RESEARCH-2026-09-30-lp-literature.md` §4.
 
 ## Hypothesis
@@ -61,13 +61,49 @@ current state's config; `resolve_skew(timestamp)` sets the state right before th
 
 ## Result
 
-| test | v6 | this | gain | max DD v6 → this |
-|---|---|---|---|---|
+Development, ETH/USDC 0.05%, yearly reset, 100,000 USDC (builds = ladders built in the up / down state):
 
-Continuous run (reported, not deciding): total / CAGR / max DD / Sharpe / Calmar.
+| test | v6 | this | gain | max DD v6 → this | rebuilds v6 → this | fees v6 → this | builds up / down |
+|---|---|---|---|---|---|---|---|
+| 2022 | +7.6% | +3.6% | −4.0 | 21.5% → 21.0% | 41 → 41 | $20.1k → $18.5k | 10 / 31 |
+| 2023 | +32.2% | +31.3% | −0.9 | 13.9% → 14.2% | 24 → 24 | | 16 / 8 |
+| 2024 | +36.4% | +26.8% | −9.6 | 26.7% → 29.9% | 29 → 29 | $30.9k → $24.7k | 14 / 15 |
+| 2025 | +16.3% | +19.3% | +3.0 | 26.9% → 24.8% | 32 → 31 | $20.8k → $24.3k | 14 / 17 |
+| 2026-01..09-17 | +18.7% | +18.4% | −0.3 | 12.0% → 11.9% | 24 → 23 | | 5 / 18 |
 
-Verdict:
+Wins 1/5, median gain −0.9 pts.
+
+Continuous runs (daily equity):
+
+| run | total | CAGR | max DD | Sharpe | Calmar | fees | rebuilds | builds up / down |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | −22.8% | 0.73 | 0.61 | $86.5k | 147 | |
+| ETH this | +79.2% | 13.2% | −22.6% | 0.69 | 0.58 | $80.9k | 144 | 57 / 87 |
+| WBTC/USDC v6 | +85.6% | 17.3% | −17.8% | 1.01 | 0.97 | $61.7k | 106 | |
+| WBTC/USDC this | +79.7% | 16.3% | −19.2% | 0.93 | 0.85 | $50.0k | 105 | 53 / 52 (fees −19%, same mechanism) |
+
+Verdict: **dropped at dev** — wins 1/5, median −0.9 pts, continuous ETH Calmar 0.58 vs 0.61 (return −6.2 pts for
+the same drawdown). The mechanism the hypothesis feared did not bite: rebuild counts are unchanged (the shorter side
+against the trend did not trigger earlier range exits). What bit is the fee side of the shift: the same band value
+spread over a 25% reach is 20% less liquidity per tick on the side the price is going, and v6's return is fees. In
+the trend years that is the whole story — 2024 fees $30.9k → $24.7k with the LP principal also lower ($105.5k →
+$102.1k), so the IL saved by the longer upper side did not cover the fees it cost; 2022 (31 of 41 builds "down")
+lost 8% of fees the same way. The one win, 2025 (+3.0 pts, fees +17%, max DD 26.9% → 24.8%), is a choppy year in
+which the extra reach kept the ladder in range through the swings. Cartea et al.'s skew is ρ = ½ + μ/δ: a 5-pt shift
+of a 40-pt range is ρ = 0.625, i.e. a drift/spread ratio of 0.125, far above what a ±20% ladder rebuilt every ~12
+days sees; at realistic drift the optimal shift is a few tenths of a point, inside tick rounding. Holdout not run.
+
+What survives: the drift-aware range is not wrong, it is too small to matter at this width; the fee density of the
+side the price is on is what v6 lives on, and anything that thins it must earn more IL than it costs in fees.
 
 ## Deviations
 
-None yet.
+- After the pre-registration commit (124d383) and before the implementation commit (0816abd) one smoke run outside
+  every pre-registered window: ETH 2021-11-01..12-31, v6 −4.81% (bit-identical to EXP-012's smoke run of v6, so
+  `SKEW = 0` reproduces v6), this −5.04%, 2 up / 3 down builds; the exported actions were read to confirm the placed
+  reaches (down: −22%/+13%, up: −13%/+22% — the outer zero-weight band is dropped, so v6's own effective reach is
+  ±17.5%, and the shift is 4.4 pts of price, not 5). No pre-registered window ran before 0816abd.
+- Yearly segments and continuous runs ran as two parallel chains (yearly; ETH then WBTC continuous), each
+  invocation v6 + this with 2 workers. No reruns.
+- 2022, 2023 and 2024 (0/3) decided the outcome; the remaining segments and continuous runs were completed for the
+  record. The Base holdout was not run.
