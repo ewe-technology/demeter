@@ -3,7 +3,7 @@
 - Version: v6.1
 - Jira: QUAN-___
 - Status: dropped-at-dev
-- Pre-registration commit: 78cc9af · Result commit: see registry
+- Pre-registration commit: 78cc9af · Result commit: 535c505
 
 ## Hypothesis
 
