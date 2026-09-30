@@ -14,5 +14,5 @@ EXP-011,2026-09-30,v6 and v6.4 on the Base cbBTC pool (go-live condition 5),QUAN
 EXP-012,2026-09-30,fee-vs-LVR gate: F = 0 while 7-day pool fees per unit liquidity < LVR (v6.9),QUAN-856,dropped-at-dev,-2.18,0/5,,,0.337,0.064,-0.254,ddae178,32ef30c,EXP-012-fee-lvr-gate.md
 EXP-013,2026-09-30,trend-skewed range: valley shifted 5 pts toward the EMA100 trend (v6.10),QUAN-858,dropped-at-dev,-0.94,1/5,,,0.792,0.132,-0.226,124d383,47ed5c6,EXP-013-trend-skewed-range.md
 EXP-014,2026-09-30,partial perp delta hedge: short 60% of the ladder ETH delta on Binance USDT-M (v6.11),QUAN-860,dropped-at-dev,-12.85,0/5,,,0.241,0.047,-0.110,599f492,606230d,EXP-014-perp-delta-hedge.md
-EXP-015,2026-09-30,fee tier: v6 on Base WETH/USDC 0.3% and a 0.05%/0.3% rotation estimate (v6.12),QUAN-861,fail,-2.45,0/3,,,,,,599f492,,EXP-015-fee-tier-rotation.md
+EXP-015,2026-09-30,fee tier: v6 on Base WETH/USDC 0.3% and a 0.05%/0.3% rotation estimate (v6.12),QUAN-861,fail,-2.45,0/3,,,,,,599f492,f195bb5,EXP-015-fee-tier-rotation.md
 EXP-016,2026-09-30,toxicity pause: pull the ladder 30 min after a 1% five-minute move (v6.13),QUAN-862,dropped-at-dev,-1.90,2/5,,,1.203,0.183,-0.281,599f492,d0f2df3,EXP-016-toxicity-pause.md

@@ -3,7 +3,7 @@
 - Version: v6.12 (deployment choice: which Base pool the unchanged v6 runs in)
 - Jira: [QUAN-861](https://ewetechnology.atlassian.net/browse/QUAN-861)
 - Status: fail (rule 1: 0.05% tier confirmed; rule 2: rotation not worth it)
-- Pre-registration commit: 599f492 · Result commit: ______
+- Pre-registration commit: 599f492 · Result commit: f195bb5
 - Literature: `RESEARCH-2026-09-30-lp-literature.md` §3.
 
 ## Hypothesis

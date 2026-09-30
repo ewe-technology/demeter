@@ -129,3 +129,15 @@ daily, transfer cost not modelled; the weights were not fitted):
 | **v6.4 ETH + cbBTC 50/50** | **15.3%** | **−14.5%** | **0.96** | **1.05** |
 
 Daily return correlation of the two books 0.61. Candidate for the pilot: v6.4 on both Base pools, 50/50.
+
+## Addendum 2026-09-30 — attribution (EXP-014) and the literature pass (EXP-012..016)
+
+§4's "principal is flat, the return is fee income" reads the fee ledger, not the attribution. EXP-014 hedged 60% of
+the ladder's ETH delta with a perp and the short lost $51k on ETH over 2022–26 (and $44k on BTC), losing in every
+year including 2022: the ladder holds ETH almost only while the price rises, because the F engine deploys into
+confirmed rebounds and exits before the falls. That timing is worth ≈ +$85k, i.e. essentially all of v6's gain;
+fees ($86k) pay for the IL. v6 is **trend-timed concentrated LP**: the engine's timing of ETH exposure is the
+return, fees cover the impermanent loss. Every variant that traded the exposure or the fee density for something
+else lost (EXP-012 fee-vs-LVR gate, EXP-013 trend-skewed range, EXP-014 hedge, EXP-016 toxicity pause); the
+fee tier makes no difference per unit of liquidity (EXP-015). Details: `experiments/RESEARCH-2026-09-30-lp-literature.md`
+and the EXP files.
