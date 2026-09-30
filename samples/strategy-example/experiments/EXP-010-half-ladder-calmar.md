@@ -2,8 +2,8 @@
 
 - Version: v6.6r (same variant as EXP-006 / v6.6, new success rule)
 - Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Status: holdout-fail
+- Pre-registration commit: fd47677 · Result commit: see registry
 
 ## Why a re-registration
 
@@ -28,7 +28,28 @@ Identical to EXP-006: `HALF_LADDER = True`, candidate `G` in `v6_validate.py`.
 
 ## Result
 
-Verdict:
+Holdout, WBTC/WETH 0.05%, ETH base, WBTC quote (returns in WBTC), yearly reset from 2 WBTC:
+
+| segment | v6 | v6.1r | v6.6r |
+|---|---|---|---|
+| 2023 | −15.2% | −19.9% | −15.5% |
+| 2024 | −2.5% | −5.2% | −4.4% |
+| 2025 | −23.3% | −27.0% | −22.2% |
+| 2026-01..09-17 | −11.0% | −13.6% | −10.9% |
+
+Continuous 2022-11-01..2026-09-17 (daily equity, WBTC):
+
+| run | total | CAGR | max DD | Sharpe | Calmar |
+|---|---|---|---|---|---|
+| v6 | −8.7% | −2.3% | −26.1% | −0.17 | −0.088 |
+| v6.1r (EXP-009) | −7.0% | −1.8% | −32.3% | −0.06 | −0.056 |
+| v6.6r (EXP-010) | −4.1% | −1.1% | −26.4% | −0.03 | −0.042 |
+
+ETH fell against BTC over the whole window (0.071 → 0.032 BTC), mean F was only 0.24, and the pool's fees
+(0.13 WBTC for v6 over four years) are small against the price moves. Both candidates lose less than v6 over the
+continuous run, but per year they lose more in the down years, which is where the sleeve / spot base hurts.
+
+Verdict: **holdout-fail** — return wins 2/4 (median −0.1 pts; the two wins are +1.1 and +0.1 pts); continuous Calmar −0.042 ≥ v6's −0.088 holds, the yearly-wins leg (≥ 3/4) does not.
 
 ## Deviations
 
