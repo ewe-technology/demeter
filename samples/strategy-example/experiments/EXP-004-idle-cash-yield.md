@@ -2,8 +2,8 @@
 
 - Version: v6.4
 - Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Status: dev-done (holdout paused)
+- Pre-registration commit: 58d94b1 · Result commit: see registry
 
 ## Hypothesis
 
@@ -47,12 +47,37 @@ the first v6 run on the deck's target pool (go-live condition 1).
 
 ## Result
 
-| test | v6 | this | gain |
-|---|---|---|---|
+Development, ETH/USDC 0.05%, yearly reset, mainnet Aave USDC rates:
 
-Verdict:
+| test | v6 | this | gain | max DD v6 → this |
+|---|---|---|---|---|
+| 2022 | +7.6% | +8.3% | +0.7 | 21.5% → 21.2% |
+| 2023 | +32.2% | +33.7% | +1.5 | 13.9% → 12.9% |
+| 2024 | +36.4% | +38.9% | +2.5 | 26.7% → 25.5% |
+| 2025 | +16.3% | +18.4% | +2.1 | 26.9% → 26.6% |
+| 2026-01..09-17 | +18.7% | +19.9% | +1.2 | 12.0% → 11.5% |
+
+Wins 5/5, median gain +1.46 pts.
+
+Continuous runs (daily equity):
+
+| run | total | CAGR | max DD | Sharpe | interest |
+|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | −22.8% | 0.73 | |
+| ETH this | +101.0% | 16.0% | −20.7% | 0.82 | $15.6k |
+| WBTC/USDC v6 | +85.6% | 17.3% | −17.8% | 1.01 | |
+| WBTC/USDC this | +96.6% | 19.0% | −16.3% | 1.10 | |
+
+Verdict: **dev passed** (5/5, median +1.5 pts, drawdown shallower). The holdout (Base USDC/WETH 0.05% with Base
+Aave rates) has **not been run**: the Base minute data stopped at 2024-03 (the public gateway rate-limited the
+fetch) and on 2026-09-30 Dino redirected the work to new strategy logic, so the Base fetch was stopped. Resume with
+`samples/fetch_base_monthly.sh 2024-04 2026-09-17 samples/base-data` (THREADS=3) and
+`fetch_aave_rates.py base ...`, then run the holdout once as pre-registered.
 
 ## Deviations
+
+- Holdout paused after dev (see Verdict); no Base backtest and no Base rate series exist yet. A first Base rate
+  fetch failed on HTTP 429 before returning any rate.
 
 - Mainnet rates were fetched for 3 test days (2022-01-01..03 ~3.2%, 2024-03-01..02 ~7.6%) and Base rates for
   2024-01-01..02 (8.1%, 3.7%) while writing the fetcher, before this commit. The full mainnet series was fetched
