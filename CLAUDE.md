@@ -40,8 +40,11 @@ Dino names versions `v6.1`, `v6.2`, ...; each is one experiment `EXP-NNN` (next 
 2. Implement the variant (add it to `OPT` in `v6_validate.py`), run dev, then the holdout once.
 3. Record: fill *Result* / *Deviations*, update the registry row (status, numbers, commits), commit and push.
 4. Jira: open a Subtask under QUAN-834 with the `jira-ticket` skill (summary `[Uniswap] v6.x: <change>`,
-   research template). **Show Dino the ticket in Chinese and wait for his OK before creating it**; ask who takes
-   it. Put the key in the registry `jira` column and the EXP file.
+   research template). **Create it right away — Dino pre-approved these subtasks**: skip the skill's
+   confirmation step, assign Dino (`712020:61c91efb-686a-4919-bb27-377f27b88318`), and report the key in step 6
+   (he edits or reassigns afterwards if needed). Never defer ticket creation to "batch it later" or to a reply —
+   an experiment is not done while its `jira` column is empty. Put the key in the registry `jira` column and the
+   EXP file.
 5. Dashboard (https://claude.ai/artifact/ATZR3s2SqybzjQvMMsAZg5): build the documents with
    `python experiments/dashboard_rows.py row ...` (and `curve ...` when a continuous ETH/WBTC run exists), then
    `ArtifactData set experiments/<EXP-id>` and `ArtifactData update curves/eth|btc` (get first, pass `if_version`).
