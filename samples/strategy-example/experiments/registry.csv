@@ -7,3 +7,4 @@ EXP-004,2026-09-30,idle USDC earns the Aave supply rate (v6.4),QUAN-838,dev-done
 EXP-005,2026-09-30,refills as quote-only range orders instead of market buys (v6.5),QUAN-839,dropped-at-dev,-2.34,1/5,,,0.265,0.051,-0.158,fd0cbb1,cd2991d,EXP-005-refill-range-order.md
 EXP-006,2026-09-30,half ladder: base side held as spot; only the quote side LPd (v6.6),QUAN-840,dropped-at-dev,0.69,4/5,,,1.730,0.238,-0.289,639a09c,53defd9,EXP-006-half-ladder.md
 EXP-007,2026-09-30,half ladder only when EMA100 1st and 2nd differences > 0 (v6.7),QUAN-841,dropped-at-dev,-0.37,1/5,,,1.302,0.194,-0.279,8ffecd2,95850cf,EXP-007-half-ladder-when-accelerating.md
+EXP-008,2026-09-30,v6 on ETH and BTC as one 50/50 portfolio (v6.8),,dev-done,,,,,,,,,,EXP-008-eth-btc-portfolio.md
