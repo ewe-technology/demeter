@@ -25,7 +25,8 @@ MARKETS = {
     "base": [(date(2023, 9, 1), "0xA238Dd80C259a72e81d7e4664a9801593F98d1c5",
               "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "v3")],
 }
-RPCS = {"ethereum": "https://gateway.tenderly.co/public/mainnet", "base": "https://base.gateway.tenderly.co"}
+RPCS = {"ethereum": os.environ.get("ETH_RPC", "https://gateway.tenderly.co/public/mainnet"),
+        "base": os.environ.get("BASE_RPC", "https://base.gateway.tenderly.co")}
 SLOT = {"ethereum": 12, "base": 2}
 
 

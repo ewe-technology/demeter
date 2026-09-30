@@ -2,7 +2,7 @@
 
 - Version: v6.4
 - Jira: [QUAN-838](https://ewetechnology.atlassian.net/browse/QUAN-838)
-- Status: dev-done (holdout paused)
+- Status: holdout-pass
 - Pre-registration commit: 58d94b1 · Result commit: 70d58bc
 
 ## Hypothesis
@@ -68,16 +68,34 @@ Continuous runs (daily equity):
 | WBTC/USDC v6 | +85.6% | 17.3% | −17.8% | 1.01 | |
 | WBTC/USDC this | +96.6% | 19.0% | −16.3% | 1.10 | |
 
-Verdict: **dev passed** (5/5, median +1.5 pts, drawdown shallower). The holdout (Base USDC/WETH 0.05% with Base
-Aave rates) has **not been run**: the Base minute data stopped at 2024-03 (the public gateway rate-limited the
-fetch) and on 2026-09-30 Dino redirected the work to new strategy logic, so the Base fetch was stopped. Resume with
-`samples/fetch_base_monthly.sh 2024-04 2026-09-17 samples/base-data` (THREADS=3) and
-`fetch_aave_rates.py base ...`, then run the holdout once as pre-registered.
+Holdout, Base USDC/WETH 0.05% (`0xd0b53d92…`), Base Aave v3 USDC rates (2024 mean 6.7%, 2025 4.5%, 2026 3.3%),
+yearly reset, 100,000 USDC, EMA warm-up on mainnet ETH/USD:
+
+| segment | v6 | this | gain | max DD v6 → this | fees v6 → this (incl. interest) |
+|---|---|---|---|---|---|
+| 2024 | +19.4% | +21.3% | +1.9 | 30.3% → 29.2% | $17.6k → $19.5k |
+| 2025 | +13.9% | +16.2% | +2.3 | 24.4% → 24.0% | $18.2k → $20.4k |
+| 2026-01..09-17 | +19.1% | +20.2% | +1.1 | 11.9% → 11.4% | $6.6k → $7.7k |
+
+Wins 3/3, median gain +1.89 pts.
+
+Continuous Base 2024-01-01..2026-09-17 (daily equity): v6 +55.9%, CAGR 17.8%, max DD −28.1%, Sharpe 0.76;
+this +63.2%, CAGR 19.8%, max DD −27.0%, Sharpe 0.83 (interest $7.3k).
+
+Verdict: **holdout-pass** — dev 5/5 (median +1.5 pts), holdout 3/3 (median +1.9 pts), drawdown shallower in every
+test. As expected by construction the gain is small and steady; its size tracks the supply rate.
+
+Side result for go-live condition 1 (first v6 run on the deck's target pool): over 2024..2026-09 v6 makes +55.9% on
+Base against about +86% on the mainnet pool for the same three segments chained (2024 +36.4%, 2025 +16.3%, 2026
++18.7%). In 2024 Base fees were $17.6k vs $30.9k on mainnet and price impact $3.6k vs $0.07k: the Base pool is much
+thinner, so the F-switch swaps cost far more. Mainnet gas is still what the gas column prices.
 
 ## Deviations
 
-- Holdout paused after dev (see Verdict); no Base backtest and no Base rate series exist yet. A first Base rate
-  fetch failed on HTTP 429 before returning any rate.
+- The holdout was paused after dev (2026-09-30 13:1x, Dino redirected to strategy logic) and resumed the same day
+  at his request. A first Base rate fetch failed on HTTP 429 before returning any rate; the full series was fetched
+  after the pre-registration commit (via developer-access-mainnet.base.org). The first 2024 holdout launch failed
+  at data loading (files not yet in the pool folder) and produced no numbers; the rerun is the one reported.
 
 - Mainnet rates were fetched for 3 test days (2022-01-01..03 ~3.2%, 2024-03-01..02 ~7.6%) and Base rates for
   2024-01-01..02 (8.1%, 3.7%) while writing the fetcher, before this commit. The full mainnet series was fetched
