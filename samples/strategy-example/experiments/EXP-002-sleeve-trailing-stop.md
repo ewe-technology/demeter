@@ -2,8 +2,8 @@
 
 - Version: v6.2
 - Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Status: dropped-at-dev
+- Pre-registration commit: 7e0d91f · Result commit: see registry
 
 ## Hypothesis
 
@@ -40,10 +40,33 @@ v6.1 (`SPOT_SLEEVE = 0.5`) plus `SLEEVE_STOP = 0.80` (v6.1: none). No new free c
 
 ## Result
 
-| test | v6 | this | gain |
-|---|---|---|---|
+Development, ETH/USDC 0.05%, yearly reset (v6.1 = EXP-001 for reference):
 
-Verdict:
+| test | v6 | v6.1 | this | gain vs v6 | max DD v6 → this | sleeve stops |
+|---|---|---|---|---|---|---|
+| 2022 | +7.6% | +12.0% | +2.2% | −5.4 | 21.5% → 28.3% | 1 |
+| 2023 | +32.2% | +42.9% | +42.9% | +10.7 | 13.9% → 18.2% | 0 |
+| 2024 | +36.4% | +35.9% | +38.9% | +2.5 | 26.7% → 35.2% | 1 |
+| 2025 | +16.3% | +37.5% | +37.5% | +21.2 | 26.9% → 31.2% | 0 |
+| 2026-01..09-17 | +18.7% | +27.2% | +29.6% | +10.9 | 12.0% → 15.1% | 1 |
+
+Wins 4/5, median gain +10.67 pts.
+
+Continuous runs (daily equity):
+
+| run | total | CAGR | max DD | Sharpe | stops |
+|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | −22.8% | 0.73 | |
+| ETH v6.1 | +198.0% | 26.1% | −33.6% | 0.86 | |
+| ETH this | +182.1% | 24.6% | **−32.4%** | 0.85 | 3 |
+| WBTC/USDC v6 | +85.6% | 17.3% | −17.8% | 1.01 | |
+| WBTC/USDC this | +131.7% | 24.2% | −23.7% | 0.98 | 0 (identical to v6.1) |
+
+Why the stop barely fired: a 20% fall also exits the ±20% ladder, and that rebuild re-buys the sleeve and resets
+its high at the fallen price, so the stop level keeps moving down with the price.
+
+Verdict: **dropped at dev** — wins 4/5 and median +10.7 pts pass, but continuous ETH max DD −32.4% is 9.6 pts
+worse than v6 (rule: ≤ 5). Holdout not run. Follow-up: EXP-003 keeps the high across rebuilds.
 
 ## Deviations
 
