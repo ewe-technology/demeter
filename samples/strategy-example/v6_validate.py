@@ -74,12 +74,13 @@ OPT = {"A": Variant("A_v6"),
        "C": Variant("C_sleeve_stop", {"SPOT_SLEEVE": Decimal("0.5"), "SLEEVE_STOP": 0.80}),   # EXP-002
        "D": Variant("D_stop_keep_high", {"SPOT_SLEEVE": Decimal("0.5"), "SLEEVE_STOP": 0.80,
                                          "SLEEVE_HIGH_KEEP": True}),   # EXP-003
-       "E": Variant("E_cash_yield", {"CASH_APR": "pool"}),
-       "F": Variant("F_refill_order", {"REFILL_ORDER": True})}   # EXP-005   # EXP-004: idle USDC earns the pool chain's Aave rate
+       "E": Variant("E_cash_yield", {"CASH_APR": "pool"}),   # EXP-004: idle USDC earns the pool chain's Aave rate
+       "F": Variant("F_refill_order", {"REFILL_ORDER": True}),   # EXP-005
+       "G": Variant("G_half_ladder", {"HALF_LADDER": True})}   # EXP-006
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER"]}
 
 
 def sens_grid():

@@ -119,6 +119,9 @@ CASH_APR: pd.Series | None = None
 # EXP-005 (v6.5): a rising F adds its increment as a quote-only range order over the ladder's lower half (buys only
 # on the dip, earns fees while waiting) instead of rebuilding and market-buying base. Falling F: as v6.
 REFILL_ORDER = False
+# EXP-006 (v6.6): place only the ladder's quote side; the base the upper bands would hold stays spot, so a rally
+# does not sell it (upside IL). Exits are judged on the full ladder span v6 would have built. False = v6.
+HALF_LADDER = False
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -592,7 +595,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         if equity <= ZERO:
             return
         # with a spot sleeve the free base is deployed capital too
-        current = (lp_value + (free_base * price if SPOT_SLEEVE > ZERO else ZERO)) / equity
+        current = (lp_value + (free_base * price if (SPOT_SLEEVE > ZERO or HALF_LADDER) else ZERO)) / equity
         target = target_fraction_for(self.daily_ema, row_data.timestamp)
         if SLEEVE_STOP is not None:
             self.sleeve_stop_work(row_data, target, free_base)
@@ -616,6 +619,23 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         finally:
             self.force_rebuild = False
 
+    def ladder_configs(self) -> List[List]:
+        """The bands a (re)build places: all of them, or with HALF_LADDER only the quote side (a range above the
+        current tick holds token0, below it token1)."""
+        if not HALF_LADDER:
+            return self.shape_config
+        quote_is_0 = self.utils.lp_market.pool_info.is_token0_quote
+        return [c for c in self.shape_config if (c[1] > 0 if quote_is_0 else c[0] < 0)]
+
+    def set_ladder_span(self, lp_market: UniLpMarketV2, current_tick: int):
+        """Tick span of the ladder v6 builds here (None when nothing is deployed); exits are judged on it when the
+        placed positions do not cover the price (REFILL_ORDER orders, HALF_LADDER)."""
+        if not self.positions:
+            self.ladder_span = None
+            return
+        _, _, lo, hi = self.calculate_range(lp_market, current_tick, self.shape_config[0][0], self.shape_config[-1][1])
+        self.ladder_span = (lo, hi)
+
     def place_refill_order(self, row_data: Snapshot, amount: Decimal) -> bool:
         """EXP-005: put `amount` of quote into one position spanning the ladder's quote side (current price down to
         -lower_ratio): it holds only quote now and turns into base only if the price comes down into it."""
@@ -637,8 +657,9 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         if quote_used == ZERO:
             lp_market.positions.pop(position, None)
             return False
-        self.positions.append(position)
-        self.positions.sort(key=lambda p: (p[0], p[1]))
+        if position not in self.positions:  # an order on the same ticks as an existing position merges into it
+            self.positions.append(position)
+            self.positions.sort(key=lambda p: (p[0], p[1]))
         self.refill_orders += 1
         if self.ladder_span is None:  # no ladder (F was 0): exits are judged on the ladder v6 would have built here
             _, _, span_lo, span_hi = self.calculate_range(lp_market, current_tick, self.shape_config[0][0],
@@ -721,7 +742,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         # Check if the current price is outside the current LP range
         rebalance = False
         # REFILL_ORDER: range orders sit off the price on purpose; judge exits on the ladder span of the last build
-        lo, hi = self.ladder_span if (REFILL_ORDER and self.ladder_span) else (self.positions[0][0], self.positions[-1][1])
+        lo, hi = self.ladder_span if ((REFILL_ORDER or HALF_LADDER) and self.ladder_span) else (self.positions[0][0], self.positions[-1][1])
         if not (lo <= current_tick < hi):
             rebalance = True
             print("allow rescale", self.positions[0][0], current_tick, self.positions[-1][1])
@@ -822,7 +843,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
                 total_base_used, total_quote_used = ZERO, ZERO
                 quote_for_bands = max(ZERO, quote - self.reserve_quote)
                 base_for_bands = max(ZERO, base - self.reserve_base)
-                for config in (self.shape_config if self.deployed_at_build > ZERO else []):
+                for config in (self.ladder_configs() if self.deployed_at_build > ZERO else []):
                     lower_price, upper_price, lower_tick, upper_tick = self.calculate_range(lp_market, current_tick, config[0], config[1])
                     base_amt, quote_amt = self.band_amounts(base_for_bands, quote_for_bands, config[2])
                     position, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(lower_tick, upper_tick, base_amt, quote_amt, tick=current_tick)
@@ -921,7 +942,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
             self.last_rescale_tick = current_tick
             self.was_in_range = False
-            self.ladder_span = (self.positions[0][0], self.positions[-1][1]) if self.positions else None
+            self.set_ladder_span(lp_market, current_tick)
 
         finally:
             self.last_price = current_price
@@ -967,7 +988,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
         quote_for_bands = max(ZERO, final_quote - self.reserve_quote)
         base_for_bands = max(ZERO, final_base - self.reserve_base)
-        for config in (self.shape_config if self.deployed_at_build > ZERO else []):
+        for config in (self.ladder_configs() if self.deployed_at_build > ZERO else []):
             lower_price, upper_price, lower_tick, upper_tick = self.calculate_range(lp_market, current_tick, config[0], config[1])
             base_amt, quote_amt = self.band_amounts(base_for_bands, quote_for_bands, config[2])
             position, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(lower_tick, upper_tick, base_amt, quote_amt, tick=current_tick)
@@ -995,7 +1016,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
         self.was_in_range = True
         self.last_price = self.last_dca_price = self.last_check_price = current_price
-        self.ladder_span = (self.positions[0][0], self.positions[-1][1]) if self.positions else None
+        self.set_ladder_span(lp_market, current_tick)
 
         pass
 
