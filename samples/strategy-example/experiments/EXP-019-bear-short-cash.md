@@ -3,7 +3,7 @@
 - Version: v6.15
 - Jira: [QUAN-866](https://ewetechnology.atlassian.net/browse/QUAN-866)
 - Status: holdout-pass
-- Pre-registration commit: 6ae6426 · Result commit: ______
+- Pre-registration commit: 6ae6426 · Result commit: d13e4cf
 - Parents: `EXP-004-idle-cash-yield.md` (v6.4, holdout-pass), `EXP-018-bear-short-leg.md` (v6.14, dev pass,
   holdout-fail on WBTC). Same code: variant `N` of EXP-018 (commit 39d04ac).
 
