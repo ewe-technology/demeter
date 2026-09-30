@@ -2,8 +2,8 @@
 
 - Version: v6.6
 - Jira: [QUAN-840](https://ewetechnology.atlassian.net/browse/QUAN-840)
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Status: dropped-at-dev
+- Pre-registration commit: 639a09c · Result commit: see registry
 
 ## Hypothesis
 
@@ -50,10 +50,34 @@ the upper bands earn while a rally passes through them. v6's ETH share at build 
 
 ## Result
 
-| test | v6 | this | gain |
-|---|---|---|---|
+Development, ETH/USDC 0.05%, yearly reset:
 
-Verdict:
+| test | v6 | this | gain | max DD v6 → this | fees v6 → this |
+|---|---|---|---|---|---|
+| 2022 | +7.6% | +10.4% | +2.8 | 21.5% → 22.2% | $20.1k → $14.2k |
+| 2023 | +32.2% | +32.4% | +0.2 | 13.9% → 15.8% | $23.3k → $2.5k |
+| 2024 | +36.4% | +29.2% | −7.2 | 26.7% → 34.4% | $30.9k → $7.6k |
+| 2025 | +16.3% | +40.4% | +24.1 | 26.9% → 28.9% | $20.8k → $9.9k |
+| 2026-01..09-17 | +18.7% | +19.4% | +0.7 | 12.0% → 12.5% | $6.2k → $3.4k |
+
+Wins 4/5, median gain +0.69 pts.
+
+Continuous runs (daily equity):
+
+| run | total | CAGR | max DD | Sharpe | Calmar |
+|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | −22.8% | 0.73 | 0.61 |
+| ETH this | +173.0% | 23.8% | **−28.9%** | 0.90 | 0.82 |
+| WBTC/USDC v6 | +85.6% | 17.3% | −17.8% | 1.01 | 0.97 |
+| WBTC/USDC this | +108.5% | 20.9% | −23.9% | 0.92 | 0.87 |
+
+The upside-IL mechanism works (2025 +24 pts, continuous +87 pts), but the hypothesis that the downside is
+"identical to v6" was wrong: v6's upper bands take profit on the way up, the spot base rides the whole move back
+down until F or a range exit acts, so drawdowns from a peak are deeper (2024: 34.4% vs 26.7%). Fees fall by more
+than half: after an up-exit rebuild the quote-side bands sit below the price and earn little while it keeps rising.
+
+Verdict: **dropped at dev** — wins 4/5 and median +0.7 pts pass, continuous ETH max DD −28.9% misses the −27.8%
+floor by 1.1 pts. Holdout not run. Best risk-adjusted numbers of the series so far (Sharpe 0.90, Calmar 0.82).
 
 ## Deviations
 
