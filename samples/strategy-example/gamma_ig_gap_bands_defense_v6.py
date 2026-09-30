@@ -116,6 +116,9 @@ SLEEVE_STOP: float | None = None
 SLEEVE_HIGH_KEEP = False
 # EXP-004 (v6.4): daily supply APR (float, indexed by UTC day) earned on idle quote; None = cash earns nothing
 CASH_APR: pd.Series | None = None
+# EXP-005 (v6.5): a rising F adds its increment as a quote-only range order over the ladder's lower half (buys only
+# on the dip, earns fees while waiting) instead of rebuilding and market-buying base. Falling F: as v6.
+REFILL_ORDER = False
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -407,6 +410,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.stop_low_f: Decimal | None = None  # lowest F since the stop; a rise above it re-arms
         self.sleeve_stops = 0
         self.total_interest = ZERO       # CASH_APR: lending interest earned on idle quote
+        self.refill_orders = 0           # REFILL_ORDER: F increases placed as quote-only range orders
+        self.ladder_span: tuple[int, int] | None = None   # (lowest, highest) tick of the last built ladder
         self.force_rebuild = False       # set by follow_work to push rescale_work past its range check
         self.follow_rebuild_count = 0
         self.fee_log: List[dict] = []    # daily: collected fees (quote) + pending fees still in the positions
@@ -599,6 +604,9 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
                or (target >= ONE - FULL_TOLERANCE and current < ONE - FULL_TOLERANCE))
         if not due:
             return
+        if REFILL_ORDER and target > current and self.place_refill_order(row_data, (target - current) * equity):
+            self.deployed_at_build = target
+            return
         print(f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} follow F: target {float(target):.4f} "
               f"current {float(current):.4f} -> rebuild")
         self.follow_rebuild_count += 1
@@ -607,6 +615,38 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             self.rescale_work(row_data)
         finally:
             self.force_rebuild = False
+
+    def place_refill_order(self, row_data: Snapshot, amount: Decimal) -> bool:
+        """EXP-005: put `amount` of quote into one position spanning the ladder's quote side (current price down to
+        -lower_ratio): it holds only quote now and turns into base only if the price comes down into it."""
+        lp_market: UniLpMarketV2 = self.broker.markets[self.utils.market_key]
+        free_quote = self.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
+        amount = min(amount, free_quote)
+        if amount <= ZERO:
+            return False
+        current_tick = self.utils.get_raw_tick(row_data)
+        spacing = self.utils.params.tick_spacing
+        # a range above the current tick holds only token0, below only token1
+        if lp_market.pool_info.is_token0_quote:
+            lo, hi = 2 * spacing, self.shape_config[-1][1]
+        else:
+            lo, hi = self.shape_config[0][0], -2 * spacing
+        _, _, lower_tick, upper_tick = self.calculate_range(lp_market, current_tick, lo, hi)
+        position, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(lower_tick, upper_tick, ZERO, amount,
+                                                                             tick=current_tick)
+        if quote_used == ZERO:
+            lp_market.positions.pop(position, None)
+            return False
+        self.positions.append(position)
+        self.positions.sort(key=lambda p: (p[0], p[1]))
+        self.refill_orders += 1
+        if self.ladder_span is None:  # no ladder (F was 0): exits are judged on the ladder v6 would have built here
+            _, _, span_lo, span_hi = self.calculate_range(lp_market, current_tick, self.shape_config[0][0],
+                                                          self.shape_config[-1][1])
+            self.ladder_span = (span_lo, span_hi)
+        print(f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} refill order: {float(quote_used):,.2f} quote over "
+              f"ticks {lower_tick}..{upper_tick} (current {current_tick}), base used {float(base_used)}")
+        return True
 
     def accrue_cash(self, row_data: Snapshot):
         """EXP-004: one day of lending interest on every quote token held outside the ladder (reserve, collected
@@ -680,7 +720,9 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
     def check_rebalance(self, lp_market: UniLpMarketV2, current_tick: int) -> bool:
         # Check if the current price is outside the current LP range
         rebalance = False
-        if not (self.positions[0][0] <= current_tick < self.positions[-1][1]):
+        # REFILL_ORDER: range orders sit off the price on purpose; judge exits on the ladder span of the last build
+        lo, hi = self.ladder_span if (REFILL_ORDER and self.ladder_span) else (self.positions[0][0], self.positions[-1][1])
+        if not (lo <= current_tick < hi):
             rebalance = True
             print("allow rescale", self.positions[0][0], current_tick, self.positions[-1][1])
 
@@ -879,6 +921,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
             self.last_rescale_tick = current_tick
             self.was_in_range = False
+            self.ladder_span = (self.positions[0][0], self.positions[-1][1]) if self.positions else None
 
         finally:
             self.last_price = current_price
@@ -952,6 +995,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
         self.was_in_range = True
         self.last_price = self.last_dca_price = self.last_check_price = current_price
+        self.ladder_span = (self.positions[0][0], self.positions[-1][1]) if self.positions else None
 
         pass
 

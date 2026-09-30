@@ -74,11 +74,12 @@ OPT = {"A": Variant("A_v6"),
        "C": Variant("C_sleeve_stop", {"SPOT_SLEEVE": Decimal("0.5"), "SLEEVE_STOP": 0.80}),   # EXP-002
        "D": Variant("D_stop_keep_high", {"SPOT_SLEEVE": Decimal("0.5"), "SLEEVE_STOP": 0.80,
                                          "SLEEVE_HIGH_KEEP": True}),   # EXP-003
-       "E": Variant("E_cash_yield", {"CASH_APR": "pool"})}   # EXP-004: idle USDC earns the pool chain's Aave rate
+       "E": Variant("E_cash_yield", {"CASH_APR": "pool"}),
+       "F": Variant("F_refill_order", {"REFILL_ORDER": True})}   # EXP-005   # EXP-004: idle USDC earns the pool chain's Aave rate
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER"]}
 
 
 def sens_grid():
@@ -256,7 +257,7 @@ def run_variant(args):
             "sharpe_ratio": float(m["sharpe_ratio"]), "impact": float(c["impact"].sum()),
             "gas_if_mainnet": float(c["gas"].sum()), "swap_notional": float(c["notional"].sum()),
             "max_swap_notional": float(c["notional"].max()), "rebuilds": len(c),
-            "fees": float(s.total_fee), "sleeve_stops": s.sleeve_stops, "interest": float(s.total_interest), "lp_net_value": float(s.final_lp_net_value),
+            "fees": float(s.total_fee), "sleeve_stops": s.sleeve_stops, "interest": float(s.total_interest), "refill_orders": s.refill_orders, "lp_net_value": float(s.final_lp_net_value),
             "mean_F": float(window["F"].mean()) if variant.deploy == V.DEPLOY_SIGNAL else 1.0,
             "benchmark_return": float(m["benchmark_rate"]), "secs": round(time.time() - t0)}
 
