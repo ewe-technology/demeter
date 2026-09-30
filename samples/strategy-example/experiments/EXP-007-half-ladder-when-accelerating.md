@@ -3,7 +3,7 @@
 - Version: v6.7 (Dino's idea: use the first / second difference as an indicator)
 - Jira: [QUAN-841](https://ewetechnology.atlassian.net/browse/QUAN-841)
 - Status: dropped-at-dev
-- Pre-registration commit: 8ffecd2 · Result commit: see registry
+- Pre-registration commit: 8ffecd2 · Result commit: 95850cf
 
 ## Hypothesis
 
