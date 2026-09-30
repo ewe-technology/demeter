@@ -8,5 +8,5 @@ EXP-005,2026-09-30,refills as quote-only range orders instead of market buys (v6
 EXP-006,2026-09-30,half ladder: base side held as spot; only the quote side LPd (v6.6),QUAN-840,dropped-at-dev,0.69,4/5,,,1.730,0.238,-0.289,639a09c,53defd9,EXP-006-half-ladder.md
 EXP-007,2026-09-30,half ladder only when EMA100 1st and 2nd differences > 0 (v6.7),QUAN-841,dropped-at-dev,-0.37,1/5,,,1.302,0.194,-0.279,8ffecd2,95850cf,EXP-007-half-ladder-when-accelerating.md
 EXP-008,2026-09-30,v6 on ETH and BTC as one 50/50 portfolio (v6.8),QUAN-842,dev-done,,,,,,,,,94fc1fa,,EXP-008-eth-btc-portfolio.md
-EXP-009,2026-09-30,v6.1 spot sleeve re-registered under a Calmar rule (v6.1r),,holdout-fail,8.54,4/5,0/4,-3.16,1.980,0.261,-0.336,fd47677,,EXP-009-spot-sleeve-calmar.md
-EXP-010,2026-09-30,v6.6 half ladder re-registered under a Calmar rule (v6.6r),,holdout-fail,0.69,4/5,2/4,-0.07,1.730,0.238,-0.289,fd47677,,EXP-010-half-ladder-calmar.md
+EXP-009,2026-09-30,v6.1 spot sleeve re-registered under a Calmar rule (v6.1r),QUAN-844,holdout-fail,8.54,4/5,0/4,-3.16,1.980,0.261,-0.336,fd47677,d4fe0a3,EXP-009-spot-sleeve-calmar.md
+EXP-010,2026-09-30,v6.6 half ladder re-registered under a Calmar rule (v6.6r),QUAN-845,holdout-fail,0.69,4/5,2/4,-0.07,1.730,0.238,-0.289,fd47677,d4fe0a3,EXP-010-half-ladder-calmar.md

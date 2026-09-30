@@ -1,9 +1,9 @@
 # EXP-009: v6.1 spot sleeve re-registered under a Calmar rule (v6.1r)
 
 - Version: v6.1r (same variant as EXP-001 / v6.1, new success rule)
-- Jira: QUAN-___
+- Jira: [QUAN-844](https://ewetechnology.atlassian.net/browse/QUAN-844)
 - Status: holdout-fail
-- Pre-registration commit: fd47677 · Result commit: see registry
+- Pre-registration commit: fd47677 · Result commit: d4fe0a3
 
 ## Why a re-registration
 

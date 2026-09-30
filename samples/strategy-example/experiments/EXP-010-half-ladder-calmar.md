@@ -1,9 +1,9 @@
 # EXP-010: v6.6 half ladder re-registered under a Calmar rule (v6.6r)
 
 - Version: v6.6r (same variant as EXP-006 / v6.6, new success rule)
-- Jira: QUAN-___
+- Jira: [QUAN-845](https://ewetechnology.atlassian.net/browse/QUAN-845)
 - Status: holdout-fail
-- Pre-registration commit: fd47677 · Result commit: see registry
+- Pre-registration commit: fd47677 · Result commit: d4fe0a3
 
 ## Why a re-registration
 
