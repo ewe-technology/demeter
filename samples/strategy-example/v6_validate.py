@@ -39,8 +39,8 @@ FIRST_DATA = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": date(2021, 5, 6),
               "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": date(2021, 11, 2)}
 INIT_QUOTE = Decimal(100000)
 G_REMOVE, G_ADD, G_SWAP = 260_000, 450_000, 150_000
-GAS_CSV = "/Users/dinohuang/Desktop/demeter-momentum/samples/gas_ethereum_hourly.csv"
-ETH_USD_CSV = "/Users/dinohuang/Desktop/demeter-momentum/samples/eth_usd_hourly.csv"
+GAS_CSV = "../gas_ethereum_hourly.csv"
+ETH_USD_CSV = "../eth_usd_hourly.csv"
 
 
 @dataclass(frozen=True)

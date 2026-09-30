@@ -18,7 +18,7 @@ sys.path.insert(0, "/Users/dinohuang/.claude/plugins/cache/agiprolabs-claude-tra
 from overfit_detector import probability_of_backtest_overfitting  # noqa: E402
 
 R = "result/v6_validate"
-ETH_USD = "/Users/dinohuang/Desktop/demeter-momentum/samples/eth_usd_hourly.csv"
+ETH_USD = "../eth_usd_hourly.csv"
 pd.set_option("display.width", 250)
 pd.set_option("display.max_columns", 20)
 

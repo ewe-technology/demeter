@@ -32,10 +32,10 @@ regimes, capacity). Never modify other branches (`defense_v6`, `remix`, `master`
 ## Environment (rebuild after a new session — nothing outside git survives)
 
     uv venv -p 3.12 .venv-lab && uv pip install -p .venv-lab/bin/python -r samples/strategy-example/requirements-lab.txt
-    # data is gitignored; it lives in the main checkout
-    ln -s /Users/dinohuang/Desktop/demeter-momentum/samples/real-data samples/real-data         # ETH pool minutes
-    ln -s /Users/dinohuang/Desktop/demeter-momentum/samples/holdout-data samples/holdout-data   # WBTC pools
-    # gas / ETH-USD hourly CSVs are read from /Users/dinohuang/Desktop/demeter-momentum/samples/ (feat/momentum-width)
+    # pool minute data is gitignored: samples/real-data (ETH pool) and samples/holdout-data (WBTC pools) live in the
+    # main checkout /Users/dinohuang/Desktop/demeter-momentum; a worktree symlinks both from there.
+    # samples/fetch_uni_minute.py downloads more (e.g. data after 2026-09-17 for a fresh holdout).
+    # gas and ETH/USD hourly CSVs are committed in samples/ (regenerate with samples/fetch_gas.py).
 
 Run (from `samples/strategy-example`, `PYTHONPATH=../..`):
 
