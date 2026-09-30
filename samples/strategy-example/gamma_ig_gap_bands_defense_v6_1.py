@@ -6,6 +6,9 @@
 2025 年基準：總報酬 -6.2%、本金 $60.3k、手續費 $33.5k（PDF 谷型 LP -6.4%）。
 已加：eth_share（固定 / EMA100 切換 0.7-0.5）與 deploy=signal（規格書 2.2 四帳戶訊號引擎算 F、
 2.3 每日追隨 F 重建，其餘留 USDC）。2025 1-4 月短測：−8.6%，同期 ETH −46%。詳見 ETH_SHARE_TODO.md。
+
+v6.1：邏輯與 v6 相同，只修正註解並說明訊號引擎的資料限制（結果資料夾前綴 gamma-pdfv6.1-）。
+與規格書作者回測的 2022、2023 差異來自資料，不是算法，詳見 GAMMA_IG_V6_1_DIFF_EXPLAINED.md。
 """
 import copy
 
@@ -104,7 +107,14 @@ SHARE_ABOVE_EMA, SHARE_BELOW_EMA = Decimal("0.7"), Decimal("0.5")
 DEPLOY_FULL, DEPLOY_SIGNAL = "full", "signal"
 EMA_SPANS = (90, 100, 110, 120)
 EMA_WARMUP_DAYS = 3 * max(EMA_SPANS)  # adjust=False EMA needs ~3 spans of history to forget its seed
-POOL_DATA_START = date(2021, 5, 5)    # first demeter-fetch file for the pool; warmup never starts earlier
+# first demeter-fetch file for the pool (Uniswap v3 launch); warmup never starts earlier. Data limitation, not
+# a bug: the spec runs the engine from 2017 on Binance. Two known effects of signalling on this pool instead:
+# - warm-up: a 2022 window gets 241 days, seeded at the 2021-05-05 close of 3,523. EMA120 still reads 30 high
+#   on 2022-01-01 and 7.5 high on 2022-03-25, enough to turn that day's 3,104 close into an EMA120 exit the
+#   2017 engine does not have (F 0.75-0.94 instead of 1 until 4/11). Settled by mid 2022; 2023+ unaffected.
+# - price: the signal is ETH priced in USDC, not USD. Normally within 0.06% of Binance ETHUSDT (p95 0.27%),
+#   which moves a threshold decision by a day now and then; in the 2023-03 USDC depeg it was up to 4.5% high.
+POOL_DATA_START = date(2021, 5, 5)
 LOWER_STOP, UPPER_REBUILD = 0.80, 1.20
 REFILL_CONFIRM_DAYS = 3                                   # stage 1 needs this many consecutive closes
 REFILL_STAGES = ((1, 1.05), (2, 1.0833), (3, 1.1167), (4, 1.15))  # (stage, close / low), stage k -> k/4 deployed
@@ -1248,7 +1258,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     _deploy_modes: List[str] = [DEPLOY_SIGNAL]
     # parallel runs; each worker copies the minute data, ~4 min per run on the 2025 set
     _workers = 5
-    _folder_prefix = (f"gamma-pdfv6-{'+'.join(SHAPE_LABELS.get(sh, sh) for sh in _shapes)}-gap-up{ratio_label(_upper_ratios[0])}~{ratio_label(_upper_ratios[-1])}-"
+    _folder_prefix = (f"gamma-pdfv6.1-{'+'.join(SHAPE_LABELS.get(sh, sh) for sh in _shapes)}-gap-up{ratio_label(_upper_ratios[0])}~{ratio_label(_upper_ratios[-1])}-"
                       f"dn{'+'.join(ratio_label(lr) for lr in _lower_ratios)}-"
                       f"{'+'.join(share_label(es) for es in _eth_shares)}-{'+'.join(_deploy_modes)}-"
                       f"{token0.name.lower()}{token1.name.lower()}-{quote_token.name.lower()}")
@@ -1486,8 +1496,8 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     # EMA is settled on day one (ema_share_for judges on the last completed day)
     daily_ema = None
     if EMA_SHARE in _eth_shares or DEPLOY_SIGNAL in _deploy_modes:
-        # clamped to POOL_DATA_START: a 2022 window only has 241 days of history, which gives the same F and
-        # s-rule decisions as 360 days on 2023/2024
+        # clamped to POOL_DATA_START: a 2022 window only has 241 days of history, so EMA120 is not settled
+        # until mid 2022 (see POOL_DATA_START)
         warm_start = max(dsd - timedelta(days=EMA_WARMUP_DAYS), POOL_DATA_START)
         prices = [market.data.price]
         if warm_start < dsd:
