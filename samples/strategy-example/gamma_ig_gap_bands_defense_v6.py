@@ -711,6 +711,9 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         # with a spot sleeve the free base is deployed capital too
         current = (lp_value + (free_base * price if (SPOT_SLEEVE > ZERO or HALF_LADDER or HALF_WHEN_ACCEL) else ZERO)) / equity
         target = target_fraction_for(self.daily_ema, row_data.timestamp)
+        if HEDGE > ZERO and self.eth_share is not None:   # EXP-014: the build keeps the short's margin out of the ladder
+            share_now = ema_share_for(self.daily_ema, row_data.timestamp)[0] if self.eth_share == EMA_SHARE else self.eth_share
+            target = target * (ONE - HEDGE * share_now / HEDGE_LEVERAGE)
         if SLEEVE_STOP is not None:
             self.sleeve_stop_work(row_data, target, free_base)
             if self.sleeve_stopped:

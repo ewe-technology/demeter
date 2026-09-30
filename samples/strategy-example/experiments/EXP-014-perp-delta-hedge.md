@@ -78,4 +78,8 @@ Verdict:
   the fee bucket go negative and the ladder overdraw. Hedge flows now go to the USDC balance (deployable), and the
   first smoke run (ETH 2021-11..12, outside every pre-registered window) showed why margin must be explicit: with
   F = 1 the whole reserve is in the bands and a $21 settlement found 0 USDC. `HEDGE_LEVERAGE = 5` (initial margin
-  held back at each build) was added before any pre-registered window ran. Same hedge ratio, same rule.
+  held back at each build) was added before any pre-registered window ran. The second smoke run then showed 44
+  rebuilds in two months (v6: 5): with the margin outside the ladder the book sits at 0.916 F and the follow
+  check's "not fully deployed" branch fired daily; the follow target is now scaled by the same margin factor
+  (third smoke run: 3 rebuilds, −1.6% vs v6 −4.8%, hedge PnL +$2.2k, funding +$116, fees $82). Same hedge ratio,
+  same rule.
