@@ -1,0 +1,54 @@
+# demeter — defense v6 LP strategy research
+
+Talk to the user (Dino) in Traditional Chinese. Code, commit messages and Jira bodies stay English.
+
+## What this branch is
+
+`feat/dino-v6-opt` is Dino's only development branch; it starts from Maker's `defense_v6` and iterates on defense v6 (`samples/strategy-example/gamma_ig_gap_bands_defense_v6.py`, Maker's
+`defense_v6` branch): a ±20% inverted-gaussian valley LP on Uniswap v3 whose deployed fraction F comes from an
+EMA 90–120 four-account engine. Every change is an experiment, recorded in three places that must stay in sync:
+
+- `samples/strategy-example/experiments/` — source of truth: `README.md` (workflow), `registry.csv`, one
+  `EXP-NNN-*.md` each. Read the README before starting an experiment.
+- Jira story QUAN-834 (site `ewetechnology`, project QUAN) — one subtask per experiment.
+- Team dashboard https://claude.ai/artifact/ATZR3s2SqybzjQvMMsAZg5 — write with the `ArtifactData` tool:
+  `experiments/<EXP-id>` (registry fields + `hypothesis`, `verdict`, `order`), `curves/eth`, `curves/btc`
+  (weekly net value per series key). Only editors write; the page never needs republishing for new rows.
+
+State as of 2026-09-30: only EXP-000 (v6 baseline): ETH continuous 2022-01..2026-09 +85.4%, CAGR 14.0%,
+max DD −22.8%; WBTC continuous +85.6%. Earlier trials (momentum width, fee compounding, EMA exit band) were
+discarded on purpose — numbering restarts at EXP-001. Background: `V6_VALIDATION.md` (PBO 0.56, DSR < 0.95,
+regimes, capacity). Never modify other branches (`defense_v6`, `remix`, `master`, ...).
+
+## Rules for experiments
+
+- Pre-register (hypothesis, fixed constants, dev data, holdout, success rule) and commit **before** running.
+- Structural changes only; no parameter tuning inside v6's family (PBO 0.56).
+- Baseline v6 runs in the same invocation. Costs: pool fee + price impact; gas reported, not charged.
+- ETH/USDC 0.05% (2021-05..2026-09-17) and WBTC/USDC 0.3% (2021-11..2026-09-17) are in-sample now: every new
+  pre-registration names a fresh holdout (another pool or chain, or data after 2026-09-17).
+- Anything seen out of order goes under *Deviations* in the EXP file.
+
+## Environment (rebuild after a new session — nothing outside git survives)
+
+    uv venv -p 3.12 .venv-lab && uv pip install -p .venv-lab/bin/python -r samples/strategy-example/requirements-lab.txt
+    # data is gitignored; it lives in the main checkout
+    ln -s /Users/dinohuang/Desktop/demeter-momentum/samples/real-data samples/real-data         # ETH pool minutes
+    ln -s /Users/dinohuang/Desktop/demeter-momentum/samples/holdout-data samples/holdout-data   # WBTC pools
+    # gas / ETH-USD hourly CSVs are read from /Users/dinohuang/Desktop/demeter-momentum/samples/ (feat/momentum-width)
+
+Run (from `samples/strategy-example`, `PYTHONPATH=../..`):
+
+    python v6_validate.py <pool> <start> <end> opt:A,B 4     # experiment variants, OPT dict in v6_validate.py
+    python v6_validate.py <pool> <start> <end> sens|bench 3   # sensitivity grid / continuous v6 vs plain LP
+    python v6_validate_report.py                              # validation numbers
+    # results -> result/v6_validate/ (gitignored); daily equity CSV per variant
+
+## Gotchas
+
+- `demeter/uniswap/core.py:167` casts ticks to `int` before `Decimal` (numpy int64 otherwise raises). Keep it.
+- Several processes loading the same data range at once can crash on demeter's `~/.demeter` cache
+  (`pickle EOFError`) before any backtest runs: rerun that segment alone.
+- A continuous ETH run takes ~8 min and several GB per worker; yearly segments take ~2 min.
+- `git fetch` here only fetches `master` (narrow refspec); fetch other branches by name.
+- Pushing needs the `dinohuang102` GitHub account (write access to `ewe-technology/demeter`).
