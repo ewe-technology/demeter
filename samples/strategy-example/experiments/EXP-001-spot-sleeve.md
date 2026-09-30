@@ -2,8 +2,8 @@
 
 - Version: v6.1
 - Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Status: dropped-at-dev
+- Pre-registration commit: 78cc9af · Result commit: see registry
 
 ## Hypothesis
 
@@ -45,12 +45,33 @@ One structural switch, `SPOT_SLEEVE = 0.5` (v6: 0):
 
 ## Result
 
-| test | v6 | this | gain |
-|---|---|---|---|
+Development, ETH/USDC 0.05%, yearly reset, 100,000 USDC (net return; max DD from the demeter metric):
 
-Continuous run (reported, not deciding): total / CAGR / max DD / Sharpe.
+| test | v6 | this | gain | max DD v6 → this |
+|---|---|---|---|---|
+| 2022 | +7.6% | +12.0% | +4.4 | 21.5% → 26.8% |
+| 2023 | +32.2% | +42.9% | +10.7 | 13.9% → 18.2% |
+| 2024 | +36.4% | +35.9% | −0.5 | 26.7% → 36.6% |
+| 2025 | +16.3% | +37.5% | +21.2 | 26.9% → 31.2% |
+| 2026-01..09-17 | +18.7% | +27.2% | +8.5 | 12.0% → 16.6% |
 
-Verdict: pass / fail / dropped at dev — and the one-line reason.
+Wins 4/5, median gain +8.54 pts.
+
+Continuous runs (daily equity):
+
+| run | total | CAGR | max DD | Sharpe | vol | longest underwater |
+|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | −22.8% | 0.73 | 21.1% | 491 d |
+| ETH this | +198.0% | 26.1% | **−33.6%** | 0.86 | 33.1% | 455 d |
+| WBTC/USDC v6 | +85.6% | 17.3% | −17.8% | 1.01 | 17.3% | 400 d |
+| WBTC/USDC this | +131.7% | 24.2% | −23.7% | 0.98 | 25.3% | 400 d |
+
+The sleeve halves the fee income (ETH 2025: $12.8k vs $20.8k) and more than makes up for it with the trend,
+but it rides every pullback until the EMA exit / 20% stop moves F, so each year's drawdown deepens 4–10 pts.
+
+Verdict: **dropped at dev** — wins 4/5 and median +8.5 pts pass, but continuous ETH max DD −33.6% is 10.8 pts
+worse than v6 (rule: ≤ 5). The holdout was not run and stays unused. Calmar improved (0.61 → 0.78), so the
+return per unit of drawdown is better; the sleeve simply carries more risk than the rule allows.
 
 ## Deviations
 
