@@ -102,7 +102,7 @@ strong rallies and loses in slow grinds up (whipsaw of the EMA exits).
    (deck 2025 +22.3% vs +16.3% here).
 5. The cbBTC "Growth" pool is unvalidated: v6 showed no edge over the plain LP on BTC.
 
-## Status after EXP-001..011 (2026-09-30)
+## Status after EXP-001..013 (2026-09-30)
 
 1. **Done** (EXP-004 holdout): Base USDC/WETH 0.05%, 2024-01..2026-09-17, v6 +55.9% (CAGR 17.8%, max DD −28.1%).
    Per year Base +19.4% / +13.9% / +19.1% vs mainnet +36.4% / +16.3% / +18.7%: the gap is the Base pool's first
@@ -110,9 +110,10 @@ strong rallies and loses in slow grinds up (whipsaw of the EMA exits).
 2. Open. On Base the rebuild price impact was $3.6k in 2024 but $0.3k in 2025 and $0.06k in 2026 (per $100k), so
    splitting swaps is worth little at pilot size; MEV exposure of the 00:00 rebuild is unchanged.
 3. Open (operational).
-4. Parameters untouched in all eleven experiments (structural changes only). One version passed dev and holdout:
+4. Parameters untouched in all thirteen experiments (structural changes only). One version passed dev and holdout:
    **v6.4, idle USDC in Aave** (EXP-004: ETH dev +101% vs +85%, Base holdout +63.2% vs +55.9%, drawdown shallower).
-   Seven structural variants of the signal / ladder failed (EXP-001..003, 005..007, 009, 010; see `experiments/`).
+   Nine structural variants of the signal / ladder failed (EXP-001..003, 005..007, 009, 010, 012, 013; see
+   `experiments/`).
 5. **Done** (EXP-011): on Base USDC/cbBTC 0.05% (2025..2026-09) v6 +22.3%, Calmar 0.80, vs plain LP +6.8%, 0.15;
    v6.4 +25.8%, Calmar 1.03. The Growth pool is a valid venue. A 50/50 ETH+BTC portfolio of
    v6 books (EXP-008, dev seen: Sharpe 0.78 → 0.98, max DD −22.8% → −18.7%) waits for its forward holdout

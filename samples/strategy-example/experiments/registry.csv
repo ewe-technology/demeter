@@ -10,6 +10,6 @@ EXP-007,2026-09-30,half ladder only when EMA100 1st and 2nd differences > 0 (v6.
 EXP-008,2026-09-30,v6 on ETH and BTC as one 50/50 portfolio (v6.8),QUAN-842,dev-done,,,,,,,,,94fc1fa,,EXP-008-eth-btc-portfolio.md
 EXP-009,2026-09-30,v6.1 spot sleeve re-registered under a Calmar rule (v6.1r),QUAN-844,holdout-fail,8.54,4/5,0/4,-3.16,1.980,0.261,-0.336,fd47677,d4fe0a3,EXP-009-spot-sleeve-calmar.md
 EXP-010,2026-09-30,v6.6 half ladder re-registered under a Calmar rule (v6.6r),QUAN-845,holdout-fail,0.69,4/5,2/4,-0.07,1.730,0.238,-0.289,fd47677,d4fe0a3,EXP-010-half-ladder-calmar.md
-EXP-011,2026-09-30,v6 and v6.4 on the Base cbBTC pool (go-live condition 5),QUAN-859,holdout-pass,,,2/2,1.61,,,,024436c,10011a7,EXP-011-base-cbbtc.md
+EXP-011,2026-09-30,v6 and v6.4 on the Base cbBTC pool (go-live condition 5),QUAN-859,holdout-pass,,,2/2,1.61,,,,024436c,fab39a2,EXP-011-base-cbbtc.md
 EXP-012,2026-09-30,fee-vs-LVR gate: F = 0 while 7-day pool fees per unit liquidity < LVR (v6.9),QUAN-856,dropped-at-dev,-2.18,0/5,,,0.337,0.064,-0.254,ddae178,32ef30c,EXP-012-fee-lvr-gate.md
 EXP-013,2026-09-30,trend-skewed range: valley shifted 5 pts toward the EMA100 trend (v6.10),QUAN-858,dropped-at-dev,-0.94,1/5,,,0.792,0.132,-0.226,124d383,47ed5c6,EXP-013-trend-skewed-range.md

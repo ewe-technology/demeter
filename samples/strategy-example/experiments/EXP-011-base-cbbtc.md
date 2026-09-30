@@ -3,7 +3,7 @@
 - Version: v6 / v6.4 on Base USDC/cbBTC 0.05% (validation, no new variant)
 - Jira: [QUAN-859](https://ewetechnology.atlassian.net/browse/QUAN-859)
 - Status: holdout-pass (both rules)
-- Pre-registration commit: 024436c · Result commit: 10011a7
+- Pre-registration commit: 024436c · Result commit: fab39a2
 
 ## Hypothesis
 
