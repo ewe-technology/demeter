@@ -118,3 +118,14 @@ strong rallies and loses in slow grinds up (whipsaw of the EMA exits).
    v6.4 +25.8%, Calmar 1.03. The Growth pool is a valid venue. A 50/50 ETH+BTC portfolio of
    v6 books (EXP-008, dev seen: Sharpe 0.78 → 0.98, max DD −22.8% → −18.7%) waits for its forward holdout
    (2026-09-18..12-31, run in Jan 2027).
+
+**Deployment estimate on Base** (daily equity of EXP-004 and EXP-011 runs, 2025-01-01..2026-09-17, books rebalanced
+daily, transfer cost not modelled; the weights were not fitted):
+
+| book | CAGR | max DD | Sharpe | Calmar |
+|---|---|---|---|---|
+| v6 ETH | 14.4% | −19.4% | 0.70 | 0.74 |
+| v6 ETH + cbBTC 50/50 | 13.3% | −15.7% | 0.84 | 0.85 |
+| **v6.4 ETH + cbBTC 50/50** | **15.3%** | **−14.5%** | **0.96** | **1.05** |
+
+Daily return correlation of the two books 0.61. Candidate for the pilot: v6.4 on both Base pools, 50/50.
