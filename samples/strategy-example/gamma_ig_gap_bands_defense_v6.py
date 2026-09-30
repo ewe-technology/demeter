@@ -112,6 +112,8 @@ FOLLOW_THRESHOLD = Decimal("0.125")
 SPOT_SLEEVE = Decimal("0")
 # EXP-002 (v6.2): sell the sleeve when the daily close < SLEEVE_STOP x its high since bought (None = no stop)
 SLEEVE_STOP: float | None = None
+# EXP-003 (v6.3): the stop's high survives range-exit / follow rebuilds; only a (re-)arm resets it (False = v6.2)
+SLEEVE_HIGH_KEEP = False
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -544,8 +546,10 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         # a stopped sleeve's share stays in quote with the reserve
         self.reserve_quote = (ONE - fraction + (SPOT_SLEEVE - sleeve) * fraction) * (base * price + quote)
         self.reserve_base = sleeve * fraction * (base * price + quote) / price
-        if SLEEVE_STOP is not None and self.reserve_base > ZERO:
+        if SLEEVE_STOP is not None and self.reserve_base > ZERO and not (SLEEVE_HIGH_KEEP and self.sleeve_high is not None):
             self.sleeve_high = float(price)
+        elif SLEEVE_HIGH_KEEP and self.reserve_base <= ZERO and not self.sleeve_stopped:
+            self.sleeve_high = None   # F went to 0: the sleeve is gone, its next purchase starts a new high
         if share is None:  # sgeo, only reachable with fraction 1 (constructor check)
             return self.calculate_swap_amount(current_tick, lower_boundary, upper_boundary, base, quote)
         # bands get share x F of total value in base and (1 - share) x F in quote; the reserve stays quote.
@@ -605,6 +609,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         if self.sleeve_stopped:
             if target > self.stop_low_f or close > self.sleeve_high:
                 self.sleeve_stopped, self.stop_low_f = False, None
+                if SLEEVE_HIGH_KEEP:
+                    self.sleeve_high = None   # the next build that buys the sleeve starts a new high
                 print(f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} sleeve re-armed: F {float(target):.4f} close {close:.4f}")
             else:
                 self.stop_low_f = min(self.stop_low_f, target)
