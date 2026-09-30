@@ -2,8 +2,8 @@
 
 - Version: v6.3
 - Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Status: dropped-at-dev
+- Pre-registration commit: 9afb72c · Result commit: see registry
 
 ## Hypothesis
 
@@ -38,10 +38,39 @@ v6.2 (`SPOT_SLEEVE = 0.5`, `SLEEVE_STOP = 0.80`) plus `SLEEVE_HIGH_KEEP = True` 
 
 ## Result
 
-| test | v6 | this | gain |
-|---|---|---|---|
+Development, ETH/USDC 0.05%, yearly reset:
 
-Verdict:
+| test | v6 | this | gain | max DD v6 → this | sleeve stops |
+|---|---|---|---|---|---|
+| 2022 | +7.6% | +2.2% | −5.4 | 21.5% → 28.3% | 1 |
+| 2023 | +32.2% | +42.9% | +10.7 | 13.9% → 18.2% | 0 |
+| 2024 | +36.4% | +38.9% | +2.5 | 26.7% → 35.2% | 1 |
+| 2025 | +16.3% | +37.6% | +21.4 | 26.9% → 31.2% | 1 |
+| 2026-01..09-17 | +18.7% | +29.6% | +10.9 | 12.0% → 15.1% | 1 |
+
+Wins 4/5, median gain +10.67 pts (yearly segments almost identical to v6.2).
+
+Continuous runs (daily equity):
+
+| run | total | CAGR | max DD | Sharpe | stops |
+|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | −22.8% | 0.73 | |
+| ETH this | +182.3% | 24.6% | **−32.4%** | 0.86 | 4 |
+| WBTC/USDC v6 | +85.6% | 17.3% | −17.8% | 1.01 | |
+| WBTC/USDC this | +129.2% | 23.8% | −24.6% | 0.97 | 2 |
+
+Why it did not help: the worst episode (2024-03-11 → 09-06, −32.4%) is not one fall but a string of F round
+trips. F went 1 → 0 → 1 four times in five months while ETH chopped between 2,400 and 3,700; the engine refills on
++5..15% bounces even below the EMAs, each refill re-buys the sleeve and the next leg down takes it again. No single
+leg reached −20% from the sleeve's high, so the stop could not act. A daily-close proxy (half of v6's return plus
+0.5 x F x ETH) reproduces the sleeve family's drawdown (−34.8% vs −33.6% measured for v6.1) and shows that
+gating the sleeve on close > EMA100 would cut the return to +84% while the drawdown only reaches −30.2%.
+Gating refills on the EMA instead destroys the signal (F x ETH +426% → +30%): the below-EMA bounce refills are
+where F's value comes from.
+
+Verdict: **dropped at dev** — wins 4/5 and median +10.7 pts pass, continuous ETH max DD −32.4% fails (≥ −27.8%
+required). Holdout not run. The spot-sleeve family (EXP-001..003) is closed: with a 5-pt drawdown budget any
+spot exposure driven by this F adds the whipsaw losses with the trend gains.
 
 ## Deviations
 
