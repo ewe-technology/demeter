@@ -65,6 +65,12 @@ FUNDING_CSV = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": "../binance_funding
                "0xd0b53d9277642d899df5c87a3966a349a798f224": "../binance_funding_ETHUSDT.csv",
                "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": "../binance_funding_BTCUSDT.csv",
                "0xfbb6eed8e7aa03b138556eedaf5d271a5e1e43ef": "../binance_funding_BTCUSDT.csv"}
+# EXP-018: Binance daily closes of the pool's base asset, for the 12-month return (samples/fetch_binance_daily.py)
+LONG_CLOSE_CSV = "../binance_daily_closes.csv"
+LONG_CLOSE_COL = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": "ETHUSDT",
+                  "0xd0b53d9277642d899df5c87a3966a349a798f224": "ETHUSDT",
+                  "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": "BTCUSDT",
+                  "0xfbb6eed8e7aa03b138556eedaf5d271a5e1e43ef": "BTCUSDT"}
 INIT_QUOTE = Decimal(100000)
 INIT_BY_POOL = {"0x4585fe77225b41b697c938b018e2ac67ac5a20c0": Decimal(2)}  # quote units; default INIT_QUOTE
 G_REMOVE, G_ADD, G_SWAP = 260_000, 450_000, 150_000
@@ -97,11 +103,14 @@ OPT = {"A": Variant("A_v6"),
        "I": Variant("I_lvr_gate", {"LVR_GATE": True}),   # EXP-012: F = 0 while 7-day pool fees / LVR < 1
        "J": Variant("J_trend_skew", {"SKEW": Decimal("0.05")}),   # EXP-013: -15/+25 above EMA100, -25/+15 below
        "K": Variant("K_perp_hedge", {"HEDGE": Decimal("0.6"), "HEDGE_FUNDING": "pool"}),   # EXP-014: short 60% of the ladder's delta
-       "L": Variant("L_tox_pause", {"PAUSE_RET": 0.01})}   # EXP-016: pull the ladder 30 min after a 1% five-minute move
+       "L": Variant("L_tox_pause", {"PAUSE_RET": 0.01}),   # EXP-016: pull the ladder 30 min after a 1% five-minute move
+       "M": Variant("M_bear_short", {"BEAR_SHORT": Decimal("0.5"), "HEDGE_FUNDING": "pool"}),   # EXP-018
+       "N": Variant("N_bear_short_cash", {"BEAR_SHORT": Decimal("0.5"), "HEDGE_FUNDING": "pool",
+                                          "CASH_APR": "pool"})}   # EXP-018: M + EXP-004's cash yield
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT"]}
 
 
 def sens_grid():
@@ -257,6 +266,9 @@ def daily_frame() -> pd.DataFrame:
         daily["ema"] = daily["close"].ewm(span=ema_span, adjust=False).mean()
     if V.LVR_GATE:   # EXP-012: zero F on days the pool did not pay its liquidity over the trailing week
         daily = V.gate_fractions(daily, V.fee_lvr_ratio(GATE_MINUTES, POOLS[POOL][3]))
+    if V.BEAR_SHORT > 0:   # EXP-018: the bear-short flag on top of the final F
+        long_close = pd.read_csv(LONG_CLOSE_CSV, parse_dates=["date"]).set_index("date")[LONG_CLOSE_COL[POOL]]
+        daily = V.bear_short_flags(daily, long_close)
     return daily
 
 
@@ -301,7 +313,7 @@ def run_variant(args):
             "hedge_pnl": float(s.hedge_pnl), "hedge_funding": float(s.hedge_funding), "hedge_fees": float(s.hedge_fees),
             "hedge_trades": s.hedge_trades, "hedge_max_ratio": s.hedge_max_ratio,
             "hedge_min_cash": float(s.hedge_min_cash) if s.hedge_min_cash is not None else float("nan"),
-            "pauses": s.pauses, "pause_minutes": s.pause_minutes,
+            "pauses": s.pauses, "pause_minutes": s.pause_minutes, "bear_short_days": s.bear_short_days,
             "benchmark_return": float(m["benchmark_rate"]), "secs": round(time.time() - t0)}
 
 

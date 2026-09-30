@@ -148,6 +148,12 @@ HEDGE_FUNDING: pd.Series | None = None
 # the daily checks skip while paused. PAUSE_RET 0 = v6.
 PAUSE_RET = 0.0
 PAUSE_WINDOW, PAUSE_MINUTES = 5, 30
+# EXP-018 (v6.14): while the daily frame's "short" flag is set (F = 0, close below every EMA in EMA_SPANS and a negative
+# 12-month return, judged on the last completed day; built by the caller, see bear_short_flags) hold a perp short of
+# BEAR_SHORT x book equity, re-sized at 00:00 after the builds. EXP-014's perp machinery (settlement, funding, fee).
+# 0 = v6.
+BEAR_SHORT = Decimal("0")
+BEAR_SHORT_LOOKBACK = 365   # days, Moskowitz-Ooi-Pedersen 12-month time-series momentum
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -251,6 +257,26 @@ def gate_fractions(daily: pd.DataFrame, ratio: pd.Series, minimum: float | None 
     out["F_raw"] = out["F"]
     out["R"] = ratio.reindex(out.index)
     out["F"] = out["F"].where(out["R"].isna() | (out["R"] >= minimum), 0.0)
+    return out
+
+
+def perp_enabled() -> bool:
+    """A perp leg is in play: EXP-014's delta hedge or EXP-018's bear short."""
+    return HEDGE > ZERO or BEAR_SHORT > ZERO
+
+
+def bear_short_flags(daily: pd.DataFrame, long_close: pd.Series) -> pd.DataFrame:
+    """EXP-018: copy of the daily signal frame with a boolean "short" column: F == 0, the close below the EMA of every
+    span in EMA_SPANS, and close / close BEAR_SHORT_LOOKBACK days earlier < 1. The 12-month return is read from
+    `long_close` (daily closes reaching further back than the pool's minutes); days without it are never short."""
+    out = daily.copy()
+    below = pd.Series(True, index=out.index)
+    for n in EMA_SPANS:
+        below &= out["close"] < out["close"].ewm(span=n, adjust=False).mean()
+    lc = long_close.astype(float).sort_index()
+    year_ret = (lc / lc.shift(BEAR_SHORT_LOOKBACK, freq="D").reindex(lc.index)).reindex(out.index)
+    out["year_ret"] = year_ret
+    out["short"] = (out["F"] == 0) & below & (year_ret < 1)
     return out
 
 
@@ -520,6 +546,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.hedge_trades = 0
         self.hedge_max_ratio = 0.0    # max short notional / equity
         self.hedge_min_cash = None    # lowest quote balance after a hedge debit (negative = margin call territory)
+        self.bear_short_days = 0      # EXP-018: days the bear short was on
         # EXP-016 pause state
         self.price_hist: deque = deque(maxlen=PAUSE_WINDOW + 1)
         self.paused_until: datetime | None = None
@@ -618,7 +645,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         if self.signal_deploy:  # spec sheet 2.3: judged once a day on the previous close
             self.triggers.append(PeriodTrigger(time_delta=timedelta(days=1), do=self.follow_work))
         self.triggers.append(PeriodTrigger(time_delta=timedelta(days=1), do=self.log_fees))
-        if HEDGE > ZERO:   # EXP-014: after every 00:00 build; funding at 00:00 / 08:00 / 16:00
+        if perp_enabled():   # EXP-014 / EXP-018: after every 00:00 build; funding at 00:00 / 08:00 / 16:00
             self.broker.allow_negative_balance = True   # a settlement past the margin shows as negative cash (reported)
             self.triggers.append(PeriodTrigger(time_delta=timedelta(days=1), do=self.hedge_rebalance))
             self.triggers.append(PeriodTrigger(time_delta=timedelta(hours=8), do=self.hedge_funding_work))
@@ -909,13 +936,22 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.hedge_entry = price
 
     def hedge_rebalance(self, row_data: Snapshot) -> None:
-        """Settle, then set the short to HEDGE x the ladder's base; taker fee on the traded notional."""
-        if HEDGE <= ZERO or self.starting_tick is None:
+        """Settle, then set the short to HEDGE x the ladder's base (EXP-014) or, while the day's "short" flag is set,
+        to BEAR_SHORT x book equity (EXP-018); taker fee on the traded notional."""
+        if not perp_enabled() or self.starting_tick is None:
             return
         lp_market: UniLpMarketV2 = self.broker.markets[self.utils.market_key]
         price = row_data.prices[self.gp.base_token.name]
         self.hedge_settle(price)
-        target = HEDGE * self.ladder_base(lp_market)
+        if BEAR_SHORT > ZERO:
+            on = bool(daily_row_for(self.daily_ema, row_data.timestamp)[1]["short"])
+            lp_value = lp_market.get_market_balance().net_value if len(lp_market.positions) > 0 else ZERO
+            equity = lp_value + self.broker.get_token_balance(self.gp.base_token) * price + \
+                self.broker.get_token_balance(self.gp.quote_token)
+            target = BEAR_SHORT * equity / price if on and equity > ZERO else ZERO
+            self.bear_short_days += int(on)
+        else:
+            target = HEDGE * self.ladder_base(lp_market)
         diff = target - self.hedge_size
         if abs(diff) * price >= Decimal(1):   # under $1 of notional: leave it
             fee = abs(diff) * price * HEDGE_FEE
@@ -930,7 +966,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
     def hedge_funding_work(self, row_data: Snapshot) -> None:
         """8h funding on the open short: rate x notional, positive rate = the short receives."""
-        if HEDGE <= ZERO or self.hedge_size <= ZERO or HEDGE_FUNDING is None:
+        if not perp_enabled() or self.hedge_size <= ZERO or HEDGE_FUNDING is None:
             return
         rate = HEDGE_FUNDING.get(pd.Timestamp(row_data.timestamp))
         if rate is None or pd.isna(rate):
@@ -941,7 +977,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
     def hedge_close(self, price: Decimal) -> None:
         """End of the run: settle and close the short, paying the taker fee."""
-        if HEDGE <= ZERO or self.hedge_size <= ZERO:
+        if not perp_enabled() or self.hedge_size <= ZERO:
             return
         self.hedge_settle(price)
         fee = self.hedge_size * price * HEDGE_FEE
