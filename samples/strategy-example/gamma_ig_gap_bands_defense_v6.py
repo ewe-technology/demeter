@@ -523,7 +523,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         # EXP-016 pause state
         self.price_hist: deque = deque(maxlen=PAUSE_WINDOW + 1)
         self.paused_until: datetime | None = None
-        self.paused_bands: list = []   # (PositionInfo, base removed, quote removed) of the pulled ladder
+        self.paused_bands: list = []   # (PositionInfo, base, quote) that came out of the pulled ladder
+        self.build_tick: int | None = None
         self.pauses = 0
         self.pause_minutes = 0
         # self.pa_upper: List[PriceActionLog] = []
@@ -856,16 +857,18 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         lp_market: UniLpMarketV2 = self.broker.markets[self.utils.market_key]
         current_tick = self.utils.get_raw_tick(row_data)
         positions = []
-        for position_info, base, quote in self.paused_bands:
-            if base <= ZERO and quote <= ZERO:
-                continue
-            free_base = self.broker.get_token_balance(self.gp.base_token) - self.total_base_fee
-            free_quote = self.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
-            base_amt, quote_amt = max(ZERO, min(base, free_base)), max(ZERO, min(quote, free_quote))
+        # the build loop again, at the build's tick (same ranges, same side-rescaled band shares) with the wallet's free
+        # tokens at the current price; band_amounts clamps to what is free, what no longer fits stays idle until the
+        # next rebuild, as v6's leftovers do
+        free_base = self.broker.get_token_balance(self.gp.base_token) - self.total_base_fee
+        free_quote = self.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
+        for config in self.ladder_configs():
+            _, _, lower_tick, upper_tick = self.calculate_range(lp_market, self.build_tick, config[0], config[1])
+            base_amt, quote_amt = self.band_amounts(free_base, free_quote, config[2])
             if base_amt <= ZERO and quote_amt <= ZERO:
                 continue
-            pos, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(position_info.lower_tick, position_info.upper_tick,
-                                                                            base_amt, quote_amt, tick=current_tick)
+            pos, base_used, quote_used, _ = lp_market.add_liquidity_by_tick(lower_tick, upper_tick, base_amt, quote_amt,
+                                                                            tick=current_tick)
             if base_used == ZERO and quote_used == ZERO:
                 lp_market.positions.pop(pos, None)   # dry band (as the build loop does)
                 continue
@@ -1102,6 +1105,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
                 total_base_used, total_quote_used = ZERO, ZERO
                 quote_for_bands = max(ZERO, quote - self.reserve_quote)
                 base_for_bands = max(ZERO, base - self.reserve_base)
+                self.build_tick = current_tick   # EXP-016: resume_ladder rebuilds the same ranges from it
                 for config in (self.ladder_configs() if self.deployed_at_build > ZERO else []):
                     lower_price, upper_price, lower_tick, upper_tick = self.calculate_range(lp_market, current_tick, config[0], config[1])
                     base_amt, quote_amt = self.band_amounts(base_for_bands, quote_for_bands, config[2])
@@ -1248,6 +1252,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
         quote_for_bands = max(ZERO, final_quote - self.reserve_quote)
         base_for_bands = max(ZERO, final_base - self.reserve_base)
+        self.build_tick = current_tick   # EXP-016: resume_ladder rebuilds the same ranges from it
         for config in (self.ladder_configs() if self.deployed_at_build > ZERO else []):
             lower_price, upper_price, lower_tick, upper_tick = self.calculate_range(lp_market, current_tick, config[0], config[1])
             base_amt, quote_amt = self.band_amounts(base_for_bands, quote_for_bands, config[2])
