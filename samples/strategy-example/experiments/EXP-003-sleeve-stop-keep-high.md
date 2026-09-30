@@ -1,7 +1,7 @@
 # EXP-003: sleeve trailing stop whose high survives rebuilds (v6.3)
 
 - Version: v6.3
-- Jira: QUAN-___
+- Jira: [QUAN-837](https://ewetechnology.atlassian.net/browse/QUAN-837)
 - Status: dropped-at-dev
 - Pre-registration commit: 9afb72c · Result commit: 2daece3
 

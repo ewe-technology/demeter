@@ -1,7 +1,7 @@
 # EXP-006: half ladder — the base side stays spot, only the quote side is LP'd (v6.6)
 
 - Version: v6.6
-- Jira: QUAN-___
+- Jira: [QUAN-840](https://ewetechnology.atlassian.net/browse/QUAN-840)
 - Status: pre-registered
 - Pre-registration commit: ______ · Result commit: ______
 

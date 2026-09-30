@@ -1,7 +1,7 @@
 # EXP-007: half ladder only in an accelerating uptrend — EMA100 first and second differences (v6.7)
 
 - Version: v6.7 (Dino's idea: use the first / second difference as an indicator)
-- Jira: QUAN-___
+- Jira: [QUAN-841](https://ewetechnology.atlassian.net/browse/QUAN-841)
 - Status: pre-registered
 - Pre-registration commit: ______ · Result commit: ______
 

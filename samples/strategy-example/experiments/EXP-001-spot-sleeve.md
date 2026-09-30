@@ -1,7 +1,7 @@
 # EXP-001: spot trend sleeve (v6.1) — half of the deployed capital held as spot ETH instead of LP
 
 - Version: v6.1
-- Jira: QUAN-___
+- Jira: [QUAN-835](https://ewetechnology.atlassian.net/browse/QUAN-835)
 - Status: dropped-at-dev
 - Pre-registration commit: 78cc9af · Result commit: 535c505
 

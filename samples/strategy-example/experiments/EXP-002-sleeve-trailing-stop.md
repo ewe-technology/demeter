@@ -1,7 +1,7 @@
 # EXP-002: spot sleeve with a trailing stop (v6.2)
 
 - Version: v6.2
-- Jira: QUAN-___
+- Jira: [QUAN-836](https://ewetechnology.atlassian.net/browse/QUAN-836)
 - Status: dropped-at-dev
 - Pre-registration commit: 7e0d91f · Result commit: 5e84d3b
 

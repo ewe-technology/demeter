@@ -1,7 +1,7 @@
 # EXP-004: idle USDC earns the Aave supply rate (v6.4)
 
 - Version: v6.4
-- Jira: QUAN-___
+- Jira: [QUAN-838](https://ewetechnology.atlassian.net/browse/QUAN-838)
 - Status: dev-done (holdout paused)
 - Pre-registration commit: 58d94b1 · Result commit: 70d58bc
 

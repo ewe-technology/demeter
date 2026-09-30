@@ -1,7 +1,7 @@
 # EXP-005: refills as quote-only range orders instead of market buys (v6.5)
 
 - Version: v6.5
-- Jira: QUAN-___
+- Jira: [QUAN-839](https://ewetechnology.atlassian.net/browse/QUAN-839)
 - Status: dropped-at-dev
 - Pre-registration commit: fd0cbb1 · Result commit: cd2991d
 
