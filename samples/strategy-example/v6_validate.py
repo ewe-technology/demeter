@@ -45,6 +45,10 @@ FIRST_DATA = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": date(2021, 5, 6),
               "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": date(2021, 11, 2),
               "0x4585fe77225b41b697c938b018e2ac67ac5a20c0": date(2021, 11, 2),
               "0xd0b53d9277642d899df5c87a3966a349a798f224": date(2023, 12, 1)}
+# EXP-004: daily Aave USDC supply APR per pool's chain (samples/fetch_aave_rates.py)
+RATE_CSV = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": "../aave_usdc_ethereum_daily.csv",
+            "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": "../aave_usdc_ethereum_daily.csv",
+            "0xd0b53d9277642d899df5c87a3966a349a798f224": "../aave_usdc_base_daily.csv"}
 INIT_QUOTE = Decimal(100000)
 INIT_BY_POOL = {"0x4585fe77225b41b697c938b018e2ac67ac5a20c0": Decimal(2)}  # quote units; default INIT_QUOTE
 G_REMOVE, G_ADD, G_SWAP = 260_000, 450_000, 150_000
@@ -69,11 +73,12 @@ OPT = {"A": Variant("A_v6"),
        "B": Variant("B_spot_sleeve", {"SPOT_SLEEVE": Decimal("0.5")}),   # EXP-001
        "C": Variant("C_sleeve_stop", {"SPOT_SLEEVE": Decimal("0.5"), "SLEEVE_STOP": 0.80}),   # EXP-002
        "D": Variant("D_stop_keep_high", {"SPOT_SLEEVE": Decimal("0.5"), "SLEEVE_STOP": 0.80,
-                                         "SLEEVE_HIGH_KEEP": True})}   # EXP-003
+                                         "SLEEVE_HIGH_KEEP": True}),   # EXP-003
+       "E": Variant("E_cash_yield", {"CASH_APR": "pool"})}   # EXP-004: idle USDC earns the pool chain's Aave rate
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR"]}
 
 
 def sens_grid():
@@ -225,6 +230,8 @@ def run_variant(args):
     t0 = time.time()
     # pool workers are reused: restore every default before applying this variant's overrides
     for k, v in {**ENGINE_DEFAULTS, **variant.engine}.items():
+        if k == "CASH_APR" and v == "pool":
+            v = pd.read_csv(RATE_CSV[POOL], parse_dates=["date"]).set_index("date")["apr"].sort_index()
         setattr(V, k, v)
     daily = daily_frame()
     window = daily.loc[pd.Timestamp(start):]
@@ -249,7 +256,7 @@ def run_variant(args):
             "sharpe_ratio": float(m["sharpe_ratio"]), "impact": float(c["impact"].sum()),
             "gas_if_mainnet": float(c["gas"].sum()), "swap_notional": float(c["notional"].sum()),
             "max_swap_notional": float(c["notional"].max()), "rebuilds": len(c),
-            "fees": float(s.total_fee), "sleeve_stops": s.sleeve_stops, "lp_net_value": float(s.final_lp_net_value),
+            "fees": float(s.total_fee), "sleeve_stops": s.sleeve_stops, "interest": float(s.total_interest), "lp_net_value": float(s.final_lp_net_value),
             "mean_F": float(window["F"].mean()) if variant.deploy == V.DEPLOY_SIGNAL else 1.0,
             "benchmark_return": float(m["benchmark_rate"]), "secs": round(time.time() - t0)}
 

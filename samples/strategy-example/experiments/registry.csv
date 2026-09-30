@@ -3,3 +3,4 @@ EXP-000,2026-09-29,v6 baseline (defense_v6 as is),QUAN-834,baseline,,,,,0.854,0.
 EXP-001,2026-09-30,spot trend sleeve: half of F x equity as spot ETH (v6.1),,dropped-at-dev,8.54,4/5,,,1.980,0.261,-0.336,78cc9af,535c505,EXP-001-spot-sleeve.md
 EXP-002,2026-09-30,spot sleeve with a 0.80 trailing stop (v6.2),,dropped-at-dev,10.67,4/5,,,1.821,0.246,-0.324,7e0d91f,5e84d3b,EXP-002-sleeve-trailing-stop.md
 EXP-003,2026-09-30,sleeve stop whose high survives rebuilds (v6.3),,dropped-at-dev,10.67,4/5,,,1.823,0.246,-0.324,9afb72c,2daece3,EXP-003-sleeve-stop-keep-high.md
+EXP-004,2026-09-30,idle USDC earns the Aave supply rate (v6.4),,pre-registered,,,,,,,,,,EXP-004-idle-cash-yield.md

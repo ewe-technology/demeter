@@ -114,6 +114,8 @@ SPOT_SLEEVE = Decimal("0")
 SLEEVE_STOP: float | None = None
 # EXP-003 (v6.3): the stop's high survives range-exit / follow rebuilds; only a (re-)arm resets it (False = v6.2)
 SLEEVE_HIGH_KEEP = False
+# EXP-004 (v6.4): daily supply APR (float, indexed by UTC day) earned on idle quote; None = cash earns nothing
+CASH_APR: pd.Series | None = None
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -404,6 +406,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.sleeve_stopped = False
         self.stop_low_f: Decimal | None = None  # lowest F since the stop; a rise above it re-arms
         self.sleeve_stops = 0
+        self.total_interest = ZERO       # CASH_APR: lending interest earned on idle quote
         self.force_rebuild = False       # set by follow_work to push rescale_work past its range check
         self.follow_rebuild_count = 0
         self.fee_log: List[dict] = []    # daily: collected fees (quote) + pending fees still in the positions
@@ -484,6 +487,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             self.add_column(self.utils.market_key, "usdc_price", self.usdc_prices)
 
         self.triggers.append(PeriodTrigger(time_delta=self.params.rescale_frequency.value, do=self.rescale_work))
+        if CASH_APR is not None:
+            self.triggers.append(PeriodTrigger(time_delta=timedelta(days=1), do=self.accrue_cash))
         if self.signal_deploy:  # spec sheet 2.3: judged once a day on the previous close
             self.triggers.append(PeriodTrigger(time_delta=timedelta(days=1), do=self.follow_work))
         self.triggers.append(PeriodTrigger(time_delta=timedelta(days=1), do=self.log_fees))
@@ -602,6 +607,22 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             self.rescale_work(row_data)
         finally:
             self.force_rebuild = False
+
+    def accrue_cash(self, row_data: Snapshot):
+        """EXP-004: one day of lending interest on every quote token held outside the ladder (reserve, collected
+        fees, earlier interest), at the previous day's supply APR. Booked as income like the fees: not deployed."""
+        if self.starting_tick is None:
+            return
+        day = pd.Timestamp(row_data.timestamp - timedelta(days=1)).normalize()
+        apr = CASH_APR.asof(day)
+        if pd.isna(apr) or apr <= 0:
+            return
+        held = self.broker.get_token_balance(self.gp.quote_token)
+        interest = held * Decimal(str(apr)) / Decimal(365)
+        if interest > ZERO:
+            self.broker.add_to_balance(self.gp.quote_token, interest)
+            self.total_quote_fee += interest
+            self.total_interest += interest
 
     def sleeve_stop_work(self, row_data: Snapshot, target: Decimal, free_base: Decimal):
         """EXP-002: trailing stop on the spot sleeve, and its re-arm (refill above the post-stop low F, or a new high)."""
