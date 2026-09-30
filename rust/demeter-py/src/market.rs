@@ -400,6 +400,13 @@ impl PyMarketCore {
     fn position_count(&self) -> usize {
         self.inner.borrow().positions.len()
     }
+    /// remove a position entry (python dict pop semantics: nothing goes back to the broker)
+    fn drop_position(&self, lower: i32, upper: i32) -> bool {
+        self.inner
+            .borrow_mut()
+            .drop_position(&pos(lower, upper))
+            .is_some()
+    }
     fn has_position(&self, lower: i32, upper: i32) -> bool {
         self.inner
             .borrow()

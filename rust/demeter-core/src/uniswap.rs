@@ -391,6 +391,12 @@ impl UniLpMarket {
         Ok(&mut self.positions[i].1)
     }
 
+    /// python `market.positions.pop(key)` / `del market.positions[key]`: forget the position
+    /// without returning its liquidity or fees to the broker. Returns the removed position.
+    pub fn drop_position(&mut self, info: &PositionInfo) -> Option<Position> {
+        self.position_index(info).map(|i| self.positions.remove(i).1)
+    }
+
     fn token_amounts(&self, pos: &Position, sqrt_price: &SqrtPrice, liquidity: u128) -> (Dec, Dec) {
         if liquidity == 0 {
             return (d0(), d0());

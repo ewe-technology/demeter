@@ -22,6 +22,7 @@ from ._typing import (
     TokenInfo,
     UniLpBalance,
     PositionInfo,
+    Position,
     UniDescription,
     UniswapMarketStatus,
     PositionStatus,
@@ -98,8 +99,21 @@ class PositionsView(Mapping):
         return {k: PositionView(self._core, k) for k in self}
 
     def __delitem__(self, key):
-        # python code may `del market.positions[key]`; emulate by zeroing the position out
-        raise NotImplementedError("positions are removed by collect_fee / remove_liquidity")
+        # like deleting from the python dict: the entry is forgotten, nothing goes back to the broker
+        if not self._core.drop_position(int(key[0]), int(key[1])):
+            raise KeyError(key)
+
+    _MISSING = object()
+
+    def pop(self, key, default=_MISSING):
+        """``dict.pop``: remove the position and return a detached ``Position`` copy of it"""
+        if key in self:
+            value = Position(*self._core.position(int(key[0]), int(key[1])))
+            self._core.drop_position(int(key[0]), int(key[1]))
+            return value
+        if default is PositionsView._MISSING:
+            raise KeyError(key)
+        return default
 
     def __repr__(self):
         return "{" + ", ".join(f"{k}: {self[k]}" for k in self) + "}"
