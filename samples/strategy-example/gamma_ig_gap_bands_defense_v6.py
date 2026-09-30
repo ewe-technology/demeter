@@ -131,6 +131,9 @@ HALF_WHEN_ACCEL = False
 # Applied to the frame by the caller (v6_validate.daily_frame); the strategy itself reads the gated F. False = v6.
 LVR_GATE = False
 LVR_GATE_DAYS, LVR_GATE_MIN = 7, 1.0
+# EXP-013 (v6.10): at every build shift the ladder's reaches SKEW toward the EMA100 trend: last daily close > EMA100
+# -> lower reach - SKEW, upper reach + SKEW; otherwise the mirror. Read once per build (resolve_skew). 0 = v6.
+SKEW = Decimal("0")
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -527,15 +530,48 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         # [lower tick offset, upper tick offset, share of the balance to place]
         self.shape = shape
         self.upper_ratio, self.lower_ratio, self.half_gap = upper_ratio, lower_ratio, half_gap
-        # build_gap_bands reaches +upper_ratio on positive tick offsets and -lower_ratio on negative ones.
-        # When token0 is the quote (USDC/WETH mainnet) a higher tick is a LOWER base price, so the positive
-        # side must reach "-lower_ratio" and the negative side "+upper_ratio". Re-express both in the other
-        # side's formula: 1+u' = 1/(1-l) and 1/(1-l') = 1+u. Swapping the ratios alone is a no-op when they
-        # are equal, which is why the first dnprice rerun still came out as +102%/-34%. MIRROR_TICKS is symmetric.
-        if lower_ratio != MIRROR_TICKS and _utils.lp_market.pool_info.is_token0_quote:
-            upper_ratio, lower_ratio = lower_ratio / (ONE - lower_ratio), upper_ratio / (ONE + upper_ratio)
-        self.shape_config: List[List] = build_shape_config(
-            shape, upper_ratio, lower_ratio, _utils.params.tick_spacing, half_gap)
+        quote_is_0, spacing = _utils.lp_market.pool_info.is_token0_quote, _utils.params.tick_spacing
+
+        def config(up: Decimal, lo: Decimal | str) -> List[List]:
+            # build_gap_bands reaches +upper_ratio on positive tick offsets and -lower_ratio on negative ones.
+            # When token0 is the quote (USDC/WETH mainnet) a higher tick is a LOWER base price, so the positive
+            # side must reach "-lower_ratio" and the negative side "+upper_ratio". Re-express both in the other
+            # side's formula: 1+u' = 1/(1-l) and 1/(1-l') = 1+u. Swapping the ratios alone is a no-op when they
+            # are equal, which is why the first dnprice rerun still came out as +102%/-34%. MIRROR_TICKS is symmetric.
+            if lo != MIRROR_TICKS and quote_is_0:
+                up, lo = lo / (ONE - lo), up / (ONE + up)
+            return build_shape_config(shape, up, lo, spacing, half_gap)
+
+        # EXP-013: one config per trend state, "flat" is v6's; resolve_skew picks the state at every build.
+        self.shape_configs: Dict[str, List[List]] = {"flat": config(upper_ratio, lower_ratio)}
+        if SKEW > ZERO:
+            if lower_ratio == MIRROR_TICKS:
+                raise ValueError("SKEW needs a percentage lower_ratio")
+            self.shape_configs["up"] = config(upper_ratio + SKEW, lower_ratio - SKEW)
+            self.shape_configs["down"] = config(upper_ratio - SKEW, lower_ratio + SKEW)
+        self.skew_state = "flat"
+        self.skew_builds = {"up": 0, "down": 0}
+
+    @property
+    def shape_config(self) -> List[List]:
+        """[lower tick offset, upper tick offset, share] rows of the ladder the current skew state places."""
+        return self.shape_configs[self.skew_state]
+
+    def resolve_skew(self, timestamp: datetime) -> None:
+        """EXP-013: pick the reaches of the ladder built at `timestamp` from the s rule's trend sign (last completed
+        daily close vs EMA100); the state then stays for the life of that ladder."""
+        if SKEW <= ZERO or self.daily_ema is None:
+            self.skew_state = "flat"
+            return
+        try:
+            _, day, close, ema = ema_share_for(self.daily_ema, timestamp)
+        except KeyError:
+            self.skew_state = "flat"
+            return
+        self.skew_state = "up" if close > ema else "down"
+        self.skew_builds[self.skew_state] += 1
+        print(f"{timestamp.strftime('%Y-%m-%d %H:%M')} skew {self.skew_state} on {day.date()} "
+              f"({'+' if self.skew_state == 'up' else '-'}{float(SKEW * HUNDRED):g} pts)")
 
 
     def initialize(self):
@@ -863,6 +899,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             self.positions = []
             rebalance_base_fee, rebalance_quote_fee = ZERO, ZERO
 
+            self.resolve_skew(row_data.timestamp)
             lowest, highest = self.shape_config[0][0], self.shape_config[-1][1]
             (_lower_price, _upper_price, lower_boundary, upper_boundary) = self.calculate_range(lp_market, current_tick, lowest, highest)
             try:
@@ -1023,6 +1060,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         current_price = row_data.prices[self.gp.base_token.name]
 
 
+        self.resolve_skew(row_data.timestamp)
         lowest, highest = self.shape_config[0][0], self.shape_config[-1][1]
         (_lower_price, _upper_price, lower_boundary, upper_boundary) = self.calculate_range(lp_market, current_tick, lowest, highest)
         self.starting_tick = current_tick

@@ -83,11 +83,12 @@ OPT = {"A": Variant("A_v6"),
        "F": Variant("F_refill_order", {"REFILL_ORDER": True}),   # EXP-005
        "G": Variant("G_half_ladder", {"HALF_LADDER": True}),   # EXP-006
        "H": Variant("H_half_when_accel", {"HALF_WHEN_ACCEL": True}),   # EXP-007
-       "I": Variant("I_lvr_gate", {"LVR_GATE": True})}   # EXP-012: F = 0 while 7-day pool fees / LVR < 1
+       "I": Variant("I_lvr_gate", {"LVR_GATE": True}),   # EXP-012: F = 0 while 7-day pool fees / LVR < 1
+       "J": Variant("J_trend_skew", {"SKEW": Decimal("0.05")})}   # EXP-013: -15/+25 above EMA100, -25/+15 below
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW"]}
 
 
 def sens_grid():
@@ -273,6 +274,7 @@ def run_variant(args):
             "mean_F": float(window["F"].mean()) if variant.deploy == V.DEPLOY_SIGNAL else 1.0,
             "gate_closed_days": int(((window["F_raw"] > 0) & (window["F"] == 0)).sum()) if "F_raw" in window else 0,
             "median_R": float(window["R"].median()) if "R" in window else float("nan"),
+            "skew_up_builds": s.skew_builds["up"], "skew_down_builds": s.skew_builds["down"],
             "benchmark_return": float(m["benchmark_rate"]), "secs": round(time.time() - t0)}
 
 
