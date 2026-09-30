@@ -3,7 +3,7 @@
 - Version: v6.4
 - Jira: [QUAN-838](https://ewetechnology.atlassian.net/browse/QUAN-838)
 - Status: holdout-pass
-- Pre-registration commit: 58d94b1 · Result commit: 70d58bc
+- Pre-registration commit: 58d94b1 · Result commit: 70d58bc (dev), f1d91f6 (holdout)
 
 ## Hypothesis
 
