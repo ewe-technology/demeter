@@ -1,9 +1,9 @@
 # EXP-022: LP fees redeployed into the ladder instead of paid out (v6.17)
 
 - Version: v6.17
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: [QUAN-873](https://ewetechnology.atlassian.net/browse/QUAN-873)
+- Status: dropped-at-dev
+- Pre-registration commit: 54e6027 · Result commit: ______
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01: no perps, no lending). Fee compounding was tried once before
   the experiment log restarted and "discarded on purpose"; there is no record of its numbers. Dino approved
   re-testing it as a backtest only (whether the product pays rewards out is a separate decision).
@@ -45,8 +45,30 @@ in the same invocations. No cash yield, no perp.
 
 ## Result
 
-Pending.
+Development (A and Q per invocation):
+
+| test | v6 | this (Q) | gain | max DD v6 → this |
+|---|---|---|---|---|
+| 2022 | +7.6% | +7.6% | 0.0 | 21.5% → 23.0% |
+| 2023 | +32.2% | +34.7% | +2.5 | 13.9% → 15.7% |
+| 2024 | +36.4% | +39.5% | +3.1 | 26.7% → 29.9% |
+| 2025 | +16.3% | +15.9% | −0.4 | 26.9% → 30.5% |
+| 2026-01..09-17 | +18.7% | +19.2% | +0.5 | 12.0% → 12.4% |
+
+Wins 3/5, median +0.46 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees |
+|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | −22.8% | 0.73 | 0.61 | $86.5k |
+| ETH this | +135.4% | 19.9% | −32.5% | 0.77 | 0.61 | $132.5k |
+| WBTC v6 | +85.6% | 17.3% | −17.8% | 1.01 | 0.97 | $61.7k |
+| WBTC this | +108.4% | 20.9% | −21.5% | 1.03 | 0.97 | |
+
+Verdict: **dropped-at-dev** — ETH max DD 9.7 pts deeper (limit 3) and WBTC 3.7 pts deeper; Calmar unchanged on
+both (0.61 / 0.97). Compounding the fees grows the ladder in proportion to equity, so return and drawdown scale
+together: it is leverage on v6's own risk/return, not an improvement of it. (In yearly-reset segments the effect is
+small because fees have less than a year to compound.) The holdout was not run.
 
 ## Deviations
 
-None so far.
+None.

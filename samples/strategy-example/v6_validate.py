@@ -48,11 +48,16 @@ POOLS = {
     # EXP-021 holdout: mainnet LINK/WETH 0.3% and UNI/WETH 0.3% (token0 the alt, WETH the quote / numeraire)
     "0xa6cc3c2531fdaa6ae1a3ca84c2855806728693e8": (("link", 18), ("eth", 18), 0, 0.3, "../holdout-data"),
     "0x1d42064fc4beb5f8aaf85f4617ae8b3b5b8bd801": (("uni", 18), ("eth", 18), 0, 0.3, "../holdout-data"),
+    # EXP-022 holdout: Arbitrum WETH/USDC 0.05% (native USDC; files from the team's Demeter S3 bucket) and mainnet
+    # AAVE/WETH 0.3%. Gas is still priced as mainnet (reported only).
+    "0xc6962004f452be9203591991d15f6b388e09e8d0": (("eth", 18), ("usdc", 6), 0, 0.05, "../holdout-data"),
+    "0x5ab53ee1d50eef2c1dd3d5402789cd27bb52c1bb": (("aave", 18), ("eth", 18), 0, 0.3, "../holdout-data"),
 }
 # the EMA warm-up needs a year of history before the pool existed: read ETH/USD from the mainnet pool
 WARM_POOL = {"0xd0b53d9277642d899df5c87a3966a349a798f224": "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
              "0xfbb6eed8e7aa03b138556eedaf5d271a5e1e43ef": "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35",
-             "0x6c561b446416e1a00e8e93e221854d6ea4171372": "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"}
+             "0x6c561b446416e1a00e8e93e221854d6ea4171372": "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
+             "0xc6962004f452be9203591991d15f6b388e09e8d0": "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"}
 FIRST_DATA = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": date(2021, 5, 6),
               "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": date(2021, 11, 2),
               "0x4585fe77225b41b697c938b018e2ac67ac5a20c0": date(2021, 11, 2),
@@ -61,7 +66,9 @@ FIRST_DATA = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": date(2021, 5, 6),
               "0x6c561b446416e1a00e8e93e221854d6ea4171372": date(2024, 1, 1),
               "0xfad57d2039c21811c8f2b5d5b65308aa99d31559": date(2021, 6, 1),
               "0xa6cc3c2531fdaa6ae1a3ca84c2855806728693e8": date(2021, 6, 1),
-              "0x1d42064fc4beb5f8aaf85f4617ae8b3b5b8bd801": date(2021, 6, 1)}
+              "0x1d42064fc4beb5f8aaf85f4617ae8b3b5b8bd801": date(2021, 6, 1),
+              "0xc6962004f452be9203591991d15f6b388e09e8d0": date(2023, 6, 9),
+              "0x5ab53ee1d50eef2c1dd3d5402789cd27bb52c1bb": date(2021, 6, 1)}
 # EXP-004: daily Aave USDC supply APR per pool's chain (samples/fetch_aave_rates.py)
 RATE_CSV = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": "../aave_usdc_ethereum_daily.csv",
             "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": "../aave_usdc_ethereum_daily.csv",
@@ -91,7 +98,8 @@ INIT_QUOTE = Decimal(100000)
 INIT_BY_POOL = {"0x4585fe77225b41b697c938b018e2ac67ac5a20c0": Decimal(2),  # quote units; default INIT_QUOTE
                 "0xfad57d2039c21811c8f2b5d5b65308aa99d31559": Decimal(10000),   # thin pool: keep the fee share small
                 "0xa6cc3c2531fdaa6ae1a3ca84c2855806728693e8": Decimal(40),      # EXP-021: 40 WETH ≈ $100k
-                "0x1d42064fc4beb5f8aaf85f4617ae8b3b5b8bd801": Decimal(40)}
+                "0x1d42064fc4beb5f8aaf85f4617ae8b3b5b8bd801": Decimal(40),
+                "0x5ab53ee1d50eef2c1dd3d5402789cd27bb52c1bb": Decimal(40)}
 G_REMOVE, G_ADD, G_SWAP = 260_000, 450_000, 150_000
 GAS_CSV = "../gas_ethereum_hourly.csv"
 ETH_USD_CSV = "../eth_usd_hourly.csv"
@@ -129,11 +137,12 @@ OPT = {"A": Variant("A_v6"),
        "O": Variant("O_bear_short_nocrash", {"BEAR_SHORT": Decimal("0.5"), "HEDGE_FUNDING": "pool",
                                              "BEAR_CRASH_SIGMA": 2.0}),   # EXP-020: M without entries on 2-sigma crash days
        "P": Variant("P_bear_short_nocrash_2leg", {"BEAR_SHORT": Decimal("0.5"), "HEDGE_FUNDING": "pool",
-                                                  "BEAR_CRASH_SIGMA": 2.0, "HEDGE_FEE": Decimal("0.001")})}   # EXP-021: O, synthetic ALT/ETH perp (two taker legs)
+                                                  "BEAR_CRASH_SIGMA": 2.0, "HEDGE_FEE": Decimal("0.001")}),   # EXP-021: O, synthetic ALT/ETH perp (two taker legs)
+       "Q": Variant("Q_fee_compound", {"FEE_COMPOUND": True})}   # EXP-022: collected fees redeployed at the next build
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND"]}
 
 
 def sens_grid():

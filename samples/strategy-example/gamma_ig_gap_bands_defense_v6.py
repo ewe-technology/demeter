@@ -159,6 +159,9 @@ BEAR_SHORT_LOOKBACK = 365   # days, Moskowitz-Ooi-Pedersen 12-month time-series 
 # 2016); a short already open is kept, entry waits for the next non-crash day with the condition still on. 0 = v6.14.
 BEAR_CRASH_SIGMA = 0.0
 BEAR_CRASH_WINDOW = 30
+# EXP-022 (v6.17): collected LP fees (sold for quote) stay in the book: F x equity and every rebuild include them, so
+# they are redeployed into the ladder at the next build. False = v6 (fees are paid out: held aside as idle quote).
+FEE_COMPOUND = False
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -757,8 +760,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         lp_market: UniLpMarketV2 = self.broker.markets[self.utils.market_key]
         price = row_data.prices[self.gp.base_token.name]
         lp_value = lp_market.get_market_balance().net_value if len(lp_market.positions) > 0 else ZERO
-        free_base = lp_market.broker.get_token_balance(self.gp.base_token) - self.total_base_fee
-        free_quote = lp_market.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
+        free_base = lp_market.broker.get_token_balance(self.gp.base_token) - self.fee_reserve_base()
+        free_quote = lp_market.broker.get_token_balance(self.gp.quote_token) - self.fee_reserve_quote()
         equity = lp_value + free_base * price + free_quote
         if equity <= ZERO:
             return
@@ -811,7 +814,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         """EXP-005: put `amount` of quote into one position spanning the ladder's quote side (current price down to
         -lower_ratio): it holds only quote now and turns into base only if the price comes down into it."""
         lp_market: UniLpMarketV2 = self.broker.markets[self.utils.market_key]
-        free_quote = self.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
+        free_quote = self.broker.get_token_balance(self.gp.quote_token) - self.fee_reserve_quote()
         amount = min(amount, free_quote)
         if amount <= ZERO:
             return False
@@ -903,8 +906,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         price = row_data.prices[self.gp.base_token.name]
         placed: Dict[PositionInfo, bool] = {}
         for _pass in range(2):
-            free_base = self.broker.get_token_balance(self.gp.base_token) - self.total_base_fee
-            free_quote = self.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
+            free_base = self.broker.get_token_balance(self.gp.base_token) - self.fee_reserve_base()
+            free_quote = self.broker.get_token_balance(self.gp.quote_token) - self.fee_reserve_quote()
             if free_base * price + free_quote < Decimal(1):
                 break
             for config in self.ladder_configs():
@@ -1032,6 +1035,13 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         total = base_value + quote_used
         return base_value / total if total > ZERO else ZERO
 
+    def fee_reserve_base(self) -> Decimal:
+        """Base held back from the book as paid-out rewards; EXP-022: nothing is held back when fees compound."""
+        return ZERO if FEE_COMPOUND else self.total_base_fee
+
+    def fee_reserve_quote(self) -> Decimal:
+        return ZERO if FEE_COMPOUND else self.total_quote_fee
+
     def collect_fee_as_quote(self, lp_market: UniLpMarketV2, position_info) -> tuple[Decimal, Decimal]:
         """Collect a position's fees and sell the base part for quote (spec sheet: rewards are paid in USDC).
         Returns (base fee collected, quote credited incl. the sold base). The sale pays the pool fee."""
@@ -1049,8 +1059,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         tick sits inside one side band, which then takes a sliver of the other side's token; without
         the clamp the last band on that side overdraws by that sliver.
         """
-        free_base = self.broker.get_token_balance(self.gp.base_token) - self.total_base_fee
-        free_quote = self.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
+        free_base = self.broker.get_token_balance(self.gp.base_token) - self.fee_reserve_base()
+        free_quote = self.broker.get_token_balance(self.gp.quote_token) - self.fee_reserve_quote()
         return max(ZERO, min(base * share, free_base)), max(ZERO, min(quote * share, free_quote))
 
     def check_rebalance(self, lp_market: UniLpMarketV2, current_tick: int) -> bool:
@@ -1129,8 +1139,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             (_lower_price, _upper_price, lower_boundary, upper_boundary) = self.calculate_range(lp_market, current_tick, lowest, highest)
             try:
 
-                # to_swap_base = lp_market.broker.get_token_balance(self.gp.base_token) - self.total_base_fee
-                # to_swap_quote = lp_market.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
+                # to_swap_base = lp_market.broker.get_token_balance(self.gp.base_token) - self.fee_reserve_base()
+                # to_swap_quote = lp_market.broker.get_token_balance(self.gp.quote_token) - self.fee_reserve_quote()
 
                 # # base_to_swap, quote_to_swap = self.calculate_swap_amount(current_tick, new_tick_lower, new_tick_upper, to_swap_base, to_swap_quote)
                 # # swapped_base, swapped_quote, base_used_fee, quote_used_fee = self.execute_swap(lp_market, base_to_swap, quote_to_swap)
@@ -1140,8 +1150,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
                 # self.total_base_swap_fee += rebalance_base_fee if rebalance_base_fee is not None else ZERO
                 # self.total_quote_swap_fee += rebalance_quote_fee if rebalance_quote_fee is not None else ZERO
 
-                to_swap_base = lp_market.broker.get_token_balance(self.gp.base_token) - self.total_base_fee
-                to_swap_quote = lp_market.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
+                to_swap_base = lp_market.broker.get_token_balance(self.gp.base_token) - self.fee_reserve_base()
+                to_swap_quote = lp_market.broker.get_token_balance(self.gp.quote_token) - self.fee_reserve_quote()
 
                 base_to_swap, quote_to_swap = self.pre_placement_swap(lp_market, current_tick, lower_boundary, upper_boundary, to_swap_base, to_swap_quote, row_data.timestamp)
                 swapped_base, swapped_quote, rebalance_base_fee, rebalance_quote_fee = self.execute_swap(lp_market, base_to_swap, quote_to_swap)
@@ -1149,8 +1159,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
                 self.total_base_swap_fee += rebalance_base_fee if rebalance_base_fee is not None else ZERO
                 self.total_quote_swap_fee += rebalance_quote_fee if rebalance_quote_fee is not None else ZERO
 
-                base = lp_market.broker.get_token_balance(self.gp.base_token) - self.total_base_fee
-                quote = lp_market.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
+                base = lp_market.broker.get_token_balance(self.gp.base_token) - self.fee_reserve_base()
+                quote = lp_market.broker.get_token_balance(self.gp.quote_token) - self.fee_reserve_quote()
 
 
                 # if self.params.compound:
@@ -1183,8 +1193,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
                 #     self.rescale_left_too_much_count += 1
                 #     print("rescale_work left too much: left_base", base_left_ratio, "left_quote", quote_left_ratio)
 
-                left_base = lp_market.broker.get_token_balance(self.gp.base_token) - self.total_base_fee
-                left_quote = lp_market.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee
+                left_base = lp_market.broker.get_token_balance(self.gp.base_token) - self.fee_reserve_base()
+                left_quote = lp_market.broker.get_token_balance(self.gp.quote_token) - self.fee_reserve_quote()
 
                 # print(f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} orig base: {to_swap_base}, orig quote: {to_swap_quote}, base_to_swap: {base_to_swap}, quote_to_swap: {quote_to_swap},"
                 #       f" swapped base: {swapped_base}, quote: {swapped_quote}, final base: {base}, quote: {quote}, base_used: {base_used}, quote_used: {quote_used}, left_base: {left_base}, left_quote: {left_quote}")
