@@ -56,7 +56,7 @@ FIRST_DATA = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": date(2021, 5, 6),
               "0xd0b53d9277642d899df5c87a3966a349a798f224": date(2023, 12, 1),
               "0xfbb6eed8e7aa03b138556eedaf5d271a5e1e43ef": date(2024, 10, 1),
               "0x6c561b446416e1a00e8e93e221854d6ea4171372": date(2024, 1, 1),
-              "0xfad57d2039c21811c8f2b5d5b65308aa99d31559": date(2021, 5, 5)}
+              "0xfad57d2039c21811c8f2b5d5b65308aa99d31559": date(2021, 6, 1)}
 # EXP-004: daily Aave USDC supply APR per pool's chain (samples/fetch_aave_rates.py)
 RATE_CSV = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": "../aave_usdc_ethereum_daily.csv",
             "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": "../aave_usdc_ethereum_daily.csv",
