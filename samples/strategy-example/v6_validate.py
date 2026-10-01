@@ -138,11 +138,12 @@ OPT = {"A": Variant("A_v6"),
                                              "BEAR_CRASH_SIGMA": 2.0}),   # EXP-020: M without entries on 2-sigma crash days
        "P": Variant("P_bear_short_nocrash_2leg", {"BEAR_SHORT": Decimal("0.5"), "HEDGE_FUNDING": "pool",
                                                   "BEAR_CRASH_SIGMA": 2.0, "HEDGE_FEE": Decimal("0.001")}),   # EXP-021: O, synthetic ALT/ETH perp (two taker legs)
-       "Q": Variant("Q_fee_compound", {"FEE_COMPOUND": True})}   # EXP-022: collected fees redeployed at the next build
+       "Q": Variant("Q_fee_compound", {"FEE_COMPOUND": True}),   # EXP-022: collected fees redeployed at the next build
+       "R": Variant("R_recentre_up", {"RECENTRE_UP": Decimal("0.1")})}   # EXP-023: recentre at +10% from the build price
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP"]}
 
 
 def sens_grid():
@@ -347,7 +348,7 @@ def run_variant(args):
             "hedge_pnl": float(s.hedge_pnl), "hedge_funding": float(s.hedge_funding), "hedge_fees": float(s.hedge_fees),
             "hedge_trades": s.hedge_trades, "hedge_max_ratio": s.hedge_max_ratio,
             "hedge_min_cash": float(s.hedge_min_cash) if s.hedge_min_cash is not None else float("nan"),
-            "pauses": s.pauses, "pause_minutes": s.pause_minutes, "bear_short_days": s.bear_short_days,
+            "pauses": s.pauses, "pause_minutes": s.pause_minutes, "bear_short_days": s.bear_short_days, "recentres": s.recentre_count,
             "benchmark_return": float(m["benchmark_rate"]), "secs": round(time.time() - t0)}
 
 

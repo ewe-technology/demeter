@@ -162,6 +162,11 @@ BEAR_CRASH_WINDOW = 30
 # EXP-022 (v6.17): collected LP fees (sold for quote) stay in the book: F x equity and every rebuild include them, so
 # they are redeployed into the ladder at the next build. False = v6 (fees are paid out: held aside as idle quote).
 FEE_COMPOUND = False
+# EXP-023 (v6.18): also rebuild (recentre) the ladder when the base price is RECENTRE_UP above the price of the last
+# build, i.e. halfway to the ladder's upper edge, instead of waiting for it to leave the ±20% span. Upside only:
+# LP impermanent loss grows with the square of the move, so two half-width legs give up about half of one full-width
+# leg in a trend. Judged at the same daily 00:00 check as the range exit. 0 = v6.
+RECENTRE_UP = Decimal("0")
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -569,6 +574,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.paused_until: datetime | None = None
         self.paused_bands: list = []   # (PositionInfo, base, quote) that came out of the pulled ladder
         self.build_tick: int | None = None
+        self.build_price: Decimal | None = None   # EXP-023: base price at the last build
+        self.recentre_count = 0                   # EXP-023: rebuilds triggered by the early upside recentre
         self.pauses = 0
         self.pause_minutes = 0
         # self.pa_upper: List[PriceActionLog] = []
@@ -1097,6 +1104,10 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         try:
             current_tick = lp_market.price_to_raw_tick(current_price)
             allow_rescale = self.force_rebuild or self.check_rebalance(lp_market, current_tick)
+            if not allow_rescale and RECENTRE_UP and self.build_price and \
+                    current_price >= self.build_price * (ONE + RECENTRE_UP):   # EXP-023: recentre early on the way up
+                allow_rescale = True
+                self.recentre_count += 1
 
             # Check if rescaling is allowed
             if not allow_rescale:
@@ -1170,7 +1181,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
                 total_base_used, total_quote_used = ZERO, ZERO
                 quote_for_bands = max(ZERO, quote - self.reserve_quote)
                 base_for_bands = max(ZERO, base - self.reserve_base)
-                self.build_tick = current_tick   # EXP-016: resume_ladder rebuilds the same ranges from it
+                self.build_tick, self.build_price = current_tick, row_data.prices[self.gp.base_token.name]   # EXP-016 / EXP-023
                 for config in (self.ladder_configs() if self.deployed_at_build > ZERO else []):
                     lower_price, upper_price, lower_tick, upper_tick = self.calculate_range(lp_market, current_tick, config[0], config[1])
                     base_amt, quote_amt = self.band_amounts(base_for_bands, quote_for_bands, config[2])
@@ -1317,7 +1328,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
         quote_for_bands = max(ZERO, final_quote - self.reserve_quote)
         base_for_bands = max(ZERO, final_base - self.reserve_base)
-        self.build_tick = current_tick   # EXP-016: resume_ladder rebuilds the same ranges from it
+        self.build_tick, self.build_price = current_tick, row_data.prices[self.gp.base_token.name]   # EXP-016 / EXP-023
         for config in (self.ladder_configs() if self.deployed_at_build > ZERO else []):
             lower_price, upper_price, lower_tick, upper_tick = self.calculate_range(lp_market, current_tick, config[0], config[1])
             base_amt, quote_amt = self.band_amounts(base_for_bands, quote_for_bands, config[2])
