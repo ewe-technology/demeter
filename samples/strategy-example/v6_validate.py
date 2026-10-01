@@ -155,7 +155,11 @@ OPT = {"A": Variant("A_v6"),
        "AG": Variant("AG_exit_confirm", {"EXIT_CONFIRM": 2}),   # EXP-044: range exit needs 2 consecutive daily checks
        "AH": Variant("AH_weekly_F", {"F_WEEKLY": True}),   # EXP-045: F read once a week (Sundays)
        "AI": Variant("AI_share_50", {"SHARE_ABOVE_EMA": Decimal("0.5")}),   # EXP-046: ETH share 50% in both trend states
-       "AJ": Variant("AJ_f_floor", {"F_FLOOR": 0.25})}   # EXP-047: F never below 25%
+       "AJ": Variant("AJ_f_floor", {"F_FLOOR": 0.25}),   # EXP-047: F never below 25%
+       "AK": Variant("AK_s50_confirm", {"SHARE_ABOVE_EMA": Decimal("0.5"), "EXIT_CONFIRM": 2}),   # EXP-048: EXP-046 + EXP-044
+       "AL": Variant("AL_s50_volwidth", {"SHARE_ABOVE_EMA": Decimal("0.5"), "WIDTH_VOL": True}),   # EXP-049: EXP-046 + EXP-030
+       "AM": Variant("AM_s50_consensus", {"SHARE_ABOVE_EMA": Decimal("0.5"), "REGIME": "max_ed"}),   # EXP-050: EXP-046 + EXP-031
+       "AN": Variant("AN_s50_confirm_volwidth", {"SHARE_ABOVE_EMA": Decimal("0.5"), "EXIT_CONFIRM": 2, "WIDTH_VOL": True})}   # EXP-051: EXP-046 + 044 + 030
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
