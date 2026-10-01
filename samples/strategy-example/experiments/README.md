@@ -40,3 +40,20 @@ definition of done is in the repo's `CLAUDE.md`.
     cd samples/strategy-example
     PYTHONPATH=../.. python v6_validate.py <pool> <start> <end> opt:A,<id> 4
     # results: result/v6_validate/<pool>-opt-...csv (+ daily equity per variant)
+
+## Success levels (added 2026-10-02, /goal "find five well-performing Uniswap strategies")
+
+Two different questions, never mixed in a verdict:
+
+- **Improvement** (the original rule in each EXP file): the variant beats v6 on both assets (CAGR above, Calmar ≥,
+  max DD ≤ 3 pts deeper) and on a fresh holdout. Status `holdout-pass`.
+- **Standalone** (a re-judged experiment, `r` suffix like v6.1r, own EXP number, own fresh holdout run once): absolute bar,
+  no comparison to v6 needed. Dev: continuous ETH and WBTC Calmar ≥ 0.60 and max DD no deeper than −30%, ETH positive in
+  at least 4 of 5 yearly segments. Holdout (three pools, one continuous run each): total return > 0 on all three,
+  Calmar ≥ 0.50 on at least 2 of the 3, max DD no deeper than −35% on all three. Status `holdout-pass` with
+  "standalone" in the EXP file's first line. v6 itself is the reference level (Base WETH 0.63, Base cbBTC 0.79).
+  A standalone pass says the strategy is good by itself, not that it is better than v6.
+
+A re-judged experiment reuses the dev numbers of the original (already seen: say so under *Deviations*) and runs its
+holdout once. Variants that are near-copies of each other (signal correlation, same price path) are reported with their
+correlation to v6 and to each other; they do not count as independent evidence.

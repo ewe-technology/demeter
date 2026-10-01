@@ -62,6 +62,7 @@ Dino names versions `v6.1`, `v6.2`, ...; each is one experiment `EXP-NNN` (next 
 - ETH/USDC 0.05% (2021-05..2026-09-17) and WBTC/USDC 0.3% (2021-11..2026-09-17) are in-sample now: every new
   pre-registration names a fresh holdout (another pool or chain, or data after 2026-09-17).
 - Anything seen out of order goes under *Deviations* in the EXP file.
+- Two success levels exist, "improvement over v6" and "standalone good": see `experiments/README.md` (Success levels).
 
 ## Environment (rebuild after a new session — nothing outside git survives)
 

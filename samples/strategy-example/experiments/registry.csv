@@ -31,3 +31,7 @@ EXP-028,2026-10-02,"F = mean of 8 accounts (4 on EMA(n), 4 on the Donchian midpo
 EXP-029,2026-10-02,ETH value share s moves with the share of EMA spans the close is above (v6.24),QUAN-881,dropped-at-dev,-0.02,1/5,,,0.862,0.141,-0.231,6907836,7c9ea34,EXP-029-share-by-armed.md
 EXP-030,2026-10-02,"ladder half-width = 30-day sigma x sqrt(30), 10..30%, instead of fixed ±20% (v6.25)",QUAN-882,dropped-at-dev,-3.66,1/5,,,0.827,0.137,-0.199,6907836,7c9ea34,EXP-030-vol-scaled-width.md
 EXP-031,2026-10-02,account armed only while the close is above both EMA(n) and the Donchian midpoint(n) (v6.26),QUAN-883,dropped-at-dev,0.12,3/5,,,0.867,0.142,-0.209,6907836,7c9ea34,EXP-031-consensus-ema-donchian.md
+EXP-032,2026-10-02,Donchian-midpoint regime line (v6.19) judged standalone (v6.19r),,pre-registered,,,,,,,,,,EXP-032-donchian-regime-standalone.md
+EXP-033,2026-10-02,EMA + Donchian ensemble (v6.23) judged standalone (v6.23r),,pre-registered,,,,,,,,,,EXP-033-ensemble-standalone.md
+EXP-034,2026-10-02,volatility-scaled ladder width (v6.25) judged standalone (v6.25r),,pre-registered,,,,,,,,,,EXP-034-vol-width-standalone.md
+EXP-035,2026-10-02,EMA/Donchian consensus regime (v6.26) judged standalone (v6.26r),,pre-registered,,,,,,,,,,EXP-035-consensus-standalone.md
