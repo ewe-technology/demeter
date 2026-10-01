@@ -35,7 +35,7 @@ EXP-032,2026-10-02,Donchian-midpoint regime line (v6.19) judged standalone (v6.1
 EXP-033,2026-10-02,EMA + Donchian ensemble (v6.23) judged standalone (v6.23r),QUAN-885,holdout-fail,4.53,3/5,1/3 pools,-5.09,0.989,0.157,-0.215,d3559e1,ea4bd27,EXP-033-ensemble-standalone.md
 EXP-034,2026-10-02,volatility-scaled ladder width (v6.25) judged standalone (v6.25r),QUAN-886,holdout-pass,-3.66,1/5,2/3 pools,-17.70,0.827,0.137,-0.199,d3559e1,ea4bd27,EXP-034-vol-width-standalone.md
 EXP-035,2026-10-02,EMA/Donchian consensus regime (v6.26) judged standalone (v6.26r),QUAN-887,holdout-fail,0.12,3/5,1/3 pools,-4.22,0.867,0.142,-0.209,d3559e1,ea4bd27,EXP-035-consensus-standalone.md
-EXP-036,2026-10-02,"regime line = SMA(n), n = 170/190/210/230 (the classic 200-day family) (v6.27)",,pre-registered,,,,,,,,,,EXP-036-sma-regime.md
-EXP-037,2026-10-02,"regime line = top of the Ichimoku cloud, standard periods scaled 1x..2.5x (v6.28)",,pre-registered,,,,,,,,,,EXP-037-ichimoku-regime.md
-EXP-038,2026-10-02,"regime = Aroon Up(n) > Aroon Down(n), n = 90/100/110/120 (v6.29)",,pre-registered,,,,,,,,,,EXP-038-aroon-regime.md
-EXP-039,2026-10-02,"regime = close within 20% of its n-day high, n = 90/100/110/120 (v6.30)",,pre-registered,,,,,,,,,,EXP-039-drawdown-regime.md
+EXP-036,2026-10-02,"regime line = SMA(n), n = 170/190/210/230 (the classic 200-day family) (v6.27)",,dropped-at-dev,-8.74,0/5,,,0.089,0.018,-0.329,0edc010,,EXP-036-sma-regime.md
+EXP-037,2026-10-02,"regime line = top of the Ichimoku cloud, standard periods scaled 1x..2.5x (v6.28)",,dropped-at-dev,-6.12,0/5,,,0.380,0.071,-0.284,0edc010,,EXP-037-ichimoku-regime.md
+EXP-038,2026-10-02,"regime = Aroon Up(n) > Aroon Down(n), n = 90/100/110/120 (v6.29)",,dropped-at-dev,-10.31,2/5,,,0.102,0.021,-0.376,0edc010,,EXP-038-aroon-regime.md
+EXP-039,2026-10-02,"regime = close within 20% of its n-day high, n = 90/100/110/120 (v6.30)",,dropped-at-dev,-6.19,2/5,,,0.599,0.105,-0.279,0edc010,,EXP-039-drawdown-regime.md

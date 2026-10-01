@@ -1,8 +1,8 @@
 # EXP-036: regime line = SMA(n), n = 170/190/210/230 (the classic 200-day family) (v6.27)
 
 - Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Status: dropped-at-dev
+- Pre-registration commit: 0edc010 · Result commit: ______
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending.
 
 ## Hypothesis
@@ -35,7 +35,26 @@ Pre-registered together with EXP-036..039 (four regime lines of different struct
 
 ## Result
 
-(not run)
+Development (`A` and the variant in each invocation):
+
+| test | v6 | this | gain | max DD v6 → this |
+|---|---|---|---|---|
+| 2022 | +7.6% | -12.1% | -19.7 | 21.5% → 34.4% |
+| 2023 | +32.2% | +27.3% | -4.9 | 13.9% → 20.5% |
+| 2024 | +36.4% | +30.1% | -6.2 | 26.7% → 29.9% |
+| 2025 | +16.3% | +7.5% | -8.7 | 26.9% → 24.8% |
+| 2026-01..09-17 | +18.7% | -5.8% | -24.5 | 12.0% → 29.8% |
+
+Wins 0/5, median -8.74 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +8.9% | 1.8% | -32.9% | 0.19 | 0.06 | $70.4k | $0.24k | 126 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +110.3% | 21.1% | -17.8% | 1.07 | 1.19 | $76.8k | $0.39k | 78 |
+
+Verdict: **dropped-at-dev** (both levels) — ETH fails: CAGR 1.8% vs 14.0%, Calmar 0.06, max DD −32.9%, wins 0/5, positive in 3/5 yearly segments. WBTC is better than v6: CAGR 21.1% vs 17.3%, Calmar 1.19 vs 0.97, same max DD. Holdout not run. Pattern shared with ROC (EXP-026), Ichimoku (EXP-037) and Aroon (EXP-038): the slow time-structure lines beat v6 on WBTC and lose badly on ETH.
 
 ## Deviations
 
