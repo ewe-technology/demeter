@@ -1,8 +1,8 @@
 # EXP-024: regime line = midpoint of the n-day Donchian channel instead of EMA(n) (v6.19)
 
 - Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Status: dropped-at-dev
+- Pre-registration commit: 5440347 · Result commit: ______
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending.
 
 ## Hypothesis
@@ -34,7 +34,26 @@ Pre-registered together with EXP-024..027 (four regime-line variants, same four 
 
 ## Result
 
-(not run)
+Development (`A` and the variant in each invocation):
+
+| test | v6 | this | gain | max DD v6 → this |
+|---|---|---|---|---|
+| 2022 | +7.6% | +6.2% | -1.4 | 21.5% → 21.0% |
+| 2023 | +32.2% | +42.6% | +10.4 | 13.9% → 14.3% |
+| 2024 | +36.4% | +30.5% | -5.8 | 26.7% → 28.6% |
+| 2025 | +16.3% | +36.3% | +20.1 | 26.9% → 21.1% |
+| 2026-01..09-17 | +18.7% | +10.3% | -8.4 | 12.0% → 21.3% |
+
+Wins 2/5, median -1.44 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +93.5% | 15.0% | -20.4% | 0.76 | 0.74 | $100.9k | $0.35k | 119 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +70.0% | 14.7% | -16.8% | 0.83 | 0.87 | $58.8k | $0.46k | 94 |
+
+Verdict: **dropped-at-dev** — ETH passes (CAGR 15.0% vs 14.0%, Calmar 0.74 vs 0.61, max DD 2.4 pts shallower, fees $100.9k vs $86.5k with 119 rebuilds vs 147) but WBTC fails (CAGR 14.7% vs 17.3%, Calmar 0.87 vs 0.97) and ETH yearly wins are 2/5 (median −1.44 pts; the gains sit in 2023 and 2025, the losses in 2024 and 2026). The channel midpoint is a different trend line that happens to suit ETH 2023/2025, not an edge that carries to the second asset. Holdout not run.
 
 ## Deviations
 

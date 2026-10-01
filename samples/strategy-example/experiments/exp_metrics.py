@@ -53,8 +53,9 @@ def years(folders: list) -> None:
     table = {}
     for folder in folders:
         seg = os.path.basename(folder.rstrip("/"))[-21:]   # <start>-<end>
-        for name, eq in load(folder).items():
-            table.setdefault(name, {})[seg] = eq.iloc[-1] / eq.iloc[0] - 1
+        res = pd.read_csv(folder.rstrip("/") + ".csv").set_index("variant")["net_return"]   # net of impact, vs the initial quote
+        for name, value in res.items():
+            table.setdefault(name, {})[seg] = value
     df = pd.DataFrame(table).T
     base = next(n for n in df.index if n.startswith("A_"))
     print((df * 100).round(1).to_string())
@@ -66,5 +67,34 @@ def years(folders: list) -> None:
               f"gains {[round(g, 1) for g in gain]}")
 
 
+def result(args: list) -> None:
+    """result <variant prefix, e.g. S_> <segment folders...> --cont <ETH cont folder> <WBTC cont folder>
+    Prints the EXP file's Result tables (yearly gain vs A, continuous metrics) for that variant."""
+    prefix, i = args[0], args.index("--cont")
+    segs, conts = args[1:i], args[i + 1:]
+    rows, gains = [], []
+    for folder in segs:
+        res = pd.read_csv(folder.rstrip("/") + ".csv").set_index("variant")
+        a = res[[n.startswith("A_") for n in res.index]].iloc[0]
+        v = res[[n.startswith(prefix) for n in res.index]].iloc[0]
+        seg = os.path.basename(folder.rstrip("/"))[-21:]
+        label = seg[:4] if seg.endswith("12-31") else seg[:7] + ".." + seg[-5:]
+        gains.append((v.net_return - a.net_return) * 100)
+        rows.append(f"| {label} | {a.net_return * 100:+.1f}% | {v.net_return * 100:+.1f}% | {gains[-1]:+.1f} | "
+                    f"{abs(a.max_draw_down) * 100:.1f}% → {abs(v.max_draw_down) * 100:.1f}% |")
+    if rows:
+        print("| test | v6 | this | gain | max DD v6 → this |\n|---|---|---|---|---|")
+        print("\n".join(rows))
+        print(f"\nWins {sum(g > 0 for g in gains)}/{len(gains)}, median {pd.Series(gains).median():+.2f} pts.\n")
+    print("| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |\n|---|---|---|---|---|---|---|---|---|")
+    for folder, asset in zip(conts, ("ETH", "WBTC")):
+        eqs, res = load(folder), pd.read_csv(folder.rstrip("/") + ".csv").set_index("variant")
+        for tag, pre in (("v6", "A_"), ("this", prefix)):
+            name = next(n for n in eqs if n.startswith(pre))
+            m, r = metrics(eqs[name]), res.loc[name]
+            print(f"| {asset} {tag} | {m['total'] * 100:+.1f}% | {m['cagr'] * 100:.1f}% | {m['maxdd'] * 100:.1f}% | "
+                  f"{m['sharpe']:.2f} | {m['calmar']:.2f} | ${r.fees / 1000:.1f}k | ${r.impact / 1000:.2f}k | {int(r.rebuilds)} |")
+
+
 if __name__ == "__main__":
-    {"cont": cont, "years": years}[sys.argv[1]](sys.argv[2:])
+    {"cont": cont, "years": years, "result": result}[sys.argv[1]](sys.argv[2:])
