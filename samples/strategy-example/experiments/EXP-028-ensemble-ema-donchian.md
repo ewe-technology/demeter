@@ -1,8 +1,8 @@
 # EXP-028: F = mean of 8 accounts (4 on EMA(n), 4 on the Donchian midpoint(n)) (v6.23)
 
 - Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Status: dropped-at-dev
+- Pre-registration commit: 6907836 · Result commit: ______
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending.
 
 ## Hypothesis
@@ -34,7 +34,26 @@ Pre-registered together with EXP-028..031 (two regime-signal combinations and tw
 
 ## Result
 
-(not run)
+Development (`A` and the variant in each invocation):
+
+| test | v6 | this | gain | max DD v6 → this |
+|---|---|---|---|---|
+| 2022 | +7.6% | +12.1% | +4.5 | 21.5% → 16.2% |
+| 2023 | +32.2% | +37.1% | +4.9 | 13.9% → 13.1% |
+| 2024 | +36.4% | +28.8% | -7.6 | 26.7% → 29.6% |
+| 2025 | +16.3% | +24.8% | +8.5 | 26.9% → 24.4% |
+| 2026-01..09-17 | +18.7% | +5.7% | -13.0 | 12.0% → 17.3% |
+
+Wins 3/5, median +4.53 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +98.9% | 15.7% | -21.5% | 0.80 | 0.73 | $97.2k | $0.33k | 142 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +66.9% | 14.1% | -16.0% | 0.81 | 0.88 | $56.8k | $0.53k | 102 |
+
+Verdict: **dropped-at-dev** — ETH passes (CAGR 15.7% vs 14.0%, Calmar 0.73 vs 0.61, max DD 1.3 pts shallower, yearly wins 3/5, median +4.53 pts) but WBTC fails (CAGR 14.1% vs 17.3%, Calmar 0.88 vs 0.97). Same split as the Donchian line alone (EXP-024): the ensemble is better than it on ETH (CAGR 15.7% vs 15.0%) and no better on WBTC (14.1% vs 14.7%), so the WBTC shortfall is not removed by averaging. Holdout not run under this rule.
 
 ## Deviations
 

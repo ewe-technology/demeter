@@ -1,8 +1,8 @@
 # EXP-030: ladder half-width = 30-day sigma x sqrt(30), 10..30%, instead of fixed ±20% (v6.25)
 
 - Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Status: dropped-at-dev
+- Pre-registration commit: 6907836 · Result commit: ______
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending.
 
 ## Hypothesis
@@ -34,7 +34,26 @@ Pre-registered together with EXP-028..031 (two regime-signal combinations and tw
 
 ## Result
 
-(not run)
+Development (`A` and the variant in each invocation):
+
+| test | v6 | this | gain | max DD v6 → this |
+|---|---|---|---|---|
+| 2022 | +7.6% | +3.9% | -3.7 | 21.5% → 20.6% |
+| 2023 | +32.2% | +24.2% | -8.1 | 13.9% → 13.8% |
+| 2024 | +36.4% | +19.4% | -17.0 | 26.7% → 28.2% |
+| 2025 | +16.3% | +20.2% | +4.0 | 26.9% → 28.0% |
+| 2026-01..09-17 | +18.7% | +17.5% | -1.2 | 12.0% → 12.7% |
+
+Wins 1/5, median -3.66 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +82.7% | 13.7% | -19.9% | 0.75 | 0.69 | $87.7k | $0.28k | 148 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +49.3% | 10.9% | -17.8% | 0.70 | 0.61 | $65.0k | $0.66k | 121 |
+
+Verdict: **dropped-at-dev** — ETH CAGR 13.7% vs 14.0% (Calmar 0.69 vs 0.61 and max DD 2.9 pts shallower, but CAGR is below v6's and wins are 1/5, median −3.66 pts; 2024 −17.0); WBTC CAGR 10.9% vs 17.3%, Calmar 0.61 vs 0.97, rebuilds 121 vs 106. Width per build is in the `width_builds` column of the run CSV. Holdout not run.
 
 ## Deviations
 

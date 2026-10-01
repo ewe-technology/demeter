@@ -1,8 +1,8 @@
 # EXP-029: ETH value share s moves with the share of EMA spans the close is above (v6.24)
 
 - Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Status: dropped-at-dev
+- Pre-registration commit: 6907836 · Result commit: ______
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending.
 
 ## Hypothesis
@@ -34,7 +34,26 @@ Pre-registered together with EXP-028..031 (two regime-signal combinations and tw
 
 ## Result
 
-(not run)
+Development (`A` and the variant in each invocation):
+
+| test | v6 | this | gain | max DD v6 → this |
+|---|---|---|---|---|
+| 2022 | +7.6% | +8.6% | +1.0 | 21.5% → 21.5% |
+| 2023 | +32.2% | +32.2% | -0.0 | 13.9% → 13.9% |
+| 2024 | +36.4% | +36.0% | -0.4 | 26.7% → 26.9% |
+| 2025 | +16.3% | +15.8% | -0.5 | 26.9% → 27.2% |
+| 2026-01..09-17 | +18.7% | +18.7% | -0.0 | 12.0% → 12.3% |
+
+Wins 1/5, median -0.02 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +86.2% | 14.1% | -23.1% | 0.73 | 0.61 | $87.0k | $0.29k | 147 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +85.8% | 17.3% | -17.7% | 1.01 | 0.98 | $61.7k | $0.70k | 106 |
+
+Verdict: **dropped-at-dev** — indistinguishable from v6 on both assets: ETH CAGR 14.1% vs 14.0%, Calmar 0.61 vs 0.61, wins 1/5 (median −0.02 pts), rebuilds 147 = 147; WBTC CAGR 17.3% = 17.3%. Whether the s rule rarely moves off 0.5/0.7 under this change was not diagnosed. Holdout not run.
 
 ## Deviations
 
