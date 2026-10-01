@@ -1,8 +1,8 @@
 # EXP-037: regime line = top of the Ichimoku cloud, standard periods scaled 1x..2.5x (v6.28)
 
-- Jira: QUAN-___
+- Jira: QUAN-889
 - Status: dropped-at-dev
-- Pre-registration commit: 0edc010 · Result commit: ______
+- Pre-registration commit: 0edc010 · Result commit: fcf6540
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending.
 
 ## Hypothesis

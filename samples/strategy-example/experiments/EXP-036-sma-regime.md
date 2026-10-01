@@ -1,8 +1,8 @@
 # EXP-036: regime line = SMA(n), n = 170/190/210/230 (the classic 200-day family) (v6.27)
 
-- Jira: QUAN-___
+- Jira: QUAN-888
 - Status: dropped-at-dev
-- Pre-registration commit: 0edc010 · Result commit: ______
+- Pre-registration commit: 0edc010 · Result commit: fcf6540
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending.
 
 ## Hypothesis

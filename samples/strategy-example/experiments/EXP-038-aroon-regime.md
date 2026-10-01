@@ -1,8 +1,8 @@
 # EXP-038: regime = Aroon Up(n) > Aroon Down(n), n = 90/100/110/120 (v6.29)
 
-- Jira: QUAN-___
+- Jira: QUAN-890
 - Status: dropped-at-dev
-- Pre-registration commit: 0edc010 · Result commit: ______
+- Pre-registration commit: 0edc010 · Result commit: fcf6540
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending.
 
 ## Hypothesis
