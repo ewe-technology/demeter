@@ -147,7 +147,11 @@ OPT = {"A": Variant("A_v6"),
        "X": Variant("X_ens_ema_donchian", {"REGIME": "ens_ed"}),   # EXP-028: 4 EMA + 4 Donchian accounts, F = mean of 8
        "Y": Variant("Y_share_by_armed", {"SHARE_BY_ARMED": True}),   # EXP-029: s = 0.5 + 0.2 x share of EMA spans above
        "Z": Variant("Z_vol_width", {"WIDTH_VOL": True}),   # EXP-030: half-width = sigma_30d x sqrt(30), 10..30%
-       "AA": Variant("AA_consensus", {"REGIME": "max_ed"})}   # EXP-031: armed only above both EMA(n) and Donchian mid(n)
+       "AA": Variant("AA_consensus", {"REGIME": "max_ed"}),   # EXP-031: armed only above both EMA(n) and Donchian mid(n)
+       "AB": Variant("AB_sma", {"REGIME": "sma"}),   # EXP-036: SMA(170/190/210/230)
+       "AD": Variant("AD_ichimoku", {"REGIME": "ichimoku"}),   # EXP-037: Ichimoku cloud top, scale 1..2.5
+       "AE": Variant("AE_aroon", {"REGIME": "aroon"}),   # EXP-038: Aroon Up(n) > Aroon Down(n)
+       "AF": Variant("AF_drawdown", {"REGIME": "dd"})}   # EXP-039: close within 20% of its n-day high
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",

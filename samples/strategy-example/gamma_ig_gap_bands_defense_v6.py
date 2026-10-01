@@ -269,6 +269,25 @@ def _supertrend(high: pd.Series, low: pd.Series, close: pd.Series, period: int, 
     return pd.Series(line, index=close.index)
 
 
+SLOW_SPANS = (170, 190, 210, 230)      # EXP-036: SMA lengths around the classic 200 days, ~10% apart like v6's EMA spans
+DD_FRAC = 0.20                         # EXP-039: armed while the close is within DD_FRAC of its n-day high (= the ladder half-width)
+ICHIMOKU_K = (1.0, 1.5, 2.0, 2.5)      # EXP-037: scale of the standard Ichimoku periods 9 / 26 / 52 (shift 26)
+
+
+def _ichimoku_top(high: pd.Series, low: pd.Series, k: float) -> pd.Series:
+    """Upper edge of the Ichimoku cloud (max of Senkou A and B), standard 9/26/52 periods and 26 displacement x k."""
+    conv, base, span, shift = (max(int(round(v * k)), 1) for v in (9, 26, 52, 26))
+    mid = lambda n: (high.rolling(n, min_periods=1).max() + low.rolling(n, min_periods=1).min()) / 2
+    a, b = (mid(conv) + mid(base)) / 2, mid(span)
+    return pd.concat([a.shift(shift), b.shift(shift)], axis=1).max(axis=1).bfill()
+
+
+def _aroon(x: pd.Series, n: int, up: bool) -> pd.Series:
+    """Aroon Up (up=True, on highs) / Down (on lows): 100 x (n - days since the n-day extreme) / n."""
+    since = x.rolling(n + 1, min_periods=1).apply(lambda v: len(v) - 1 - (np.argmax(v) if up else np.argmin(v)), raw=True)
+    return 100.0 * (n - since) / n
+
+
 def regime_components() -> list:
     return {"ens_ed": ["ema", "donchian"], "max_ed": ["max_ed"]}.get(REGIME, [REGIME])
 
@@ -281,6 +300,15 @@ def regime_lines(minute_price: pd.Series, close: pd.Series, kind: str) -> dict:
     for n in EMA_SPANS:
         if kind == "ema":
             out[n] = close.ewm(span=n, adjust=False).mean()
+        elif kind == "sma":   # EXP-036: simple MA over the slow lengths SMA_SPANS (the EMA_SPANS slot picks the position)
+            out[n] = close.rolling(SLOW_SPANS[EMA_SPANS.index(n)], min_periods=1).mean()
+        elif kind == "dd":   # EXP-039: line = (1 - DD_FRAC) x the n-day high of the close
+            out[n] = (1 - DD_FRAC) * close.rolling(n, min_periods=1).max()
+        elif kind == "ichimoku":   # EXP-037: top of the cloud, periods and shift scaled by ICHIMOKU_K[position]
+            out[n] = _ichimoku_top(high, low, ICHIMOKU_K[EMA_SPANS.index(n)])
+        elif kind == "aroon":   # EXP-038: armed while Aroon Up(n) > Aroon Down(n): line = half / double the close
+            up = _aroon(high, n, True) > _aroon(low, n, False)
+            out[n] = close.where(~up, close * 0.5).where(up, close * 2.0)
         elif kind == "max_ed":
             ema = close.ewm(span=n, adjust=False).mean()
             out[n] = np.maximum(ema, (high.rolling(n, min_periods=1).max() + low.rolling(n, min_periods=1).min()) / 2)
