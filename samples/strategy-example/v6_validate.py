@@ -387,9 +387,18 @@ def main():
     DATA = load_minutes(start, end)
     warm_days = 3 * max(max(v.engine.get("EMA_SPANS", V.EMA_SPANS)) for v in variants)
     warm_pool = WARM_POOL.get(POOL, POOL)
-    warm = load_minutes(max(start - timedelta(days=warm_days), FIRST_DATA[warm_pool]), start - timedelta(days=1),
-                        warm_pool)
-    PRICE = pd.concat([warm.price, DATA.price])
+    warm_from = start - timedelta(days=warm_days)
+    parts = []
+    if os.environ.get("BINANCE_WARM") and warm_from < FIRST_DATA[warm_pool]:
+        # EXP-040..: window before the pool's own data (out-of-time holdout): the missing warm-up days come from the
+        # Binance daily closes of the base asset (close only: the day's high and low equal its close on those days)
+        col = LONG_CLOSE_COL[POOL]
+        closes = pd.read_csv(LONG_CLOSE_CSV, parse_dates=["date"]).set_index("date")[col]
+        seg = closes.loc[pd.Timestamp(warm_from):pd.Timestamp(min(FIRST_DATA[warm_pool], start) - timedelta(days=1))].dropna()
+        parts.append(pd.Series(seg.to_numpy(), index=seg.index + pd.Timedelta(hours=23, minutes=59)))
+    if start > FIRST_DATA[warm_pool]:
+        parts.append(load_minutes(max(warm_from, FIRST_DATA[warm_pool]), start - timedelta(days=1), warm_pool).price)
+    PRICE = pd.concat(parts + [DATA.price])
     if any(v.engine.get("LVR_GATE") for v in variants):   # EXP-012: the gate needs the pool's own week before start
         gate_start = max(start - timedelta(days=V.LVR_GATE_DAYS + 1), FIRST_DATA[POOL])
         GATE_MINUTES = DATA if gate_start >= start else \
