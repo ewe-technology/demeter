@@ -119,6 +119,11 @@ auth/
 env.bak/
 venv.bak/
 data*
+# source files caught by data* above
+!rust/demeter-core/src/data.rs
+!rust/python/demeter/data/
+!rust/python/demeter/data/data_cache.py
+!rust/python/demeter/uniswap/data.py
 # Spyder project settings
 .spyderproject
 .spyproject
