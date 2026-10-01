@@ -1,8 +1,8 @@
 # EXP-041: Ichimoku-cloud regime (v6.28) judged standalone as a BTC-pool strategy (v6.28r)
 
-- Jira: QUAN-___
+- Jira: QUAN-893
 - Status: holdout-fail
-- Pre-registration commit: 5dad516 · Result commit: ______
+- Pre-registration commit: 5dad516 · Result commit: 859aece
 - Re-judged from EXP-037; level: standalone, BTC-pool (README *Success levels*)
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending. Claimed for BTC pools only: it failed the ETH dev screen.
 
