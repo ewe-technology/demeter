@@ -70,6 +70,8 @@ Dino names versions `v6.1`, `v6.2`, ...; each is one experiment `EXP-NNN` (next 
     # main checkout /Users/dinohuang/Desktop/demeter-momentum; a worktree symlinks both from there.
     # samples/fetch_uni_minute.py downloads more (e.g. data after 2026-09-17 for a fresh holdout).
     # gas and ETH/USD hourly CSVs are committed in samples/ (regenerate with samples/fetch_gas.py).
+    # samples/strategy-example/experiments/INVENTORY.md lists every pool and series (downloaded, in the team S3 bucket, fit for v6): read it before
+    # picking a holdout, and update it whenever data is added or used.
 
 Run (from `samples/strategy-example`, `PYTHONPATH=../..`):
 
