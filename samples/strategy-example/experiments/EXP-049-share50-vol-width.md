@@ -1,8 +1,8 @@
 # EXP-049: ETH share 50% + volatility-scaled ladder width (v6.36)
 
-- Jira: QUAN-___
+- Jira: QUAN-901
 - Status: holdout-pass
-- Pre-registration commit: 7ac9e72 · Result commit: ______
+- Pre-registration commit: 7ac9e72 · Result commit: 4773975
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending.
 
 ## Hypothesis
