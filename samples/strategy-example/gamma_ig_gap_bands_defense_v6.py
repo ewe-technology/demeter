@@ -154,6 +154,11 @@ PAUSE_WINDOW, PAUSE_MINUTES = 5, 30
 # 0 = v6.
 BEAR_SHORT = Decimal("0")
 BEAR_SHORT_LOOKBACK = 365   # days, Moskowitz-Ooi-Pedersen 12-month time-series momentum
+# EXP-020 (v6.16): no new bear short on a crash day — a daily log return below −BEAR_CRASH_SIGMA x the standard
+# deviation of the previous BEAR_CRASH_WINDOW daily log returns (momentum shorts crash after panics, Daniel-Moskowitz
+# 2016); a short already open is kept, entry waits for the next non-crash day with the condition still on. 0 = v6.14.
+BEAR_CRASH_SIGMA = 0.0
+BEAR_CRASH_WINDOW = 30
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -276,7 +281,16 @@ def bear_short_flags(daily: pd.DataFrame, long_close: pd.Series) -> pd.DataFrame
     lc = long_close.astype(float).sort_index()
     year_ret = (lc / lc.shift(BEAR_SHORT_LOOKBACK, freq="D").reindex(lc.index)).reindex(out.index)
     out["year_ret"] = year_ret
-    out["short"] = (out["F"] == 0) & below & (year_ret < 1)
+    cond = (out["F"] == 0) & below & (year_ret < 1)
+    if BEAR_CRASH_SIGMA:   # EXP-020: no new short on a crash day; an open short is kept
+        r = np.log(out["close"].astype(float)).diff()
+        crash = r < -BEAR_CRASH_SIGMA * r.rolling(BEAR_CRASH_WINDOW).std().shift(1)
+        on, flags = False, []
+        for c, k in zip(cond, crash):
+            on = bool(c) and (on or not bool(k))
+            flags.append(on)
+        cond = pd.Series(flags, index=out.index)
+    out["short"] = cond
     return out
 
 

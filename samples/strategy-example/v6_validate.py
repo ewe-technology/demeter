@@ -43,6 +43,8 @@ POOLS = {
     "0xfbb6eed8e7aa03b138556eedaf5d271a5e1e43ef": (("usdc", 6), ("btc", 8), 1, 0.05, "../base-data"),
     # EXP-015: Base WETH/USDC 0.3% (token0 is WETH, tick spacing 60)
     "0x6c561b446416e1a00e8e93e221854d6ea4171372": (("eth", 18), ("usdc", 6), 0, 0.3, "../base-data"),
+    # EXP-020 holdout: mainnet LINK/USDC 0.3% (token0 LINK), an asset no strategy run has touched
+    "0xfad57d2039c21811c8f2b5d5b65308aa99d31559": (("link", 18), ("usdc", 6), 0, 0.3, "../holdout-data"),
 }
 # the EMA warm-up needs a year of history before the pool existed: read ETH/USD from the mainnet pool
 WARM_POOL = {"0xd0b53d9277642d899df5c87a3966a349a798f224": "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
@@ -53,7 +55,8 @@ FIRST_DATA = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": date(2021, 5, 6),
               "0x4585fe77225b41b697c938b018e2ac67ac5a20c0": date(2021, 11, 2),
               "0xd0b53d9277642d899df5c87a3966a349a798f224": date(2023, 12, 1),
               "0xfbb6eed8e7aa03b138556eedaf5d271a5e1e43ef": date(2024, 10, 1),
-              "0x6c561b446416e1a00e8e93e221854d6ea4171372": date(2024, 1, 1)}
+              "0x6c561b446416e1a00e8e93e221854d6ea4171372": date(2024, 1, 1),
+              "0xfad57d2039c21811c8f2b5d5b65308aa99d31559": date(2021, 5, 5)}
 # EXP-004: daily Aave USDC supply APR per pool's chain (samples/fetch_aave_rates.py)
 RATE_CSV = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": "../aave_usdc_ethereum_daily.csv",
             "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": "../aave_usdc_ethereum_daily.csv",
@@ -64,15 +67,18 @@ RATE_CSV = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": "../aave_usdc_ethereum
 FUNDING_CSV = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": "../binance_funding_ETHUSDT.csv",
                "0xd0b53d9277642d899df5c87a3966a349a798f224": "../binance_funding_ETHUSDT.csv",
                "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": "../binance_funding_BTCUSDT.csv",
-               "0xfbb6eed8e7aa03b138556eedaf5d271a5e1e43ef": "../binance_funding_BTCUSDT.csv"}
+               "0xfbb6eed8e7aa03b138556eedaf5d271a5e1e43ef": "../binance_funding_BTCUSDT.csv",
+               "0xfad57d2039c21811c8f2b5d5b65308aa99d31559": "../binance_funding_LINKUSDT.csv"}
 # EXP-018: Binance daily closes of the pool's base asset, for the 12-month return (samples/fetch_binance_daily.py)
 LONG_CLOSE_CSV = "../binance_daily_closes.csv"
 LONG_CLOSE_COL = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": "ETHUSDT",
                   "0xd0b53d9277642d899df5c87a3966a349a798f224": "ETHUSDT",
                   "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": "BTCUSDT",
-                  "0xfbb6eed8e7aa03b138556eedaf5d271a5e1e43ef": "BTCUSDT"}
+                  "0xfbb6eed8e7aa03b138556eedaf5d271a5e1e43ef": "BTCUSDT",
+                  "0xfad57d2039c21811c8f2b5d5b65308aa99d31559": "LINKUSDT"}
 INIT_QUOTE = Decimal(100000)
-INIT_BY_POOL = {"0x4585fe77225b41b697c938b018e2ac67ac5a20c0": Decimal(2)}  # quote units; default INIT_QUOTE
+INIT_BY_POOL = {"0x4585fe77225b41b697c938b018e2ac67ac5a20c0": Decimal(2),  # quote units; default INIT_QUOTE
+                "0xfad57d2039c21811c8f2b5d5b65308aa99d31559": Decimal(10000)}   # thin pool: keep the fee share small
 G_REMOVE, G_ADD, G_SWAP = 260_000, 450_000, 150_000
 GAS_CSV = "../gas_ethereum_hourly.csv"
 ETH_USD_CSV = "../eth_usd_hourly.csv"
@@ -106,11 +112,13 @@ OPT = {"A": Variant("A_v6"),
        "L": Variant("L_tox_pause", {"PAUSE_RET": 0.01}),   # EXP-016: pull the ladder 30 min after a 1% five-minute move
        "M": Variant("M_bear_short", {"BEAR_SHORT": Decimal("0.5"), "HEDGE_FUNDING": "pool"}),   # EXP-018
        "N": Variant("N_bear_short_cash", {"BEAR_SHORT": Decimal("0.5"), "HEDGE_FUNDING": "pool",
-                                          "CASH_APR": "pool"})}   # EXP-018: M + EXP-004's cash yield
+                                          "CASH_APR": "pool"}),   # EXP-018: M + EXP-004's cash yield
+       "O": Variant("O_bear_short_nocrash", {"BEAR_SHORT": Decimal("0.5"), "HEDGE_FUNDING": "pool",
+                                             "BEAR_CRASH_SIGMA": 2.0})}   # EXP-020: M without entries on 2-sigma crash days
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA"]}
 
 
 def sens_grid():
