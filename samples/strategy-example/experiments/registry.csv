@@ -47,7 +47,7 @@ EXP-044,2026-10-02,range exit needs two consecutive daily checks outside the lad
 EXP-045,2026-10-02,signal engine's F read once a week (Sunday value held) (v6.32),QUAN-897,dropped-at-dev,0.24,3/5,,,0.607,0.106,-0.251,203850a,05b59f4,EXP-045-weekly-f.md
 EXP-046,2026-10-02,ETH value share fixed at 50% (ablation of the EMA100 share rule) (v6.33),QUAN-898,holdout-pass,-3.29,1/5,3/3 pools (standalone),-7.71,0.849,0.139,-0.187,203850a,05b59f4,EXP-046-share-50.md
 EXP-047,2026-10-02,F never below 25% (one refill stage always deployed) (v6.34),QUAN-899,dropped-at-dev,-4.99,1/5,,,0.537,0.096,-0.228,203850a,05b59f4,EXP-047-f-floor.md
-EXP-048,2026-10-02,ETH share 50% + range exit needs two consecutive daily checks (v6.35),,pre-registered,,,,,,,,,,EXP-048-share50-exit-confirm.md
-EXP-049,2026-10-02,ETH share 50% + volatility-scaled ladder width (v6.36),,pre-registered,,,,,,,,,,EXP-049-share50-vol-width.md
-EXP-050,2026-10-02,ETH share 50% + EMA/Donchian consensus regime (v6.37),,pre-registered,,,,,,,,,,EXP-050-share50-consensus.md
-EXP-051,2026-10-02,ETH share 50% + exit confirmation + volatility-scaled width (v6.38),,pre-registered,,,,,,,,,,EXP-051-share50-confirm-vol-width.md
+EXP-048,2026-10-02,ETH share 50% + range exit needs two consecutive daily checks (v6.35),,holdout-pass,-4.14,2/5,3/3 pools (standalone),-6.81,0.957,0.153,-0.161,7ac9e72,,EXP-048-share50-exit-confirm.md
+EXP-049,2026-10-02,ETH share 50% + volatility-scaled ladder width (v6.36),,holdout-pass,-2.04,1/5,2/3 pools (standalone),-29.12,0.827,0.136,-0.169,7ac9e72,,EXP-049-share50-vol-width.md
+EXP-050,2026-10-02,ETH share 50% + EMA/Donchian consensus regime (v6.37),,dropped-at-dev,-3.18,1/5,,,0.810,0.134,-0.177,7ac9e72,,EXP-050-share50-consensus.md
+EXP-051,2026-10-02,ETH share 50% + exit confirmation + volatility-scaled width (v6.38),,holdout-pass,-4.56,0/5,2/3 pools (standalone),-23.62,0.662,0.114,-0.166,7ac9e72,,EXP-051-share50-confirm-vol-width.md
