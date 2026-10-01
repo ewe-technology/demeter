@@ -23,3 +23,7 @@ EXP-020,2026-10-01,bear short leg without entries on 2-sigma crash days; no cash
 EXP-021,2026-10-01,v6.16 re-judged on fresh deep pools LINK/WETH and UNI/WETH (v6.16r),QUAN-872,holdout-fail,,,2/5 + 2/5,-3.85,,,,9912117,d7fbb9f,EXP-021-bear-short-alt-eth-holdout.md
 EXP-022,2026-10-01,LP fees redeployed into the ladder instead of paid out (v6.17),QUAN-873,dropped-at-dev,0.46,3/5,,,1.354,0.199,-0.325,54e6027,9459512,EXP-022-fee-compounding.md
 EXP-023,2026-10-01,recentre the ladder at +10% from the build price instead of the +20% edge (v6.18),QUAN-874,dropped-at-dev,0.64,4/5,,,1.211,0.183,-0.262,5c6dfbd,185ee50,EXP-023-early-upside-recentre.md
+EXP-024,2026-10-02,regime line = midpoint of the n-day Donchian channel instead of EMA(n) (v6.19),,pre-registered,,,,,,,,,,EXP-024-donchian-regime.md
+EXP-025,2026-10-02,regime line = Hull MA(n) instead of EMA(n) (v6.20),,pre-registered,,,,,,,,,,EXP-025-hma-regime.md
+EXP-026,2026-10-02,regime = n-day return > 0 (time-series momentum) instead of price above EMA(n) (v6.21),,pre-registered,,,,,,,,,,EXP-026-roc-regime.md
+EXP-027,2026-10-02,regime line = Supertrend (ATR(n) × 3 trailing band) instead of EMA(n) (v6.22),,pre-registered,,,,,,,,,,EXP-027-supertrend-regime.md

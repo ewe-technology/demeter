@@ -167,6 +167,13 @@ FEE_COMPOUND = False
 # LP impermanent loss grows with the square of the move, so two half-width legs give up about half of one full-width
 # leg in a trend. Judged at the same daily 00:00 check as the range exit. 0 = v6.
 RECENTRE_UP = Decimal("0")
+# EXP-024..027 (v6.19..v6.22): the regime line each virtual account compares the daily close with. "ema" = v6 (EMA of
+# span n for n in EMA_SPANS). Others use the same four lengths n (90, 100, 110, 120): "donchian" = midpoint of the n-day
+# high / low channel (daily high / low from the minute prices); "hma" = Hull MA(n); "roc" = the close n days ago
+# (armed while the n-day return is positive); "supertrend" = ATR(n) x SUPERTREND_MULT trailing band. The s rule keeps
+# EMA100, and the account logic (exit, re-arm, stop, staged refill) is unchanged.
+REGIME = "ema"
+SUPERTREND_MULT = 3.0
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -227,17 +234,61 @@ def share_label(eth_share: Decimal | str | None) -> str:
     return f"s{float(eth_share * HUNDRED):g}"
 
 
+def _wma(x: pd.Series, n: int) -> pd.Series:
+    w = np.arange(1, n + 1, dtype=float)
+    return x.rolling(n, min_periods=1).apply(lambda v: float(np.dot(v, w[-len(v):]) / w[-len(v):].sum()), raw=True)
+
+
+def _supertrend(high: pd.Series, low: pd.Series, close: pd.Series, period: int, mult: float) -> pd.Series:
+    """Standard Supertrend line (Wilder ATR): the lower band while the trend is up, the upper band while down."""
+    tr = pd.concat([high - low, (high - close.shift(1)).abs(), (low - close.shift(1)).abs()], axis=1).max(axis=1)
+    atr = tr.ewm(alpha=1 / period, adjust=False).mean()
+    mid = (high + low) / 2
+    ub, lb = (mid + mult * atr).to_numpy(), (mid - mult * atr).to_numpy()
+    c = close.to_numpy()
+    fub, flb, line = ub.copy(), lb.copy(), np.empty(len(c))
+    line[0] = flb[0] if c[0] > mid.iloc[0] else fub[0]
+    for i in range(1, len(c)):
+        fub[i] = ub[i] if ub[i] < fub[i - 1] or c[i - 1] > fub[i - 1] else fub[i - 1]
+        flb[i] = lb[i] if lb[i] > flb[i - 1] or c[i - 1] < flb[i - 1] else flb[i - 1]
+        if line[i - 1] == fub[i - 1]:
+            line[i] = fub[i] if c[i] <= fub[i] else flb[i]
+        else:
+            line[i] = flb[i] if c[i] >= flb[i] else fub[i]
+    return pd.Series(line, index=close.index)
+
+
+def regime_lines(minute_price: pd.Series, close: pd.Series) -> dict:
+    """EXP-024..027: per account span n, the line the daily close is compared with (see REGIME)."""
+    high = minute_price.resample("1D").max().reindex(close.index)
+    low = minute_price.resample("1D").min().reindex(close.index)
+    out = {}
+    for n in EMA_SPANS:
+        if REGIME == "donchian":
+            out[n] = (high.rolling(n, min_periods=1).max() + low.rolling(n, min_periods=1).min()) / 2
+        elif REGIME == "hma":
+            out[n] = _wma(2 * _wma(close, max(n // 2, 1)) - _wma(close, n), max(int(round(n ** 0.5)), 1))
+        elif REGIME == "roc":
+            out[n] = close.shift(n).bfill()
+        elif REGIME == "supertrend":
+            out[n] = _supertrend(high, low, close, n, SUPERTREND_MULT)
+        else:
+            raise ValueError(REGIME)
+    return out
+
+
 def daily_ema_frame(minute_price: pd.Series) -> pd.DataFrame:
     """UTC daily closes (last price of each day), their EMA100 ("ema", for the s rule) and the signal
     engine's target deployment F, from a minute price series that should start EMA_WARMUP_DAYS before
     the backtest window so the EMAs and the virtual accounts are settled on day one."""
     close = minute_price.astype(float).resample("1D").last().dropna()
     emas = {n: close.ewm(span=n, adjust=False).mean() for n in EMA_SPANS}
+    lines = emas if REGIME == "ema" else regime_lines(minute_price.astype(float), close)
     accounts = [VirtualAccount(n) for n in EMA_SPANS]
     fractions = []
     for day, c in close.items():
         for a in accounts:
-            a.step(float(c), float(emas[a.span][day]))
+            a.step(float(c), float(lines[a.span][day]))
         fractions.append(sum(a.deployed for a in accounts) / len(accounts))
     return pd.DataFrame({"close": close, "ema": emas[EMA_SPAN], "F": fractions})
 

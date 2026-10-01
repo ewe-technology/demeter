@@ -139,11 +139,15 @@ OPT = {"A": Variant("A_v6"),
        "P": Variant("P_bear_short_nocrash_2leg", {"BEAR_SHORT": Decimal("0.5"), "HEDGE_FUNDING": "pool",
                                                   "BEAR_CRASH_SIGMA": 2.0, "HEDGE_FEE": Decimal("0.001")}),   # EXP-021: O, synthetic ALT/ETH perp (two taker legs)
        "Q": Variant("Q_fee_compound", {"FEE_COMPOUND": True}),   # EXP-022: collected fees redeployed at the next build
-       "R": Variant("R_recentre_up", {"RECENTRE_UP": Decimal("0.1")})}   # EXP-023: recentre at +10% from the build price
+       "R": Variant("R_recentre_up", {"RECENTRE_UP": Decimal("0.1")}),   # EXP-023: recentre at +10% from the build price
+       "S": Variant("S_donchian", {"REGIME": "donchian"}),   # EXP-024: regime line = Donchian channel midpoint, n = 90..120
+       "T": Variant("T_hma", {"REGIME": "hma"}),   # EXP-025: regime line = Hull MA(n)
+       "U": Variant("U_roc", {"REGIME": "roc"}),   # EXP-026: regime = n-day return > 0
+       "W": Variant("W_supertrend", {"REGIME": "supertrend"})}   # EXP-027: Supertrend(ATR n, x3)
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT"]}
 
 
 def sens_grid():
