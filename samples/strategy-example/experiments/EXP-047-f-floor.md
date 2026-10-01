@@ -1,8 +1,8 @@
 # EXP-047: F never below 25% (one refill stage always deployed) (v6.34)
 
 - Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Status: dropped-at-dev
+- Pre-registration commit: 203850a · Result commit: ______
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending.
 
 ## Hypothesis
@@ -35,7 +35,26 @@ Pre-registered together with EXP-044..047 (four small structural LP-mechanic cha
 
 ## Result
 
-(not run)
+Development (`A` and the variant in each invocation):
+
+| test | v6 | this | gain | max DD v6 → this |
+|---|---|---|---|---|
+| 2022 | +7.6% | -2.5% | -10.1 | 21.5% → 26.8% |
+| 2023 | +32.2% | +36.0% | +3.8 | 13.9% → 13.3% |
+| 2024 | +36.4% | +35.7% | -0.7 | 26.7% → 27.0% |
+| 2025 | +16.3% | +11.3% | -5.0 | 26.9% → 26.3% |
+| 2026-01..09-17 | +18.7% | +8.9% | -9.9 | 12.0% → 14.7% |
+
+Wins 1/5, median -4.99 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +53.7% | 9.6% | -22.8% | 0.55 | 0.42 | $85.1k | $0.14k | 123 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +87.7% | 17.6% | -15.2% | 1.03 | 1.16 | $69.6k | $0.54k | 81 |
+
+Verdict: **dropped-at-dev** (both levels) — ETH fails: CAGR 9.6% vs 14.0%, Calmar 0.42, wins 1/5, positive in 4/5 segments; WBTC is better than v6 (CAGR 17.6% vs 17.3%, Calmar 1.16 vs 0.97, max DD −15.2%) but the standalone screen needs both assets at Calmar ≥ 0.60. A permanent 25% deployment costs ETH more in the falls than the fees it earns. Holdout not run.
 
 ## Deviations
 

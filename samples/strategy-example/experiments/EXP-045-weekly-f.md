@@ -1,8 +1,8 @@
 # EXP-045: signal engine's F read once a week (Sunday value held) (v6.32)
 
 - Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Status: dropped-at-dev
+- Pre-registration commit: 203850a · Result commit: ______
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending.
 
 ## Hypothesis
@@ -35,7 +35,26 @@ Pre-registered together with EXP-044..047 (four small structural LP-mechanic cha
 
 ## Result
 
-(not run)
+Development (`A` and the variant in each invocation):
+
+| test | v6 | this | gain | max DD v6 → this |
+|---|---|---|---|---|
+| 2022 | +7.6% | -11.5% | -19.1 | 21.5% → 27.1% |
+| 2023 | +32.2% | +46.2% | +14.0 | 13.9% → 10.7% |
+| 2024 | +36.4% | +23.9% | -12.5 | 26.7% → 26.1% |
+| 2025 | +16.3% | +32.6% | +16.3 | 26.9% → 24.4% |
+| 2026-01..09-17 | +18.7% | +19.0% | +0.2 | 12.0% → 11.7% |
+
+Wins 3/5, median +0.24 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +60.7% | 10.6% | -25.1% | 0.58 | 0.42 | $74.9k | $0.19k | 99 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +65.3% | 13.8% | -19.9% | 0.80 | 0.70 | $55.9k | $0.53k | 67 |
+
+Verdict: **dropped-at-dev** (both levels) — ETH CAGR 10.6% vs 14.0%, Calmar 0.42, max DD −25.1%, wins 3/5, positive in 4/5 segments; WBTC CAGR 13.8% vs 17.3%, Calmar 0.70, max DD −19.9%. Reading F once a week loses return on both assets without cutting risk; the daily reaction speed is part of what the engine earns. Holdout not run.
 
 ## Deviations
 

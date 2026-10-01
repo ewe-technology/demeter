@@ -1,8 +1,8 @@
 # EXP-044: range exit needs two consecutive daily checks outside the ladder (v6.31)
 
 - Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Status: holdout-pass
+- Pre-registration commit: 203850a · Result commit: ______
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending.
 
 ## Hypothesis
@@ -35,7 +35,41 @@ Pre-registered together with EXP-044..047 (four small structural LP-mechanic cha
 
 ## Result
 
-(not run)
+Development (`A` and the variant in each invocation):
+
+| test | v6 | this | gain | max DD v6 → this |
+|---|---|---|---|---|
+| 2022 | +7.6% | +8.7% | +1.1 | 21.5% → 21.5% |
+| 2023 | +32.2% | +18.6% | -13.6 | 13.9% → 14.5% |
+| 2024 | +36.4% | +34.5% | -1.9 | 26.7% → 27.0% |
+| 2025 | +16.3% | +25.8% | +9.6 | 26.9% → 23.0% |
+| 2026-01..09-17 | +18.7% | +14.0% | -4.7 | 12.0% → 12.9% |
+
+Wins 2/5, median -1.90 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +99.1% | 15.8% | -19.8% | 0.81 | 0.80 | $95.9k | $0.29k | 143 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +79.9% | 16.3% | -17.2% | 0.96 | 0.95 | $60.0k | $0.69k | 106 |
+
+Holdout (`A` and the variant in the same invocation, one continuous run per window):
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| Arbitrum WETH v6 | +57.0% | 33.6% | -25.1% | 1.24 | 1.34 | $40.8k | $0.30k | 47 |
+| Arbitrum WETH this | +57.1% | 33.6% | -25.7% | 1.26 | 1.31 | $43.8k | $0.30k | 46 |
+| Base WETH v6 | +55.9% | 17.8% | -28.1% | 0.76 | 0.63 | $43.1k | $3.96k | 83 |
+| Base WETH this | +58.5% | 18.5% | -29.1% | 0.80 | 0.64 | $48.4k | $3.93k | 80 |
+| Base cbBTC v6 | +22.3% | 12.5% | -15.7% | 0.93 | 0.79 | $15.9k | $0.43k | 40 |
+| Base cbBTC this | +21.2% | 11.9% | -15.8% | 0.89 | 0.75 | $15.7k | $0.42k | 40 |
+| WBTC 2022 out-of-time (H4) v6 | +2.4% | 2.9% | -12.5% | 0.24 | 0.23 | $14.3k | $0.04k | 17 |
+| WBTC 2022 out-of-time (H4) this | +2.4% | 2.9% | -12.5% | 0.24 | 0.23 | $14.3k | $0.04k | 17 |
+| ETH 2021 bull (H5 reported) v6 | +4.5% | 7.0% | -30.7% | 0.37 | 0.23 | $21.0k | $3.70k | 37 |
+| ETH 2021 bull (H5 reported) this | -6.9% | -10.3% | -30.7% | -0.10 | -0.34 | $21.7k | $3.70k | 37 |
+
+Verdict: **holdout-pass** (standalone; improvement level fails) — dev: the improvement rule fails (ETH CAGR 15.8% vs 14.0%, Calmar 0.80 vs 0.61, max DD −19.8% vs −22.8%, but WBTC CAGR 16.3% vs 17.3%, Calmar 0.95 vs 0.97 and ETH wins 2/5) while the standalone screen passes (ETH Calmar 0.80, WBTC Calmar 0.95, max DDs −19.8% / −17.2%, ETH positive in 5/5 segments). Holdout: Calmar 1.31 / 0.64 / 0.75 on Arbitrum / Base WETH / Base cbBTC (≥ 0.50 on 3 of 3), all returns positive, worst max DD −29.1%, H4 (WBTC 2022 out-of-time) +2.4% = v6. Improvement level on the holdout: CAGR above v6's on 1 of 3 pools (Base WETH 18.5% vs 17.8%), so it fails. Reading: statistically indistinguishable from v6 on every judged window (Calmar within ±0.04, H4 identical because no exit occurred); H5 (reported, not judged) ETH 2021 bull: −6.9% vs v6 +4.5%, the confirmation day costs on the way up.
 
 ## Deviations
 

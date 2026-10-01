@@ -69,6 +69,12 @@ def hold(tag: str, prefixes: list) -> dict:
         imp = len(imp_pools) >= 2 and all(v["calmar"] >= a["calmar"] - 0.2 for l, a, v in rest)
         std_pools = [l for l, a, v in per if v["calmar"] >= 0.5]
         std = all(v["total"] > 0 for _, a, v in per) and len(std_pools) >= 2 and all(v["maxdd"] >= -0.35 for _, a, v in per)
+        foot = f"{R}/0x99ac-opt-{tag}-2022-01-01-2022-10-31"   # H4 out-of-time window, when it was run
+        if os.path.exists(foot + ".csv"):
+            a4, v4 = cont(foot, "A_"), cont(foot, pre)
+            imp = imp and v4["total"] >= a4["total"] - 0.03
+            std = std and v4["total"] > 0 and v4["maxdd"] >= -0.35
+            print(f"       H4 WBTC 2022 out-of-time: total {v4['total']*100:+.1f}% dd {v4['maxdd']*100:.1f}% (v6 {a4['total']*100:+.1f}%)")
         out[pre] = {"improvement": imp, "standalone": std, "per": per}
         print(f"{pre:6s} improvement={'PASS' if imp else 'fail'} ({len(imp_pools)}/3 pools) standalone={'PASS' if std else 'fail'} ({len(std_pools)}/3 pools Calmar>=0.5) | "
               + "; ".join(f"{l}: calmar {v['calmar']:.3f} (v6 {a['calmar']:.3f}) dd {v['maxdd']*100:.1f}" for l, a, v in per))
