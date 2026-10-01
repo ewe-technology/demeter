@@ -4,6 +4,7 @@ Three-pool experiment, plan A: BTC/USD is derived from two pools, LP only in the
   ETH/USDC  0x88e6... 0.05%  -> WETH price in USDC, LP leg 1
   WBTC/WETH 0x4585... 0.05%  -> WBTC price in WETH, LP leg 2
   BTC/USDC  = ETH/USDC x WBTC/WETH (synthetic, no BTC/stable pool needed)
+  USDC/USDT 0x3416... 0.01%  -> optional parking place while the gate is closed
 
 Rules, judged daily at 00:00 UTC on yesterday's close:
   * gate decides whether capital is in the pools or parked in USDC
@@ -11,20 +12,26 @@ Rules, judged daily at 00:00 UTC on yesterday's close:
       btc   : synthetic BTC close > its EMA
       eth   : ETH close > its EMA
       both  : both of the above
+    with `band` > 0 the signals get hysteresis: they turn on above EMA x (1 + band) and
+    off below EMA x (1 - band), and keep their last state in between
   * when in, equity is split between the ETH/USDC leg and the WBTC/WETH leg, either by fixed
     `weights`, or by `tilt` on the ETH/BTC trend (ETH/BTC close vs its EMA):
       follow: ETH stronger -> TILT_STRONG, weaker -> TILT_WEAK
       fade  : the opposite
     each leg placed +/- its range around the current price
-  * rebuild when the target changes, or when a leg's price has left its range
+  * when out and `park` is set, the USDC goes into USDC/USDT +/- PARK_RANGE instead of idling,
+    unless USDT/USDC is off peg by PARK_MAX_DEPEG or more; then it waits in USDC until the peg is back
+  * rebuild when the target changes, or when a placed position's price has left its range.
+    Range is checked daily at 00:00, or every hour with check="hourly"
 
-Costs: swaps pay the pool fee (0.05%), no slippage. Gas is estimated afterwards from the action
+Costs: swaps pay the pool fee, no slippage. Gas is estimated afterwards from the action
 log (GAS_UNITS x GAS_GWEI of that year x ETH price) and subtracted from net value. Both tables
 are rough assumptions, edit them to taste.
 
 Run from samples/strategy-example:
   PYTHONPATH=../.. python tri_btc_eth_gate.py                  # hourly sweep, 2022-2025
   PYTHONPATH=../.. python tri_btc_eth_gate.py --grid           # gate x span x tilt grid, for samples/research/walk_forward.py
+  PYTHONPATH=../.. python tri_btc_eth_gate.py --improve        # parking / hysteresis / hourly range check on btc100_follow
   PYTHONPATH=../.. python tri_btc_eth_gate.py --minute mix_btc100,mix_none --window 2025-01-01
       # the same configs on minute bars and hourly bars over one window, to check the hourly approximation
 """
@@ -40,10 +47,28 @@ from decimal import Decimal
 import pandas as pd
 
 from demeter import Actuator, ChainType, MarketInfo, Snapshot, Strategy, TokenInfo
-from demeter.uniswap import UniLpMarket, UniV3Pool
+from demeter.uniswap import UniLpMarket, UniV3Pool, V3CoreLib
 from demeter.uniswap.data import resample
 
+_demeter_update_fee = V3CoreLib.update_fee
+
+
+def _update_fee_counting_own_liquidity(last_tick, pool, pos, position, state):
+    """
+    Demeter shares fees by our liquidity / the pool's on-chain liquidity, which leaves our own position out of
+    the denominator. Harmless when we are a sliver of the pool, but when on-chain liquidity at the current tick
+    is thin (USDC/USDT during the March 2023 depeg) it overstates our fees a lot. Count our liquidity in.
+    Patched here at import, so it applies to this script (and its worker processes) only.
+    """
+    state = state.copy()
+    state["currentLiquidity"] = state["currentLiquidity"] + position.liquidity
+    _demeter_update_fee(last_tick, pool, pos, position, state)
+
+
+V3CoreLib.update_fee = staticmethod(_update_fee_counting_own_liquidity)
+
 DATA_START, END = date(2021, 5, 13), date(2025, 12, 31)  # WBTC/WETH has no file for 2021-05-12
+STABLE_START = date(2021, 11, 15)  # first day of USDC/USDT data, the backtest itself starts here
 TRADE_START = datetime(2022, 1, 1)  # the months before only warm up the EMA
 INITIAL_USDC = 100_000
 WORKERS = 4
@@ -57,16 +82,26 @@ GAS_GWEI = {2021: 50, 2022: 40, 2023: 30, 2024: 15, 2025: 3}
 
 ETH_POOL = "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
 RATIO_POOL = "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0"
+STABLE_POOL = "0x3416cF6C708Da44DB2624D63ea0AAef7113527C6"
 usdc = TokenInfo(name="usdc", decimal=6)
+usdt = TokenInfo(name="usdt", decimal=6)
 weth = TokenInfo(name="weth", decimal=18)
 wbtc = TokenInfo(name="wbtc", decimal=8)
 eth_pool = UniV3Pool(token0=usdc, token1=weth, fee=0.05, quote_token=usdc)
 ratio_pool = UniV3Pool(token0=wbtc, token1=weth, fee=0.05, quote_token=weth)
-ETH_KEY, RATIO_KEY = MarketInfo("eth"), MarketInfo("ratio")
+stable_pool = UniV3Pool(token0=usdc, token1=usdt, fee=0.01, quote_token=usdc, tick_spacing=1)  # default would be 2
+ETH_KEY, RATIO_KEY, STABLE_KEY = MarketInfo("eth"), MarketInfo("ratio"), MarketInfo("stable")
+MARKETS = ((ETH_KEY, eth_pool, ETH_POOL), (RATIO_KEY, ratio_pool, RATIO_POOL), (STABLE_KEY, stable_pool, STABLE_POOL))
 SAFETY = Decimal("0.999")  # leave a hair of balance so rounding never overdraws
 
 EMA_SPANS = (50, 100, 150, 200)
+BANDS = (0.0, 0.01, 0.02, 0.05)
 TILT_STRONG, TILT_WEAK = (0.75, 0.25), (0.25, 0.75)  # (ETH/USDC leg, WBTC/WETH leg)
+PARK_RANGE = 0.005
+# no parking while USDT/USDC is further than this from 1: LPing a depeg means soaking up the coin that is
+# breaking, and Demeter credits a thin-liquidity range with far more fees than it could earn (the March 2023
+# USDC depeg showed +3.9 pt in one month on hourly bars, +1.1 pt on minute bars)
+PARK_MAX_DEPEG = Decimal("0.003")
 
 
 @dataclass(frozen=True)
@@ -78,6 +113,9 @@ class Config:
     ratio_range: float = 0.10
     ema_span: int = 100
     tilt: str = "none"  # none / follow / fade
+    park: bool = False  # LP the idle USDC in USDC/USDT while the gate is closed
+    band: float = 0.0  # hysteresis around the EMA, see BANDS
+    check: str = "daily"  # daily / hourly range check
 
 
 def build_configs() -> list[Config]:
@@ -102,12 +140,52 @@ def build_grid() -> list[Config]:
     return configs
 
 
+def build_improvements() -> list[Config]:
+    """The three improvements one at a time on btc100_follow, then combined, plus the fixed 50/50 as a cross-check."""
+    base = dict(gate="btc", ema_span=100, tilt="follow")
+    return [
+        Config("follow_base", **base),
+        Config("follow_park", park=True, **base),
+        Config("follow_band1", band=0.01, **base),
+        Config("follow_band2", band=0.02, **base),
+        Config("follow_band5", band=0.05, **base),
+        Config("follow_hourly", check="hourly", **base),
+        Config("follow_park_band2", park=True, band=0.02, **base),
+        Config("follow_all", park=True, band=0.02, check="hourly", **base),
+        Config("follow_park_band1", park=True, band=0.01, **base),  # added after seeing the others: best of each, daily check
+        Config("fixed_base", "btc"),
+        Config("fixed_all", "btc", park=True, band=0.02, check="hourly"),
+    ]
+
+
+def signal_column(series: str, span: int, band: float) -> str:
+    return f"{series}{span}" if band == 0 else f"{series}{span}b{band:g}"
+
+
+def above_with_band(close: pd.Series, ema: pd.Series, band: float) -> pd.Series:
+    """True once close > ema x (1 + band), False once close < ema x (1 - band), otherwise keep the last state."""
+    if band == 0:
+        return close > ema
+    state, out = bool(close.iloc[0] > ema.iloc[0]), []
+    for c, e in zip(close.values, ema.values):
+        if c > e * (1 + band):
+            state = True
+        elif c < e * (1 - band):
+            state = False
+        out.append(state)
+    return pd.Series(out, index=close.index)
+
+
 def build_signal(eth_daily: pd.Series, ratio_daily: pd.Series) -> pd.DataFrame:
-    """One bool column per (series, span). The row for day d holds what was known at d 00:00."""
+    """One bool column per (series, span, band). The row for day d holds what was known at d 00:00."""
     daily = pd.DataFrame({"eth": eth_daily, "btc": eth_daily * ratio_daily}).dropna()
     daily["ethbtc"] = daily["eth"] / daily["btc"]
-    columns = {f"{col}{span}": daily[col] > daily[col].ewm(span=span, adjust=False).mean()
-               for span in EMA_SPANS for col in daily.columns}
+    columns = {}
+    for span in EMA_SPANS:
+        for col in daily.columns:
+            ema = daily[col].ewm(span=span, adjust=False).mean()
+            for band in BANDS:
+                columns[signal_column(col, span, band)] = above_with_band(daily[col], ema, band)
     return pd.DataFrame(columns).shift(1).dropna().astype(bool)
 
 
@@ -117,28 +195,38 @@ class TriGate(Strategy):
         self.cfg = cfg
         self.signal = signal
         self.trade_start = trade_start
-        self.target = None  # None = parked in USDC, else (ETH/USDC leg, WBTC/WETH leg)
-        self.bounds = {}  # market key -> (low price, high price)
+        self.target = None  # None = out of the ETH/BTC pools, else (ETH/USDC leg, WBTC/WETH leg)
+        self.parked = False  # USDC is in USDC/USDT
+        self.bounds = {}  # market key -> (low price, high price) of every placed position
         self.rebuilds = 0
 
+    def _sig(self, sig: pd.Series, series: str) -> bool:
+        return bool(sig[signal_column(series, self.cfg.ema_span, self.cfg.band)])
+
     def wanted(self, sig: pd.Series) -> tuple | None:
-        span, gate = self.cfg.ema_span, self.cfg.gate
-        if gate == "btc" and not sig[f"btc{span}"] or gate == "eth" and not sig[f"eth{span}"] \
-                or gate == "both" and not (sig[f"btc{span}"] and sig[f"eth{span}"]):
+        gate = self.cfg.gate
+        if gate == "btc" and not self._sig(sig, "btc") or gate == "eth" and not self._sig(sig, "eth") \
+                or gate == "both" and not (self._sig(sig, "btc") and self._sig(sig, "eth")):
             return None
         if self.cfg.tilt == "none":
             return self.cfg.weights
-        eth_strong = bool(sig[f"ethbtc{span}"])
+        eth_strong = self._sig(sig, "ethbtc")
         return TILT_STRONG if eth_strong == (self.cfg.tilt == "follow") else TILT_WEAK
 
     def on_bar(self, snapshot: Snapshot):
         t = snapshot.timestamp
-        if t < self.trade_start or t.hour != 0 or t.minute != 0:
+        if t < self.trade_start or t.minute != 0:
             return
-        target = self.wanted(self.signal.loc[pd.Timestamp(t.date())])
+        daily = t.hour == 0
+        if not daily and self.cfg.check != "hourly":
+            return
+        # the target only changes at 00:00, an hourly check only re-centres what is already placed
+        target = self.wanted(self.signal.loc[pd.Timestamp(t.date())]) if daily else self.target
         left_range = any(not (lo <= self.markets[k].market_status.data.price <= hi) for k, (lo, hi) in self.bounds.items())
-        if target != self.target or (target is not None and left_range):
-            self.rebuild(target)
+        stable_on_peg = abs(self.markets[STABLE_KEY].market_status.data.price - 1) < PARK_MAX_DEPEG
+        park = self.cfg.park and target is None and stable_on_peg
+        if target != self.target or left_range or park != self.parked:
+            self.rebuild(target, park)
 
     @staticmethod
     def _swap(market: UniLpMarket, amount: Decimal, from_token: TokenInfo, to_token: TokenInfo):
@@ -152,18 +240,23 @@ class TriGate(Strategy):
         market.add_liquidity_by_value(min(t1, t2), max(t1, t2), value)
         self.bounds[market.market_info] = (lo, hi)
 
-    def rebuild(self, target: tuple | None):
+    def rebuild(self, target: tuple | None, park: bool):
         m_eth: UniLpMarket = self.markets[ETH_KEY]
         m_ratio: UniLpMarket = self.markets[RATIO_KEY]
+        m_stable: UniLpMarket = self.markets[STABLE_KEY]
         self.rebuilds += 1
         self.target = target
-        for m in (m_eth, m_ratio):
+        self.parked = park
+        for m in (m_eth, m_ratio, m_stable):
             m.remove_all_liquidity()
         self.bounds = {}
-        # consolidate WBTC into WETH, so the only balances are USDC and WETH
+        # consolidate, so the only balances are USDC and WETH
         self._swap(m_ratio, self.broker.get_token_balance(wbtc), wbtc, weth)
+        self._swap(m_stable, self.broker.get_token_balance(usdt), usdt, usdc)
         if target is None:
             self._swap(m_eth, self.broker.get_token_balance(weth), weth, usdc)
+            if park:
+                self._place(m_stable, PARK_RANGE, None)  # add_liquidity_by_value swaps half of it to USDT
             return
 
         p_eth = m_eth.market_status.data.price  # USDC per WETH
@@ -192,14 +285,18 @@ def load_market(key: MarketInfo, pool: UniV3Pool, address: str, start: date, end
     return data, daily_close
 
 
-def load_pair(start: date, end: date, bar: str | None):
-    eth_d, eth_close = load_market(ETH_KEY, eth_pool, ETH_POOL, start, end, bar)
-    ratio_d, ratio_close = load_market(RATIO_KEY, ratio_pool, RATIO_POOL, start, end, bar)
-    index = eth_d.index.intersection(ratio_d.index)
-    eth_d, ratio_d = eth_d.loc[index], ratio_d.loc[index]
-    p_eth, p_ratio = eth_d["price"].astype(float), ratio_d["price"].astype(float)
-    prices = pd.DataFrame({weth.name: p_eth, wbtc.name: p_eth * p_ratio, usdc.name: 1.0}, index=index)
-    return eth_d, ratio_d, prices, eth_close, ratio_close
+def load_all(start: date, end: date, bar: str | None):
+    """Market data for the backtest (from max(start, STABLE_START)), prices, and daily closes from `start`."""
+    data, closes = {}, {}
+    for key, pool, address in MARKETS:
+        data[key], closes[key] = load_market(key, pool, address, max(start, STABLE_START) if key == STABLE_KEY else start,
+                                             end, bar)
+    index = data[ETH_KEY].index.intersection(data[RATIO_KEY].index).intersection(data[STABLE_KEY].index)
+    data = {k: v.loc[index] for k, v in data.items()}
+    p_eth, p_ratio = data[ETH_KEY]["price"].astype(float), data[RATIO_KEY]["price"].astype(float)
+    prices = pd.DataFrame({weth.name: p_eth, wbtc.name: p_eth * p_ratio,
+                           usdt.name: data[STABLE_KEY]["price"].astype(float), usdc.name: 1.0}, index=index)
+    return data, prices, closes[ETH_KEY], closes[RATIO_KEY]
 
 
 def gas_usd(actions, prices: pd.DataFrame) -> pd.Series:
@@ -213,13 +310,12 @@ def gas_usd(actions, prices: pd.DataFrame) -> pd.Series:
     return pd.Series(rows, index=pd.DatetimeIndex(list(rows)), dtype=float).sort_index().cumsum()
 
 
-def run_one(cfg: Config, eth_d: pd.DataFrame, ratio_d: pd.DataFrame, prices: pd.DataFrame, signal: pd.DataFrame,
-            trade_start: datetime):
+def run_one(cfg: Config, data: dict, prices: pd.DataFrame, signal: pd.DataFrame, trade_start: datetime):
     started = time.time()
     actuator = Actuator()
-    for key, pool, data in ((ETH_KEY, eth_pool, eth_d), (RATIO_KEY, ratio_pool, ratio_d)):
+    for key, pool, _ in MARKETS:
         market = UniLpMarket(key, pool)
-        market.data = data
+        market.data = data[key]
         actuator.broker.add_market(market)
     actuator.broker.set_balance(usdc, INITIAL_USDC)
     actuator.set_price(prices, usdc)
@@ -259,8 +355,8 @@ def show(table: pd.DataFrame) -> str:
     return shown.fillna("").to_string()
 
 
-def run_all(configs, eth_d, ratio_d, prices, signal, trade_start, workers):
-    args = [(c, eth_d, ratio_d, prices, signal, trade_start) for c in configs]
+def run_all(configs, data, prices, signal, trade_start, workers):
+    args = [(c, data, prices, signal, trade_start) for c in configs]
     if workers == 1:
         return [run_one(*a) for a in args]
     with multiprocessing.Pool(workers) as pool:
@@ -277,9 +373,9 @@ def summarise(results, start: str) -> tuple[pd.DataFrame, dict]:
 
 
 def sweep(configs: list[Config], tag: str):
-    eth_d, ratio_d, prices, eth_close, ratio_close = load_pair(DATA_START, END, "1h")
+    data, prices, eth_close, ratio_close = load_all(DATA_START, END, "1h")
     signal = build_signal(eth_close, ratio_close)
-    results = run_all(configs, eth_d, ratio_d, prices, signal, TRADE_START, WORKERS)
+    results = run_all(configs, data, prices, signal, TRADE_START, WORKERS)
     table, navs = summarise(results, "2022-01-01")
 
     base = prices.loc["2022-01-01"].iloc[0]
@@ -293,17 +389,17 @@ def sweep(configs: list[Config], tag: str):
 
 def minute_check(names: list[str], window_start: str):
     """Same configs on minute and hourly bars over [window_start, END], signal from the full history."""
-    configs = [c for c in build_configs() if c.name in names]
+    configs = [c for c in build_configs() + build_grid() + build_improvements() if c.name in names]
     start = datetime.fromisoformat(window_start)
-    _, _, _, eth_close, ratio_close = load_pair(DATA_START, END, "1D")  # only for the daily closes
+    _, _, eth_close, ratio_close = load_all(DATA_START, END, "1D")  # only for the daily closes
     signal = build_signal(eth_close, ratio_close)
     rows = []
     for bar in ("1h", None):
-        eth_d, ratio_d, prices, _, _ = load_pair(start.date(), END, bar)
-        table, _ = summarise(run_all(configs, eth_d, ratio_d, prices, signal, start, 1), window_start)
+        data, prices, _, _ = load_all(start.date(), END, bar)
+        table, _ = summarise(run_all(configs, data, prices, signal, start, 1), window_start)
         table.index = [f"{n} [{bar or '1min'}]" for n in table.index]
         rows.append(table)
-        del eth_d, ratio_d, prices
+        del data, prices
         gc.collect()
     table = pd.concat(rows).sort_index()
     table.to_csv(f"{RESULT_DIR}/minute_check_{window_start}.csv")
@@ -315,11 +411,14 @@ if __name__ == "__main__":
     parser.add_argument("--minute", help="comma separated config names to rerun on minute bars")
     parser.add_argument("--window", default="2025-01-01", help="start of the minute-check window")
     parser.add_argument("--grid", action="store_true", help="run build_grid() for walk-forward selection")
+    parser.add_argument("--improve", action="store_true", help="run build_improvements()")
     cli = parser.parse_args()
     os.makedirs(RESULT_DIR, exist_ok=True)
     if cli.minute:
         minute_check(cli.minute.split(","), cli.window)
     elif cli.grid:
         sweep(build_grid(), "grid")
+    elif cli.improve:
+        sweep(build_improvements(), "improve")
     else:
         sweep(build_configs(), "sweep")
