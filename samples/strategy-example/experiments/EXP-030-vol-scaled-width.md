@@ -1,8 +1,8 @@
 # EXP-030: ladder half-width = 30-day sigma x sqrt(30), 10..30%, instead of fixed ±20% (v6.25)
 
-- Jira: QUAN-___
+- Jira: QUAN-882
 - Status: dropped-at-dev
-- Pre-registration commit: 6907836 · Result commit: ______
+- Pre-registration commit: 6907836 · Result commit: 7c9ea34
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending.
 
 ## Hypothesis

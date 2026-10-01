@@ -1,8 +1,8 @@
 # EXP-029: ETH value share s moves with the share of EMA spans the close is above (v6.24)
 
-- Jira: QUAN-___
+- Jira: QUAN-881
 - Status: dropped-at-dev
-- Pre-registration commit: 6907836 · Result commit: ______
+- Pre-registration commit: 6907836 · Result commit: 7c9ea34
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending.
 
 ## Hypothesis

@@ -1,8 +1,8 @@
 # EXP-028: F = mean of 8 accounts (4 on EMA(n), 4 on the Donchian midpoint(n)) (v6.23)
 
-- Jira: QUAN-___
+- Jira: QUAN-880
 - Status: dropped-at-dev
-- Pre-registration commit: 6907836 · Result commit: ______
+- Pre-registration commit: 6907836 · Result commit: 7c9ea34
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending.
 
 ## Hypothesis
