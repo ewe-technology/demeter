@@ -45,6 +45,9 @@ POOLS = {
     "0x6c561b446416e1a00e8e93e221854d6ea4171372": (("eth", 18), ("usdc", 6), 0, 0.3, "../base-data"),
     # EXP-020 holdout: mainnet LINK/USDC 0.3% (token0 LINK), an asset no strategy run has touched
     "0xfad57d2039c21811c8f2b5d5b65308aa99d31559": (("link", 18), ("usdc", 6), 0, 0.3, "../holdout-data"),
+    # EXP-021 holdout: mainnet LINK/WETH 0.3% and UNI/WETH 0.3% (token0 the alt, WETH the quote / numeraire)
+    "0xa6cc3c2531fdaa6ae1a3ca84c2855806728693e8": (("link", 18), ("eth", 18), 0, 0.3, "../holdout-data"),
+    "0x1d42064fc4beb5f8aaf85f4617ae8b3b5b8bd801": (("uni", 18), ("eth", 18), 0, 0.3, "../holdout-data"),
 }
 # the EMA warm-up needs a year of history before the pool existed: read ETH/USD from the mainnet pool
 WARM_POOL = {"0xd0b53d9277642d899df5c87a3966a349a798f224": "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
@@ -56,7 +59,9 @@ FIRST_DATA = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": date(2021, 5, 6),
               "0xd0b53d9277642d899df5c87a3966a349a798f224": date(2023, 12, 1),
               "0xfbb6eed8e7aa03b138556eedaf5d271a5e1e43ef": date(2024, 10, 1),
               "0x6c561b446416e1a00e8e93e221854d6ea4171372": date(2024, 1, 1),
-              "0xfad57d2039c21811c8f2b5d5b65308aa99d31559": date(2021, 6, 1)}
+              "0xfad57d2039c21811c8f2b5d5b65308aa99d31559": date(2021, 6, 1),
+              "0xa6cc3c2531fdaa6ae1a3ca84c2855806728693e8": date(2021, 6, 1),
+              "0x1d42064fc4beb5f8aaf85f4617ae8b3b5b8bd801": date(2021, 6, 1)}
 # EXP-004: daily Aave USDC supply APR per pool's chain (samples/fetch_aave_rates.py)
 RATE_CSV = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": "../aave_usdc_ethereum_daily.csv",
             "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": "../aave_usdc_ethereum_daily.csv",
@@ -68,17 +73,25 @@ FUNDING_CSV = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": "../binance_funding
                "0xd0b53d9277642d899df5c87a3966a349a798f224": "../binance_funding_ETHUSDT.csv",
                "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": "../binance_funding_BTCUSDT.csv",
                "0xfbb6eed8e7aa03b138556eedaf5d271a5e1e43ef": "../binance_funding_BTCUSDT.csv",
-               "0xfad57d2039c21811c8f2b5d5b65308aa99d31559": "../binance_funding_LINKUSDT.csv"}
+               "0xfad57d2039c21811c8f2b5d5b65308aa99d31559": "../binance_funding_LINKUSDT.csv",
+               # EXP-021: synthetic ALT/ETH perp = short ALTUSDT + long ETHUSDT (samples/make_synthetic_funding.py)
+               "0xa6cc3c2531fdaa6ae1a3ca84c2855806728693e8": "../binance_funding_LINKETH_synth.csv",
+               "0x1d42064fc4beb5f8aaf85f4617ae8b3b5b8bd801": "../binance_funding_UNIETH_synth.csv"}
 # EXP-018: Binance daily closes of the pool's base asset, for the 12-month return (samples/fetch_binance_daily.py)
 LONG_CLOSE_CSV = "../binance_daily_closes.csv"
 LONG_CLOSE_COL = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": "ETHUSDT",
                   "0xd0b53d9277642d899df5c87a3966a349a798f224": "ETHUSDT",
                   "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": "BTCUSDT",
                   "0xfbb6eed8e7aa03b138556eedaf5d271a5e1e43ef": "BTCUSDT",
-                  "0xfad57d2039c21811c8f2b5d5b65308aa99d31559": "LINKUSDT"}
+                  "0xfad57d2039c21811c8f2b5d5b65308aa99d31559": "LINKUSDT",
+                  # EXP-021: ETH-quoted pools read the ratio of two USDT closes
+                  "0xa6cc3c2531fdaa6ae1a3ca84c2855806728693e8": ("LINKUSDT", "ETHUSDT"),
+                  "0x1d42064fc4beb5f8aaf85f4617ae8b3b5b8bd801": ("UNIUSDT", "ETHUSDT")}
 INIT_QUOTE = Decimal(100000)
 INIT_BY_POOL = {"0x4585fe77225b41b697c938b018e2ac67ac5a20c0": Decimal(2),  # quote units; default INIT_QUOTE
-                "0xfad57d2039c21811c8f2b5d5b65308aa99d31559": Decimal(10000)}   # thin pool: keep the fee share small
+                "0xfad57d2039c21811c8f2b5d5b65308aa99d31559": Decimal(10000),   # thin pool: keep the fee share small
+                "0xa6cc3c2531fdaa6ae1a3ca84c2855806728693e8": Decimal(40),      # EXP-021: 40 WETH ≈ $100k
+                "0x1d42064fc4beb5f8aaf85f4617ae8b3b5b8bd801": Decimal(40)}
 G_REMOVE, G_ADD, G_SWAP = 260_000, 450_000, 150_000
 GAS_CSV = "../gas_ethereum_hourly.csv"
 ETH_USD_CSV = "../eth_usd_hourly.csv"
@@ -114,11 +127,13 @@ OPT = {"A": Variant("A_v6"),
        "N": Variant("N_bear_short_cash", {"BEAR_SHORT": Decimal("0.5"), "HEDGE_FUNDING": "pool",
                                           "CASH_APR": "pool"}),   # EXP-018: M + EXP-004's cash yield
        "O": Variant("O_bear_short_nocrash", {"BEAR_SHORT": Decimal("0.5"), "HEDGE_FUNDING": "pool",
-                                             "BEAR_CRASH_SIGMA": 2.0})}   # EXP-020: M without entries on 2-sigma crash days
+                                             "BEAR_CRASH_SIGMA": 2.0}),   # EXP-020: M without entries on 2-sigma crash days
+       "P": Variant("P_bear_short_nocrash_2leg", {"BEAR_SHORT": Decimal("0.5"), "HEDGE_FUNDING": "pool",
+                                                  "BEAR_CRASH_SIGMA": 2.0, "HEDGE_FEE": Decimal("0.001")})}   # EXP-021: O, synthetic ALT/ETH perp (two taker legs)
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE"]}
 
 
 def sens_grid():
@@ -275,7 +290,9 @@ def daily_frame() -> pd.DataFrame:
     if V.LVR_GATE:   # EXP-012: zero F on days the pool did not pay its liquidity over the trailing week
         daily = V.gate_fractions(daily, V.fee_lvr_ratio(GATE_MINUTES, POOLS[POOL][3]))
     if V.BEAR_SHORT > 0:   # EXP-018: the bear-short flag on top of the final F
-        long_close = pd.read_csv(LONG_CLOSE_CSV, parse_dates=["date"]).set_index("date")[LONG_CLOSE_COL[POOL]]
+        closes = pd.read_csv(LONG_CLOSE_CSV, parse_dates=["date"]).set_index("date")
+        col = LONG_CLOSE_COL[POOL]
+        long_close = closes[col[0]] / closes[col[1]] if isinstance(col, tuple) else closes[col]
         daily = V.bear_short_flags(daily, long_close)
     return daily
 
