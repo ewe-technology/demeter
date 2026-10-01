@@ -27,3 +27,7 @@ EXP-024,2026-10-02,regime line = midpoint of the n-day Donchian channel instead 
 EXP-025,2026-10-02,regime line = Hull MA(n) instead of EMA(n) (v6.20),QUAN-877,dropped-at-dev,-10.53,0/5,,,0.162,0.032,-0.241,5440347,8912e08,EXP-025-hma-regime.md
 EXP-026,2026-10-02,regime = n-day return > 0 (time-series momentum) instead of price above EMA(n) (v6.21),QUAN-878,dropped-at-dev,-7.42,1/5,,,0.202,0.040,-0.326,5440347,8912e08,EXP-026-roc-regime.md
 EXP-027,2026-10-02,regime line = Supertrend (ATR(n) × 3 trailing band) instead of EMA(n) (v6.22),QUAN-879,dropped-at-dev,-15.80,0/5,,,-0.156,-0.035,-0.352,5440347,8912e08,EXP-027-supertrend-regime.md
+EXP-028,2026-10-02,"F = mean of 8 accounts (4 on EMA(n), 4 on the Donchian midpoint(n)) (v6.23)",,pre-registered,,,,,,,,,,EXP-028-ensemble-ema-donchian.md
+EXP-029,2026-10-02,ETH value share s moves with the share of EMA spans the close is above (v6.24),,pre-registered,,,,,,,,,,EXP-029-share-by-armed.md
+EXP-030,2026-10-02,"ladder half-width = 30-day sigma x sqrt(30), 10..30%, instead of fixed ±20% (v6.25)",,pre-registered,,,,,,,,,,EXP-030-vol-scaled-width.md
+EXP-031,2026-10-02,account armed only while the close is above both EMA(n) and the Donchian midpoint(n) (v6.26),,pre-registered,,,,,,,,,,EXP-031-consensus-ema-donchian.md

@@ -174,6 +174,17 @@ RECENTRE_UP = Decimal("0")
 # EMA100, and the account logic (exit, re-arm, stop, staged refill) is unchanged.
 REGIME = "ema"
 SUPERTREND_MULT = 3.0
+# EXP-028 / EXP-031 (v6.23 / v6.26): combinations of two regime lines. "ens_ed" = 8 accounts (4 EMA + 4 Donchian), F =
+# their mean; "max_ed" = 4 accounts armed only while the close is above BOTH the EMA(n) and the Donchian midpoint(n).
+# EXP-029 (v6.24): the ETH value share s moves with the share of the EMA spans (90, 100, 110, 120) the last close is above:
+# s = SHARE_BELOW_EMA + (SHARE_ABOVE_EMA - SHARE_BELOW_EMA) x that share (v6: all or nothing on EMA100 alone). False = v6.
+SHARE_BY_ARMED = False
+# EXP-030 (v6.25): ladder half-width per build = WIDTH_VOL_K x sigma x sqrt(WIDTH_VOL_DAYS), sigma = std of the last
+# WIDTH_VOL_DAYS completed daily log returns, clamped to [WIDTH_VOL_MIN, WIDTH_VOL_MAX] and rounded to WIDTH_VOL_GRID, the
+# same width up and down (the ladder keeps v6's valley shape). False = v6's fixed +-20%.
+WIDTH_VOL = False
+WIDTH_VOL_K, WIDTH_VOL_DAYS = 1.0, 30
+WIDTH_VOL_MIN, WIDTH_VOL_MAX, WIDTH_VOL_GRID = 0.10, 0.30, 0.05
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -258,22 +269,31 @@ def _supertrend(high: pd.Series, low: pd.Series, close: pd.Series, period: int, 
     return pd.Series(line, index=close.index)
 
 
-def regime_lines(minute_price: pd.Series, close: pd.Series) -> dict:
-    """EXP-024..027: per account span n, the line the daily close is compared with (see REGIME)."""
+def regime_components() -> list:
+    return {"ens_ed": ["ema", "donchian"], "max_ed": ["max_ed"]}.get(REGIME, [REGIME])
+
+
+def regime_lines(minute_price: pd.Series, close: pd.Series, kind: str) -> dict:
+    """EXP-024..031: per account span n, the line the daily close is compared with (see REGIME)."""
     high = minute_price.resample("1D").max().reindex(close.index)
     low = minute_price.resample("1D").min().reindex(close.index)
     out = {}
     for n in EMA_SPANS:
-        if REGIME == "donchian":
+        if kind == "ema":
+            out[n] = close.ewm(span=n, adjust=False).mean()
+        elif kind == "max_ed":
+            ema = close.ewm(span=n, adjust=False).mean()
+            out[n] = np.maximum(ema, (high.rolling(n, min_periods=1).max() + low.rolling(n, min_periods=1).min()) / 2)
+        elif kind == "donchian":
             out[n] = (high.rolling(n, min_periods=1).max() + low.rolling(n, min_periods=1).min()) / 2
-        elif REGIME == "hma":
+        elif kind == "hma":
             out[n] = _wma(2 * _wma(close, max(n // 2, 1)) - _wma(close, n), max(int(round(n ** 0.5)), 1))
-        elif REGIME == "roc":
+        elif kind == "roc":
             out[n] = close.shift(n).bfill()
-        elif REGIME == "supertrend":
+        elif kind == "supertrend":
             out[n] = _supertrend(high, low, close, n, SUPERTREND_MULT)
         else:
-            raise ValueError(REGIME)
+            raise ValueError(kind)
     return out
 
 
@@ -283,14 +303,17 @@ def daily_ema_frame(minute_price: pd.Series) -> pd.DataFrame:
     the backtest window so the EMAs and the virtual accounts are settled on day one."""
     close = minute_price.astype(float).resample("1D").last().dropna()
     emas = {n: close.ewm(span=n, adjust=False).mean() for n in EMA_SPANS}
-    lines = emas if REGIME == "ema" else regime_lines(minute_price.astype(float), close)
-    accounts = [VirtualAccount(n) for n in EMA_SPANS]
+    comps = regime_components()
+    lines = {k: emas if k == "ema" else regime_lines(minute_price.astype(float), close, k) for k in comps}
+    accounts = [(k, VirtualAccount(n)) for k in comps for n in EMA_SPANS]
     fractions = []
     for day, c in close.items():
-        for a in accounts:
-            a.step(float(c), float(lines[a.span][day]))
-        fractions.append(sum(a.deployed for a in accounts) / len(accounts))
-    return pd.DataFrame({"close": close, "ema": emas[EMA_SPAN], "F": fractions})
+        for k, a in accounts:
+            a.step(float(c), float(lines[k][a.span][day]))
+        fractions.append(sum(a.deployed for _, a in accounts) / len(accounts))
+    arm = sum((close > emas[n]).astype(float) for n in EMA_SPANS) / len(EMA_SPANS)   # EXP-029
+    sigma = np.log(close).diff().rolling(WIDTH_VOL_DAYS, min_periods=WIDTH_VOL_DAYS).std()   # EXP-030
+    return pd.DataFrame({"close": close, "ema": emas[EMA_SPAN], "F": fractions, "arm": arm, "sigma": sigma})
 
 
 def fee_lvr_ratio(minute: pd.DataFrame, fee_pct: float, days: int | None = None) -> pd.Series:
@@ -362,7 +385,10 @@ def daily_row_for(daily: pd.DataFrame, timestamp: datetime) -> tuple[pd.Timestam
 def ema_share_for(daily: pd.DataFrame, timestamp: datetime) -> tuple[Decimal, pd.Timestamp, float, float]:
     """(share, judged day, close, ema) for a (re)build at `timestamp`."""
     day, row = daily_row_for(daily, timestamp)
-    share = SHARE_ABOVE_EMA if row["close"] > row["ema"] else SHARE_BELOW_EMA
+    if SHARE_BY_ARMED:   # EXP-029: arm is a multiple of 1/4 (four spans), exact in Decimal
+        share = SHARE_BELOW_EMA + (SHARE_ABOVE_EMA - SHARE_BELOW_EMA) * Decimal(str(row["arm"]))
+    else:
+        share = SHARE_ABOVE_EMA if row["close"] > row["ema"] else SHARE_BELOW_EMA
     return share, day, float(row["close"]), float(row["ema"])
 
 
@@ -681,8 +707,10 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
                 raise ValueError("SKEW needs a percentage lower_ratio")
             self.shape_configs["up"] = config(upper_ratio + SKEW, lower_ratio - SKEW)
             self.shape_configs["down"] = config(upper_ratio - SKEW, lower_ratio + SKEW)
+        self._config = config
         self.skew_state = "flat"
         self.skew_builds = {"up": 0, "down": 0}
+        self.width_builds: Dict[str, int] = {}   # EXP-030: builds per half-width
 
     @property
     def shape_config(self) -> List[List]:
@@ -692,6 +720,19 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
     def resolve_skew(self, timestamp: datetime) -> None:
         """EXP-013: pick the reaches of the ladder built at `timestamp` from the s rule's trend sign (last completed
         daily close vs EMA100); the state then stays for the life of that ladder."""
+        if WIDTH_VOL and self.daily_ema is not None:   # EXP-030
+            try:
+                sigma = float(daily_row_for(self.daily_ema, timestamp)[1]["sigma"])
+            except KeyError:
+                sigma = float("nan")
+            width = 0.20 if math.isnan(sigma) else min(max(WIDTH_VOL_K * sigma * math.sqrt(WIDTH_VOL_DAYS), WIDTH_VOL_MIN),
+                                                       WIDTH_VOL_MAX)
+            width = round(round(width / WIDTH_VOL_GRID) * WIDTH_VOL_GRID, 4)
+            self.skew_state = f"w{width}"
+            if self.skew_state not in self.shape_configs:
+                self.shape_configs[self.skew_state] = self._config(Decimal(str(width)), Decimal(str(width)))
+            self.width_builds[self.skew_state] = self.width_builds.get(self.skew_state, 0) + 1
+            return
         if SKEW <= ZERO or self.daily_ema is None:
             self.skew_state = "flat"
             return

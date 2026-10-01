@@ -143,11 +143,15 @@ OPT = {"A": Variant("A_v6"),
        "S": Variant("S_donchian", {"REGIME": "donchian"}),   # EXP-024: regime line = Donchian channel midpoint, n = 90..120
        "T": Variant("T_hma", {"REGIME": "hma"}),   # EXP-025: regime line = Hull MA(n)
        "U": Variant("U_roc", {"REGIME": "roc"}),   # EXP-026: regime = n-day return > 0
-       "W": Variant("W_supertrend", {"REGIME": "supertrend"})}   # EXP-027: Supertrend(ATR n, x3)
+       "W": Variant("W_supertrend", {"REGIME": "supertrend"}),   # EXP-027: Supertrend(ATR n, x3)
+       "X": Variant("X_ens_ema_donchian", {"REGIME": "ens_ed"}),   # EXP-028: 4 EMA + 4 Donchian accounts, F = mean of 8
+       "Y": Variant("Y_share_by_armed", {"SHARE_BY_ARMED": True}),   # EXP-029: s = 0.5 + 0.2 x share of EMA spans above
+       "Z": Variant("Z_vol_width", {"WIDTH_VOL": True}),   # EXP-030: half-width = sigma_30d x sqrt(30), 10..30%
+       "AA": Variant("AA_consensus", {"REGIME": "max_ed"})}   # EXP-031: armed only above both EMA(n) and Donchian mid(n)
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL"]}
 
 
 def sens_grid():
@@ -348,7 +352,7 @@ def run_variant(args):
             "mean_F": float(window["F"].mean()) if variant.deploy == V.DEPLOY_SIGNAL else 1.0,
             "gate_closed_days": int(((window["F_raw"] > 0) & (window["F"] == 0)).sum()) if "F_raw" in window else 0,
             "median_R": float(window["R"].median()) if "R" in window else float("nan"),
-            "skew_up_builds": s.skew_builds["up"], "skew_down_builds": s.skew_builds["down"],
+            "width_builds": str(s.width_builds), "skew_up_builds": s.skew_builds["up"], "skew_down_builds": s.skew_builds["down"],
             "hedge_pnl": float(s.hedge_pnl), "hedge_funding": float(s.hedge_funding), "hedge_fees": float(s.hedge_fees),
             "hedge_trades": s.hedge_trades, "hedge_max_ratio": s.hedge_max_ratio,
             "hedge_min_cash": float(s.hedge_min_cash) if s.hedge_min_cash is not None else float("nan"),
