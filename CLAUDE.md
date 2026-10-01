@@ -44,7 +44,8 @@ Dino names versions `v6.1`, `v6.2`, ...; each is one experiment `EXP-NNN` (next 
    confirmation step, assign Dino (`712020:61c91efb-686a-4919-bb27-377f27b88318`), and report the key in step 6
    (he edits or reassigns afterwards if needed). Never defer ticket creation to "batch it later" or to a reply —
    an experiment is not done while its `jira` column is empty. Put the key in the registry `jira` column and the
-   EXP file.
+   EXP file. When the registry status is final (`dropped-at-dev`, `holdout-pass`, `holdout-fail`, `fail`), also
+   transition the subtask to Done (transition id `31`); leave it open for `dev-done` or a pending holdout.
 5. Dashboard (https://claude.ai/artifact/ATZR3s2SqybzjQvMMsAZg5): build the documents with
    `python experiments/dashboard_rows.py row ...` (and `curve ...` when a continuous ETH/WBTC run exists), then
    `ArtifactData set experiments/<EXP-id>` and `ArtifactData update curves/eth|btc` (get first, pass `if_version`).
