@@ -1,8 +1,8 @@
 # EXP-047: F never below 25% (one refill stage always deployed) (v6.34)
 
-- Jira: QUAN-___
+- Jira: QUAN-899
 - Status: dropped-at-dev
-- Pre-registration commit: 203850a · Result commit: ______
+- Pre-registration commit: 203850a · Result commit: 05b59f4
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending.
 
 ## Hypothesis

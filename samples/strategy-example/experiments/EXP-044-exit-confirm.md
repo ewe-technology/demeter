@@ -1,8 +1,8 @@
 # EXP-044: range exit needs two consecutive daily checks outside the ladder (v6.31)
 
-- Jira: QUAN-___
+- Jira: QUAN-896
 - Status: holdout-pass
-- Pre-registration commit: 203850a · Result commit: ______
+- Pre-registration commit: 203850a · Result commit: 05b59f4
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending.
 
 ## Hypothesis
