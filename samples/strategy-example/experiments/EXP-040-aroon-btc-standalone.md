@@ -1,8 +1,8 @@
 # EXP-040: Aroon regime (v6.29) judged standalone as a BTC-pool strategy (v6.29r)
 
 - Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Status: holdout-fail
+- Pre-registration commit: 5dad516 · Result commit: ______
 - Re-judged from EXP-038; level: standalone, BTC-pool (README *Success levels*)
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending. Claimed for BTC pools only: it failed the ETH dev screen.
 
@@ -29,7 +29,16 @@ Pre-registered together with EXP-040..043 and run in the same invocations as `A`
 
 ## Result
 
-(not run)
+Holdout, `A` and the variant in the same invocation:
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| WBTC 2022 out-of-time v6 | +2.4% | 2.9% | -12.5% | 0.24 | 0.23 | $14.3k | $0.04k | 17 |
+| WBTC 2022 out-of-time this | -12.1% | -14.4% | -23.0% | -0.51 | -0.63 | $11.0k | $0.04k | 21 |
+| Base cbBTC v6 | +22.3% | 12.5% | -15.7% | 0.93 | 0.79 | $15.9k | $0.43k | 40 |
+| Base cbBTC this | +9.1% | 5.2% | -19.0% | 0.41 | 0.28 | $17.6k | $0.50k | 31 |
+
+Verdict: **holdout-fail** (standalone, BTC-pool) — dev passes the screen (from EXP-038: WBTC Calmar ≥ 0.60) but H-a, the out-of-time 2022 bear window, ends -12.1% (max DD -23.0%) where v6 ends +2.4% (max DD -12.5%): the rule needs a positive return. H-b Base cbBTC: +9.1%, Calmar 0.276 (v6 +22.3%, 0.795), below the 0.50 bar. The WBTC dev edge of this line was a bull-market fit: it lost the 2022 window the dev data never held, and lagged v6 on the other BTC pool.
 
 ## Deviations
 

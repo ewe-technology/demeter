@@ -39,7 +39,7 @@ EXP-036,2026-10-02,"regime line = SMA(n), n = 170/190/210/230 (the classic 200-d
 EXP-037,2026-10-02,"regime line = top of the Ichimoku cloud, standard periods scaled 1x..2.5x (v6.28)",QUAN-889,dropped-at-dev,-6.12,0/5,,,0.380,0.071,-0.284,0edc010,fcf6540,EXP-037-ichimoku-regime.md
 EXP-038,2026-10-02,"regime = Aroon Up(n) > Aroon Down(n), n = 90/100/110/120 (v6.29)",QUAN-890,dropped-at-dev,-10.31,2/5,,,0.102,0.021,-0.376,0edc010,fcf6540,EXP-038-aroon-regime.md
 EXP-039,2026-10-02,"regime = close within 20% of its n-day high, n = 90/100/110/120 (v6.30)",QUAN-891,dropped-at-dev,-6.19,2/5,,,0.599,0.105,-0.279,0edc010,fcf6540,EXP-039-drawdown-regime.md
-EXP-040,2026-10-02,Aroon regime (v6.29) judged standalone as a BTC-pool strategy (v6.29r),,pre-registered,,,,,,,,,,EXP-040-aroon-btc-standalone.md
-EXP-041,2026-10-02,Ichimoku-cloud regime (v6.28) judged standalone as a BTC-pool strategy (v6.28r),,pre-registered,,,,,,,,,,EXP-041-ichimoku-btc-standalone.md
-EXP-042,2026-10-02,SMA(200 family) regime (v6.27) judged standalone as a BTC-pool strategy (v6.27r),,pre-registered,,,,,,,,,,EXP-042-sma-btc-standalone.md
-EXP-043,2026-10-02,time-series-momentum regime (v6.21) judged standalone as a BTC-pool strategy (v6.21r),,pre-registered,,,,,,,,,,EXP-043-roc-btc-standalone.md
+EXP-040,2026-10-02,Aroon regime (v6.29) judged standalone as a BTC-pool strategy (v6.29r),,holdout-fail,-10.31,2/5,0/2 windows,-13.84,0.102,0.021,-0.376,5dad516,,EXP-040-aroon-btc-standalone.md
+EXP-041,2026-10-02,Ichimoku-cloud regime (v6.28) judged standalone as a BTC-pool strategy (v6.28r),,holdout-fail,-6.12,0/5,0/2 windows,-12.67,0.380,0.071,-0.284,5dad516,,EXP-041-ichimoku-btc-standalone.md
+EXP-042,2026-10-02,SMA(200 family) regime (v6.27) judged standalone as a BTC-pool strategy (v6.27r),,holdout-fail,-8.74,0/5,0/2 windows,-13.12,0.089,0.018,-0.329,5dad516,,EXP-042-sma-btc-standalone.md
+EXP-043,2026-10-02,time-series-momentum regime (v6.21) judged standalone as a BTC-pool strategy (v6.21r),,holdout-fail,-7.42,1/5,0/2 windows,-15.23,0.202,0.040,-0.326,5dad516,,EXP-043-roc-btc-standalone.md

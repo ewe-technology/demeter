@@ -1,8 +1,8 @@
 # EXP-041: Ichimoku-cloud regime (v6.28) judged standalone as a BTC-pool strategy (v6.28r)
 
 - Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Status: holdout-fail
+- Pre-registration commit: 5dad516 · Result commit: ______
 - Re-judged from EXP-037; level: standalone, BTC-pool (README *Success levels*)
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending. Claimed for BTC pools only: it failed the ETH dev screen.
 
@@ -29,7 +29,16 @@ Pre-registered together with EXP-040..043 and run in the same invocations as `A`
 
 ## Result
 
-(not run)
+Holdout, `A` and the variant in the same invocation:
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| WBTC 2022 out-of-time v6 | +2.4% | 2.9% | -12.5% | 0.24 | 0.23 | $14.3k | $0.04k | 17 |
+| WBTC 2022 out-of-time this | -14.3% | -17.0% | -22.6% | -0.64 | -0.75 | $13.0k | $0.04k | 18 |
+| Base cbBTC v6 | +22.3% | 12.5% | -15.7% | 0.93 | 0.79 | $15.9k | $0.43k | 40 |
+| Base cbBTC this | +13.7% | 7.8% | -23.1% | 0.60 | 0.34 | $14.0k | $0.37k | 38 |
+
+Verdict: **holdout-fail** (standalone, BTC-pool) — dev passes the screen (from EXP-037: WBTC Calmar ≥ 0.60) but H-a, the out-of-time 2022 bear window, ends -14.3% (max DD -22.6%) where v6 ends +2.4% (max DD -12.5%): the rule needs a positive return. H-b Base cbBTC: +13.7%, Calmar 0.337 (v6 +22.3%, 0.795), below the 0.50 bar. The WBTC dev edge of this line was a bull-market fit: it lost the 2022 window the dev data never held, and lagged v6 on the other BTC pool.
 
 ## Deviations
 

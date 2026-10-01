@@ -75,5 +75,22 @@ def hold(tag: str, prefixes: list) -> dict:
     return out
 
 
+def holdbtc(tag: str, prefixes: list) -> dict:
+    """BTC-pool standalone holdout (EXP-040..043): H-a out-of-time WBTC 2022-01-01..2022-10-31 (total > 0, max DD >= -35%),
+    H-b Base cbBTC 2025-01-01..2026-09-17 (total > 0, Calmar >= 0.5, max DD >= -35%)."""
+    out = {}
+    fa, fb = f"{R}/0x99ac-opt-{tag}-2022-01-01-2022-10-31", f"{R}/0xfbb6-opt-{tag}-2025-01-01-2026-09-17"
+    a_a, a_b = cont(fa, "A_"), cont(fb, "A_")
+    for pre in prefixes:
+        v_a, v_b = cont(fa, pre), cont(fb, pre)
+        ok_a = v_a["total"] > 0 and v_a["maxdd"] >= -0.35
+        ok_b = v_b["total"] > 0 and v_b["calmar"] >= 0.5 and v_b["maxdd"] >= -0.35
+        out[pre] = {"standalone": ok_a and ok_b, "a": v_a, "b": v_b, "a_v6": a_a, "b_v6": a_b}
+        print(f"{pre:5s} standalone={'PASS' if ok_a and ok_b else 'fail'} | H-a total {v_a['total']*100:+.1f}% dd {v_a['maxdd']*100:.1f}% calmar {v_a['calmar']:.2f} "
+              f"(v6 {a_a['total']*100:+.1f}% dd {a_a['maxdd']*100:.1f}%) | H-b total {v_b['total']*100:+.1f}% calmar {v_b['calmar']:.3f} dd {v_b['maxdd']*100:.1f}% "
+              f"(v6 {a_b['total']*100:+.1f}% calmar {a_b['calmar']:.3f})")
+    return out
+
+
 if __name__ == "__main__":
-    {"dev": dev, "hold": hold}[sys.argv[1]](sys.argv[2], sys.argv[3:])
+    {"dev": dev, "hold": hold, "holdbtc": holdbtc}[sys.argv[1]](sys.argv[2], sys.argv[3:])
