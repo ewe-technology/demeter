@@ -26,5 +26,5 @@ def get(sym):
 
 
 if __name__ == "__main__":
-    pd.DataFrame({s: get(s) for s in ["ETHUSDT", "BTCUSDT"]}).to_csv(
+    pd.DataFrame({s: get(s) for s in ["ETHUSDT", "BTCUSDT", "LINKUSDT"]}).to_csv(
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "binance_daily_closes.csv"))
