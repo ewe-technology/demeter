@@ -86,4 +86,4 @@ Run (from `samples/strategy-example`, `PYTHONPATH=../..`):
 - A continuous ETH run takes ~8 min and several GB per worker; yearly segments take ~2 min.
 - `git fetch` here only fetches `master` and `feat/dino-v6-opt` (narrow refspec in the local config); fetch any
   other branch by name.
-- Pushing needs the `dinohuang102` GitHub account (write access to `ewe-technology/demeter`).
+- Pushing needs the `dinohuang102` GitHub account (write access to `ewe-technology/demeter`): run `gh auth switch -u dinohuang102` before pushing (a 403 means the wrong account is active) and leave it active.
