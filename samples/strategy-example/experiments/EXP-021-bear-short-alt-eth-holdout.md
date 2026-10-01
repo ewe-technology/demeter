@@ -3,7 +3,7 @@
 - Version: v6.16r
 - Jira: [QUAN-872](https://ewetechnology.atlassian.net/browse/QUAN-872)
 - Status: holdout-fail
-- Pre-registration commit: 9912117 · Result commit: ______
+- Pre-registration commit: 9912117 · Result commit: d7fbb9f
 - Parent: `EXP-020-bear-short-no-crash-entry.md` (v6.16: dev pass on all four ETH/BTC pools, holdout-fail on
   LINK/USDC because the pool is too thin for the book — impact 37–63% of capital, v6 itself −62%). Pure strategy
   logic, no cash yield (Dino, 2026-10-01).
