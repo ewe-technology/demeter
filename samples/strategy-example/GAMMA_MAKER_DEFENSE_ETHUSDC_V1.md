@@ -5,10 +5,6 @@
 
 相關文件：
 - [PDFV6_COMPARISON_REPORT.md](PDFV6_COMPARISON_REPORT.md)：2024／2025 對規格書的對照報告，給規格書作者
-- [ETH_SHARE_TODO.md](ETH_SHARE_TODO.md)：開發過程的待辦與決策紀錄
-- [GAP_BANDS_FINDINGS.md](GAP_BANDS_FINDINGS.md)：階梯 gap 與 range 的先前結論
-- [IG_GAP_BANDS_RESULTS.md](IG_GAP_BANDS_RESULTS.md)：原始 `ig_gap_bands` 的結果摘要
-- [BACKTEST_COST_TODO.md](BACKTEST_COST_TODO.md)：swap 成本模型的待辦
 
 ---
 

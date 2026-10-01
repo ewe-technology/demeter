@@ -5,7 +5,7 @@
 8+8 段 inverted_gaussian、±20%（MIRROR_PRICE）、中心無 gap、日線判定。
 2025 年基準：總報酬 -6.2%、本金 $60.3k、手續費 $33.5k（PDF 谷型 LP -6.4%）。
 已加：eth_share（固定 / EMA100 切換 0.7-0.5）與 deploy=signal（規格書 2.2 四帳戶訊號引擎算 F、
-2.3 每日追隨 F 重建，其餘留 USDC）。2025 1-4 月短測：−8.6%，同期 ETH −46%。詳見 ETH_SHARE_TODO.md。
+2.3 每日追隨 F 重建，其餘留 USDC）。2025 1-4 月短測：−8.6%，同期 ETH −46%。
 """
 import copy
 
@@ -1341,7 +1341,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     # _shape: str = "uniform"
     # _shape: str = "inverted_triangle"
     # _shape: str = "inverted_gaussian"
-    # spec sheet (谷型LP規格書 v6): 8+8 bands, ±20%, no centre gap, see ETH_SHARE_TODO.md
+    # spec sheet (谷型LP規格書 v6): 8+8 bands, ±20%, no centre gap
     # inverted_gaussian_spec = the spec sheet's own 8+8 weights; inverted_gaussian = sheet-derived 8+8 weights
     # (under 0.1 point apart, results within 0.06 pt); inverted_gaussian_9 = 4+4 positions
     # "..._price" = bands in equal PRICE steps (spec sheet: 2.5% each), plain name = equal TICK counts.
@@ -1361,7 +1361,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     # every lower-side rule to sweep: MIRROR_PRICE = true -20% (spec sheet), MIRROR_TICKS = same tick count
     # as the upper side (about -17% at +20%)
     _lower_ratios: List[Decimal | str] = [MIRROR_PRICE]  # spec sheet; add MIRROR_TICKS to compare (2024 -6.4pt, 2025 flat)
-    # _lower_ratio: Decimal | str = MIRROR_TICKS  # MIRROR_PRICE (true +-50%) tested 2025: worse, see GAP_BANDS_FINDINGS.md
+    # _lower_ratio: Decimal | str = MIRROR_TICKS  # MIRROR_PRICE (true +-50%) tested 2025: worse
     # centre gap each side, in tick spacings. 0 = sides meet at the centre tick, 1 = one spacing
     # above and below, BAND_GAP = one 17-band slot (the old gamma gap, 480 ticks total at 50%)
     # "4+" = same 4 spacing gap, but sized as if gap-less and pushed outward (outer edge = gap + 50%)
