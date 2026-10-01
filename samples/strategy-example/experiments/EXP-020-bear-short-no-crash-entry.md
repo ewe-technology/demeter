@@ -3,7 +3,7 @@
 - Version: v6.16
 - Jira: [QUAN-871](https://ewetechnology.atlassian.net/browse/QUAN-871)
 - Status: holdout-fail
-- Pre-registration commit: 0108b0a · Result commit: ______
+- Pre-registration commit: 0108b0a · Result commit: a12e390
 - Parent: `EXP-018-bear-short-leg.md` (v6.14: dev pass on ETH, holdout-fail on WBTC). No cash yield: Dino asked
   (2026-10-01) to judge strategy logic only, so EXP-004's Aave yield is off in every run here.
 
