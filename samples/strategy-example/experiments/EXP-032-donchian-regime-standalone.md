@@ -1,8 +1,8 @@
 # EXP-032: Donchian-midpoint regime line (v6.19) judged standalone (v6.19r)
 
 - Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Status: holdout-pass
+- Pre-registration commit: d3559e1 · Result commit: ______
 - Re-judged from EXP-024; level: standalone (README *Success levels*)
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending.
 
@@ -31,7 +31,20 @@ Pre-registered together with EXP-032..035.
 
 ## Result
 
-(not run)
+Holdout, one continuous run per pool, `A` and the variant in the same invocation:
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| Arbitrum WETH v6 | +57.0% | 33.6% | -25.1% | 1.24 | 1.34 | $40.8k | $0.30k | 47 |
+| Arbitrum WETH this | +60.6% | 35.5% | -26.2% | 1.22 | 1.36 | $40.9k | $0.32k | 42 |
+| Base WETH v6 | +55.9% | 17.8% | -28.1% | 0.76 | 0.63 | $43.1k | $3.96k | 83 |
+| Base WETH this | +59.4% | 18.8% | -29.4% | 0.76 | 0.64 | $55.9k | $4.02k | 63 |
+| Base cbBTC v6 | +22.3% | 12.5% | -15.7% | 0.93 | 0.79 | $15.9k | $0.43k | 40 |
+| Base cbBTC this | +15.0% | 8.5% | -21.4% | 0.65 | 0.40 | $16.4k | $0.47k | 36 |
+
+Verdict: **holdout-pass** (standalone) — Dev (from EXP-024, not re-run): ETH Calmar 0.74, max DD -20.4%; WBTC Calmar 0.87, max DD -16.8%; ETH positive in 5/5 yearly segments → dev passes the standalone screen. Holdout: Calmar ≥ 0.50 on 2 of 3 pools (Arbitrum WETH Calmar 1.356 (v6 1.337); Base WETH Calmar 0.639 (v6 0.634); Base cbBTC Calmar 0.400 (v6 0.795)); total return > 0 on 3/3; worst max DD -29.4%.
+
+Reading: standalone pass, not an improvement on v6. On the two ETH pools it equals v6 (Arbitrum Calmar 1.356 vs 1.337, Base 0.639 vs 0.634); on Base cbBTC it is half of v6 (0.400 vs 0.795), the same WBTC/BTC weakness seen at dev. The pass margin is the cbBTC pool being the third one: the rule needs only two of three.
 
 ## Deviations
 

@@ -72,6 +72,10 @@ def result(args: list) -> None:
     Prints the EXP file's Result tables (yearly gain vs A, continuous metrics) for that variant."""
     prefix, i = args[0], args.index("--cont")
     segs, conts = args[1:i], args[i + 1:]
+    names = ("ETH", "WBTC")
+    if "--names" in conts:   # --names a,b,c after the folders: row labels for other pools (holdouts)
+        j = conts.index("--names")
+        conts, names = conts[:j], tuple(conts[j + 1].split(","))
     rows, gains = [], []
     for folder in segs:
         res = pd.read_csv(folder.rstrip("/") + ".csv").set_index("variant")
@@ -87,7 +91,7 @@ def result(args: list) -> None:
         print("\n".join(rows))
         print(f"\nWins {sum(g > 0 for g in gains)}/{len(gains)}, median {pd.Series(gains).median():+.2f} pts.\n")
     print("| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |\n|---|---|---|---|---|---|---|---|---|")
-    for folder, asset in zip(conts, ("ETH", "WBTC")):
+    for folder, asset in zip(conts, names):
         eqs, res = load(folder), pd.read_csv(folder.rstrip("/") + ".csv").set_index("variant")
         for tag, pre in (("v6", "A_"), ("this", prefix)):
             name = next(n for n in eqs if n.startswith(pre))

@@ -1,8 +1,8 @@
 # EXP-033: EMA + Donchian ensemble (v6.23) judged standalone (v6.23r)
 
 - Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Status: holdout-fail
+- Pre-registration commit: d3559e1 · Result commit: ______
 - Re-judged from EXP-028; level: standalone (README *Success levels*)
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending.
 
@@ -31,7 +31,20 @@ Pre-registered together with EXP-032..035.
 
 ## Result
 
-(not run)
+Holdout, one continuous run per pool, `A` and the variant in the same invocation:
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| Arbitrum WETH v6 | +57.0% | 33.6% | -25.1% | 1.24 | 1.34 | $40.8k | $0.30k | 47 |
+| Arbitrum WETH this | +64.0% | 37.4% | -23.1% | 1.34 | 1.62 | $42.4k | $0.27k | 50 |
+| Base WETH v6 | +55.9% | 17.8% | -28.1% | 0.76 | 0.63 | $43.1k | $3.96k | 83 |
+| Base WETH this | +44.7% | 14.6% | -30.9% | 0.63 | 0.47 | $44.2k | $3.95k | 80 |
+| Base cbBTC v6 | +22.3% | 12.5% | -15.7% | 0.93 | 0.79 | $15.9k | $0.43k | 40 |
+| Base cbBTC this | +17.2% | 9.7% | -19.5% | 0.74 | 0.50 | $16.1k | $0.44k | 38 |
+
+Verdict: **holdout-fail** (standalone) — Dev (from EXP-028, not re-run): ETH Calmar 0.73, max DD -21.5%; WBTC Calmar 0.88, max DD -16.0%; ETH positive in 5/5 yearly segments → dev passes the standalone screen. Holdout: Calmar ≥ 0.50 on 1 of 3 pools (Arbitrum WETH Calmar 1.616 (v6 1.337); Base WETH Calmar 0.473 (v6 0.634); Base cbBTC Calmar 0.499 (v6 0.795)); total return > 0 on 3/3; worst max DD -30.9%.
+
+Reading: fails the standalone holdout by a hair on cbBTC (Calmar 0.4993 vs the 0.50 threshold; the rule is the rule) and clearly on Base WETH (0.473). Best of the four on Arbitrum (1.616 vs v6 1.337), worse than v6 on the other two pools.
 
 ## Deviations
 
