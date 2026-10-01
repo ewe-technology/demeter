@@ -21,4 +21,4 @@ EXP-018,2026-10-01,bear-phase short leg: short 0.5 x equity perp while F=0 below
 EXP-019,2026-10-01,bear-phase short leg plus idle-cash yield (v6.14 + v6.4) on the Base USDC/WETH holdout (v6.15),QUAN-866,holdout-pass,8.72,5/5,3/3,8.71,2.457,0.301,-0.213,6ae6426,d13e4cf,EXP-019-bear-short-cash.md
 EXP-020,2026-10-01,bear short leg without entries on 2-sigma crash days; no cash yield (v6.16),QUAN-871,holdout-fail,5.45,4/5,2/5,-2.17,2.153,0.276,-0.234,0108b0a,a12e390,EXP-020-bear-short-no-crash-entry.md
 EXP-021,2026-10-01,v6.16 re-judged on fresh deep pools LINK/WETH and UNI/WETH (v6.16r),QUAN-872,holdout-fail,,,2/5 + 2/5,-3.85,,,,9912117,d7fbb9f,EXP-021-bear-short-alt-eth-holdout.md
-EXP-022,2026-10-01,LP fees redeployed into the ladder instead of paid out (v6.17),QUAN-873,dropped-at-dev,0.46,3/5,,,1.354,0.199,-0.325,54e6027,,EXP-022-fee-compounding.md
+EXP-022,2026-10-01,LP fees redeployed into the ladder instead of paid out (v6.17),QUAN-873,dropped-at-dev,0.46,3/5,,,1.354,0.199,-0.325,54e6027,9459512,EXP-022-fee-compounding.md

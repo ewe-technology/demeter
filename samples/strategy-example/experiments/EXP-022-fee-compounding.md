@@ -3,7 +3,7 @@
 - Version: v6.17
 - Jira: [QUAN-873](https://ewetechnology.atlassian.net/browse/QUAN-873)
 - Status: dropped-at-dev
-- Pre-registration commit: 54e6027 · Result commit: ______
+- Pre-registration commit: 54e6027 · Result commit: 9459512
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01: no perps, no lending). Fee compounding was tried once before
   the experiment log restarted and "discarded on purpose"; there is no record of its numbers. Dino approved
   re-testing it as a backtest only (whether the product pays rewards out is a separate decision).
