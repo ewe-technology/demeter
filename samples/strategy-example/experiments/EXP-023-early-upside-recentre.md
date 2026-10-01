@@ -3,7 +3,7 @@
 - Version: v6.18
 - Jira: [QUAN-874](https://ewetechnology.atlassian.net/browse/QUAN-874)
 - Status: dropped-at-dev
-- Pre-registration commit: 5c6dfbd · Result commit: ______
+- Pre-registration commit: 5c6dfbd · Result commit: 185ee50
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01): LP mechanics only, no perps, no lending.
 
 ## Hypothesis
