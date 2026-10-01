@@ -185,6 +185,13 @@ SHARE_BY_ARMED = False
 WIDTH_VOL = False
 WIDTH_VOL_K, WIDTH_VOL_DAYS = 1.0, 30
 WIDTH_VOL_MIN, WIDTH_VOL_MAX, WIDTH_VOL_GRID = 0.10, 0.30, 0.05
+# EXP-044 (v6.31): the ladder is rebuilt after a range exit only when the price is outside it at EXIT_CONFIRM consecutive
+# daily checks (the one-sided ladder earns no fees meanwhile; a close back inside cancels the exit). 1 = v6.
+EXIT_CONFIRM = 1
+# EXP-045 (v6.32): the signal engine's F is read once a week: the Sunday close's F is held until the next Sunday. False = v6.
+F_WEEKLY = False
+# EXP-047 (v6.34): F never below F_FLOOR (one of the four refill stages always stays deployed). 0 = v6.
+F_FLOOR = 0.0
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -339,6 +346,11 @@ def daily_ema_frame(minute_price: pd.Series) -> pd.DataFrame:
         for k, a in accounts:
             a.step(float(c), float(lines[k][a.span][day]))
         fractions.append(sum(a.deployed for _, a in accounts) / len(accounts))
+    if F_WEEKLY:   # EXP-045: the Sunday value, held until the next Sunday
+        fs = pd.Series(fractions, index=close.index)
+        fractions = fs.where(fs.index.dayofweek == 6).ffill().bfill().tolist()
+    if F_FLOOR > 0:   # EXP-047
+        fractions = [max(f, F_FLOOR) for f in fractions]
     arm = sum((close > emas[n]).astype(float) for n in EMA_SPANS) / len(EMA_SPANS)   # EXP-029
     sigma = np.log(close).diff().rolling(WIDTH_VOL_DAYS, min_periods=WIDTH_VOL_DAYS).std()   # EXP-030
     return pd.DataFrame({"close": close, "ema": emas[EMA_SPAN], "F": fractions, "arm": arm, "sigma": sigma})
@@ -736,6 +748,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             self.shape_configs["up"] = config(upper_ratio + SKEW, lower_ratio - SKEW)
             self.shape_configs["down"] = config(upper_ratio - SKEW, lower_ratio + SKEW)
         self._config = config
+        self.exit_streak = 0   # EXP-044: consecutive daily checks with the price outside the ladder
         self.skew_state = "flat"
         self.skew_builds = {"up": 0, "down": 0}
         self.width_builds: Dict[str, int] = {}   # EXP-030: builds per half-width
@@ -1196,8 +1209,12 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         # REFILL_ORDER: range orders sit off the price on purpose; judge exits on the ladder span of the last build
         lo, hi = self.ladder_span if ((REFILL_ORDER or HALF_LADDER or HALF_WHEN_ACCEL) and self.ladder_span) else (self.positions[0][0], self.positions[-1][1])
         if not (lo <= current_tick < hi):
-            rebalance = True
-            print("allow rescale", self.positions[0][0], current_tick, self.positions[-1][1])
+            self.exit_streak += 1
+            rebalance = self.exit_streak >= EXIT_CONFIRM
+            if rebalance:
+                print("allow rescale", self.positions[0][0], current_tick, self.positions[-1][1])
+        else:
+            self.exit_streak = 0
 
         return rebalance
 

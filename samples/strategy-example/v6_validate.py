@@ -151,11 +151,15 @@ OPT = {"A": Variant("A_v6"),
        "AB": Variant("AB_sma", {"REGIME": "sma"}),   # EXP-036: SMA(170/190/210/230)
        "AD": Variant("AD_ichimoku", {"REGIME": "ichimoku"}),   # EXP-037: Ichimoku cloud top, scale 1..2.5
        "AE": Variant("AE_aroon", {"REGIME": "aroon"}),   # EXP-038: Aroon Up(n) > Aroon Down(n)
-       "AF": Variant("AF_drawdown", {"REGIME": "dd"})}   # EXP-039: close within 20% of its n-day high
+       "AF": Variant("AF_drawdown", {"REGIME": "dd"}),   # EXP-039: close within 20% of its n-day high
+       "AG": Variant("AG_exit_confirm", {"EXIT_CONFIRM": 2}),   # EXP-044: range exit needs 2 consecutive daily checks
+       "AH": Variant("AH_weekly_F", {"F_WEEKLY": True}),   # EXP-045: F read once a week (Sundays)
+       "AI": Variant("AI_share_50", {"SHARE_ABOVE_EMA": Decimal("0.5")}),   # EXP-046: ETH share 50% in both trend states
+       "AJ": Variant("AJ_f_floor", {"F_FLOOR": 0.25})}   # EXP-047: F never below 25%
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL", "EXIT_CONFIRM", "F_WEEKLY", "F_FLOOR"]}
 
 
 def sens_grid():
