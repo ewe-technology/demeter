@@ -46,6 +46,8 @@ Verdict: **holdout-pass** (standalone) — Dev (from EXP-024, not re-run): ETH C
 
 Reading: standalone pass, not an improvement on v6. On the two ETH pools it equals v6 (Arbitrum Calmar 1.356 vs 1.337, Base 0.639 vs 0.634); on Base cbBTC it is half of v6 (0.400 vs 0.795), the same WBTC/BTC weakness seen at dev. The pass margin is the cbBTC pool being the third one: the rule needs only two of three.
 
+Supplementary (not part of the pre-registered rule; run after the verdict, so it does not change it): WBTC/USDC 0.3% out-of-time window 2022-01-01..2022-10-31 (Binance warm-up, as in EXP-040..043), one run: v6 +2.4% (max DD −12.5%), this variant −3.3% (max DD −12.6%, Calmar −0.32): it loses money on the bear window the dev data never held, so this standalone pass is fragile. Same invocation for S, Z, X, AA: S −3.3%, Z +1.6%, X +1.3%, AA +3.6%.
+
 ## Deviations
 
 - The standalone rule was written on 2026-10-02 after the dev results of EXP-024, 028, 030 and 031 were seen (all four were `dropped-at-dev` under the improvement rule). Its thresholds (Calmar 0.60 / 0.50, max DD −30% / −35%) are v6's own levels rounded down, not fitted to these candidates; the holdout is the part not yet seen.

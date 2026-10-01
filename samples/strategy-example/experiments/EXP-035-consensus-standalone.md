@@ -46,6 +46,8 @@ Verdict: **holdout-fail** (standalone) — Dev (from EXP-031, not re-run): ETH C
 
 Reading: Arbitrum 1.267 (v6 1.337) passes; Base WETH 0.432 and cbBTC 0.478 miss the 0.50 threshold; the consensus rule gave up the Base ETH gain that EMA alone earned.
 
+Supplementary (not part of the pre-registered rule; run after the verdict, so it does not change it): WBTC/USDC 0.3% out-of-time window 2022-01-01..2022-10-31 (Binance warm-up, as in EXP-040..043), one run: v6 +2.4% (max DD −12.5%), this variant +3.6% (max DD −11.0%): above v6 on this window. Same invocation for S, Z, X, AA: S −3.3%, Z +1.6%, X +1.3%, AA +3.6%.
+
 ## Deviations
 
 - The standalone rule was written on 2026-10-02 after the dev results of EXP-024, 028, 030 and 031 were seen (all four were `dropped-at-dev` under the improvement rule). Its thresholds (Calmar 0.60 / 0.50, max DD −30% / −35%) are v6's own levels rounded down, not fitted to these candidates; the holdout is the part not yet seen.

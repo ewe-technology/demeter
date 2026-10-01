@@ -46,6 +46,8 @@ Verdict: **holdout-fail** (standalone) — Dev (from EXP-028, not re-run): ETH C
 
 Reading: fails the standalone holdout by a hair on cbBTC (Calmar 0.4993 vs the 0.50 threshold; the rule is the rule) and clearly on Base WETH (0.473). Best of the four on Arbitrum (1.616 vs v6 1.337), worse than v6 on the other two pools.
 
+Supplementary (not part of the pre-registered rule; run after the verdict, so it does not change it): WBTC/USDC 0.3% out-of-time window 2022-01-01..2022-10-31 (Binance warm-up, as in EXP-040..043), one run: v6 +2.4% (max DD −12.5%), this variant +1.3% (max DD −13.7%). Same invocation for S, Z, X, AA: S −3.3%, Z +1.6%, X +1.3%, AA +3.6%.
+
 ## Deviations
 
 - The standalone rule was written on 2026-10-02 after the dev results of EXP-024, 028, 030 and 031 were seen (all four were `dropped-at-dev` under the improvement rule). Its thresholds (Calmar 0.60 / 0.50, max DD −30% / −35%) are v6's own levels rounded down, not fitted to these candidates; the holdout is the part not yet seen.
