@@ -1,8 +1,8 @@
 # EXP-035: EMA/Donchian consensus regime (v6.26) judged standalone (v6.26r)
 
-- Jira: QUAN-___
+- Jira: QUAN-887
 - Status: holdout-fail
-- Pre-registration commit: d3559e1 · Result commit: ______
+- Pre-registration commit: d3559e1 · Result commit: ea4bd27
 - Re-judged from EXP-031; level: standalone (README *Success levels*)
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending.
 

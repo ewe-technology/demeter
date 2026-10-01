@@ -1,8 +1,8 @@
 # EXP-034: volatility-scaled ladder width (v6.25) judged standalone (v6.25r)
 
-- Jira: QUAN-___
+- Jira: QUAN-886
 - Status: holdout-pass
-- Pre-registration commit: d3559e1 · Result commit: ______
+- Pre-registration commit: d3559e1 · Result commit: ea4bd27
 - Re-judged from EXP-030; level: standalone (README *Success levels*)
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending.
 
