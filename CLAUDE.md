@@ -15,9 +15,10 @@ EMA 90–120 four-account engine. Every change is an experiment, recorded in thr
   `experiments/<EXP-id>` (registry fields + `hypothesis`, `verdict`, `order`), `curves/eth`, `curves/btc`
   (weekly net value per series key). Only editors write; the page never needs republishing for new rows.
 
-State as of 2026-09-30: only EXP-000 (v6 baseline): ETH continuous 2022-01..2026-09 +85.4%, CAGR 14.0%,
-max DD −22.8%; WBTC continuous +85.6%. Earlier trials (momentum width, fee compounding, EMA exit band) were
-discarded on purpose — numbering restarts at EXP-001. Background: `V6_VALIDATION.md` (PBO 0.56, DSR < 0.95,
+State as of 2026-10-02: EXP-001..051 recorded (`registry.csv`). v6 baseline (EXP-000): ETH continuous 2022-01..2026-09 +85.4%, CAGR 14.0%,
+max DD −22.8%; WBTC continuous +85.6%. No variant has beaten v6's return out-of-time; the best standalone strategies are lower-risk versions of v6
+(ETH share 50%, two-day exit confirmation): see `experiments/FINDINGS-2026-10-02.md`. Pure-LP scope (no perps, no lending) since 2026-10-01.
+Earlier trials (momentum width, fee compounding, EMA exit band) were discarded on purpose. Background: `V6_VALIDATION.md` (PBO 0.56, DSR < 0.95,
 regimes, capacity).
 
 ## Git workflow (Dino's standing instruction)
@@ -79,6 +80,8 @@ Run (from `samples/strategy-example`, `PYTHONPATH=../..`):
     python v6_validate.py <pool> <start> <end> opt:A,B 4     # experiment variants, OPT dict in v6_validate.py
     python v6_validate.py <pool> <start> <end> sens|bench 3   # sensitivity grid / continuous v6 vs plain LP
     python v6_validate_report.py                              # validation numbers
+    BINANCE_WARM=1 python v6_validate.py <pool> <start> <end> opt:A,B 4   # window before the pool's data: warm-up from Binance daily closes
+    python experiments/judge.py dev|hold|holdbtc <tag> <prefix...>    # apply the pre-registered success rules to a run
     # results -> result/v6_validate/ (gitignored); daily equity CSV per variant
 
 ## Gotchas

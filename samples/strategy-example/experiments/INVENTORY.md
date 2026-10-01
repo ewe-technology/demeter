@@ -42,7 +42,7 @@ All of these are **in-sample** for v6 research now: a new pre-registration needs
 Regenerate with `fetch_gas.py`, `fetch_binance_daily.py`, `fetch_binance_funding.py`, `fetch_aave_rates.py`.
 `samples/data/` also holds older GMX / Polygon files from other strategies; v6 does not use them.
 
-## C. Team S3 bucket: not downloaded yet
+## C. Team S3 bucket (one pool downloaded since: `0x56534741...` WBTC/USDT 0.05% to `samples/holdout-data`, 89 MB; most days of 2021-22 are empty (sampled 2021-06..2022-10, 2023-03: 0-11 non-empty days per month), so it is unusable for out-of-time windows; later years not checked)
 
 `s3://demeter-900103508088-ap-northeast-1-an/<pool>/<chain>-<pool>-<date>.minute.csv` (same format as above; access
 with the `aws` CLI). Pairs below come from DexScreener, **fee tier is not known**: determine it before adding to `POOLS`.
