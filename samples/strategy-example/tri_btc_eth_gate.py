@@ -32,6 +32,8 @@ Run from samples/strategy-example:
   PYTHONPATH=../.. python tri_btc_eth_gate.py                  # hourly sweep, 2022-2025
   PYTHONPATH=../.. python tri_btc_eth_gate.py --grid           # gate x span x tilt grid, for samples/research/walk_forward.py
   PYTHONPATH=../.. python tri_btc_eth_gate.py --improve        # parking / hysteresis / hourly range check on btc100_follow
+  PYTHONPATH=../.. python tri_btc_eth_gate.py --starts         # START_CONFIGS started on the first of every month 2022-01 ~ 2025-01
+  PYTHONPATH=../.. python tri_btc_eth_gate.py --ethguard       # ways to cover an ETH-only drop the BTC gate misses
   PYTHONPATH=../.. python tri_btc_eth_gate.py --minute mix_btc100,mix_none --window 2025-01-01
       # the same configs on minute bars and hourly bars over one window, to check the hourly approximation
 """
@@ -116,6 +118,7 @@ class Config:
     park: bool = False  # LP the idle USDC in USDC/USDT while the gate is closed
     band: float = 0.0  # hysteresis around the EMA, see BANDS
     check: str = "daily"  # daily / hourly range check
+    eth_weak_scale: float = 1.0  # gate open but ETH below its own EMA: deploy only this share, the rest waits in USDC
 
 
 def build_configs() -> list[Config]:
@@ -155,6 +158,20 @@ def build_improvements() -> list[Config]:
         Config("follow_park_band1", park=True, band=0.01, **base),  # added after seeing the others: best of each, daily check
         Config("fixed_base", "btc"),
         Config("fixed_all", "btc", park=True, band=0.02, check="hourly"),
+    ]
+
+
+def build_eth_guard() -> list[Config]:
+    """
+    Ways to cover the ETH-only drop of Dec 2024 - Mar 2025 (BTC stayed above its EMA, so the BTC gate stayed open),
+    on top of follow_park_band1. Chosen after seeing that drop, so judge them on the other years too.
+    """
+    base = dict(ema_span=100, tilt="follow", park=True, band=0.01)
+    return [
+        Config("follow_park_band1", "btc", **base),
+        Config("guard_both", "both", **base),
+        Config("guard_half", "btc", eth_weak_scale=0.5, **base),
+        Config("guard_eth", "eth", **base),
     ]
 
 
@@ -209,9 +226,13 @@ class TriGate(Strategy):
                 or gate == "both" and not (self._sig(sig, "btc") and self._sig(sig, "eth")):
             return None
         if self.cfg.tilt == "none":
-            return self.cfg.weights
-        eth_strong = self._sig(sig, "ethbtc")
-        return TILT_STRONG if eth_strong == (self.cfg.tilt == "follow") else TILT_WEAK
+            weights = self.cfg.weights
+        else:
+            eth_strong = self._sig(sig, "ethbtc")
+            weights = TILT_STRONG if eth_strong == (self.cfg.tilt == "follow") else TILT_WEAK
+        if self.cfg.eth_weak_scale < 1 and not self._sig(sig, "eth"):
+            weights = tuple(w * self.cfg.eth_weak_scale for w in weights)
+        return weights
 
     def on_bar(self, snapshot: Snapshot):
         t = snapshot.timestamp
@@ -224,7 +245,7 @@ class TriGate(Strategy):
         target = self.wanted(self.signal.loc[pd.Timestamp(t.date())]) if daily else self.target
         left_range = any(not (lo <= self.markets[k].market_status.data.price <= hi) for k, (lo, hi) in self.bounds.items())
         stable_on_peg = abs(self.markets[STABLE_KEY].market_status.data.price - 1) < PARK_MAX_DEPEG
-        park = self.cfg.park and target is None and stable_on_peg
+        park = self.cfg.park and stable_on_peg and (target is None or sum(target) < 1)
         if target != self.target or left_range or park != self.parked:
             self.rebuild(target, park)
 
@@ -269,8 +290,14 @@ class TriGate(Strategy):
             if shortfall > 0:
                 self._swap(m_eth, min(shortfall * p_eth, self.broker.get_token_balance(usdc)), usdc, weth)
             self._place(m_ratio, self.cfg.ratio_range, min(weth_needed, self.broker.get_token_balance(weth)) * SAFETY)
+        deployed = w_eth + w_ratio
         if w_eth > 0:
-            self._place(m_eth, self.cfg.eth_range, None)  # everything left in USDC + WETH
+            # everything left in USDC + WETH, or only this leg's share when part of the equity stays out
+            self._place(m_eth, self.cfg.eth_range, None if deployed >= 1 else equity * w_eth * SAFETY)
+        if deployed < 1:
+            self._swap(m_eth, self.broker.get_token_balance(weth), weth, usdc)
+            if park:
+                self._place(m_stable, PARK_RANGE, None)
 
 
 def load_market(key: MarketInfo, pool: UniV3Pool, address: str, start: date, end: date, bar: str | None):
@@ -387,6 +414,40 @@ def sweep(configs: list[Config], tag: str):
     print(show(table))
 
 
+START_CONFIGS = ("follow_base", "follow_park_band1", "fixed_base")
+
+
+def start_sweep(first: str = "2022-01-01", last: str = "2025-01-01"):
+    """Same configs started on the first of every month, each run to END, with buy-and-hold from the same start."""
+    data, prices, eth_close, ratio_close = load_all(DATA_START, END, "1h")
+    signal = build_signal(eth_close, ratio_close)
+    configs = [c for c in build_improvements() if c.name in START_CONFIGS]
+    starts = pd.date_range(first, last, freq="MS")
+    # slice the data so a later start only replays its own months
+    args = [(c, {k: v.loc[s:] for k, v in data.items()}, prices.loc[s:], signal, s.to_pydatetime())
+            for s in starts for c in configs]
+    with multiprocessing.Pool(WORKERS) as pool:
+        results = pool.starmap(run_one, args)
+
+    def stats(nav: pd.Series) -> dict:
+        years = (nav.index[-1] - nav.index[0]).days / 365.25
+        total = nav.iloc[-1] / nav.iloc[0] - 1
+        return {"total": total, "annual": (1 + total) ** (1 / years) - 1, "maxDD": (nav / nav.cummax() - 1).min()}
+
+    rows = []
+    for (cfg, _, _, _, start), (name, nav, rebuilds, swap_fee, gas, _) in zip(args, results):
+        rows.append({"start": start.date(), "run": name, **stats(nav), "rebuilds": rebuilds,
+                     "swap $": round(swap_fee), "gas $": round(gas)})
+    for s in starts:
+        p = prices.loc[s:]
+        mix = 0.5 * p[weth.name] / p[weth.name].iloc[0] + 0.5 * p[wbtc.name] / p[wbtc.name].iloc[0]
+        for name, nav in (("hold_btc", p[wbtc.name]), ("hold_eth", p[weth.name]), ("hold_50eth_50btc", mix)):
+            rows.append({"start": s.date(), "run": name, **stats(nav)})
+    table = pd.DataFrame(rows)
+    table.to_csv(f"{RESULT_DIR}/starts_summary.csv", index=False)
+    print(table.pivot(index="start", columns="run", values="annual").map(lambda v: f"{v:+.1%}").to_string())
+
+
 def minute_check(names: list[str], window_start: str):
     """Same configs on minute and hourly bars over [window_start, END], signal from the full history."""
     configs = [c for c in build_configs() + build_grid() + build_improvements() if c.name in names]
@@ -412,13 +473,19 @@ if __name__ == "__main__":
     parser.add_argument("--window", default="2025-01-01", help="start of the minute-check window")
     parser.add_argument("--grid", action="store_true", help="run build_grid() for walk-forward selection")
     parser.add_argument("--improve", action="store_true", help="run build_improvements()")
+    parser.add_argument("--starts", action="store_true", help="START_CONFIGS started on the first of every month")
+    parser.add_argument("--ethguard", action="store_true", help="run build_eth_guard()")
     cli = parser.parse_args()
     os.makedirs(RESULT_DIR, exist_ok=True)
     if cli.minute:
         minute_check(cli.minute.split(","), cli.window)
+    elif cli.starts:
+        start_sweep()
     elif cli.grid:
         sweep(build_grid(), "grid")
     elif cli.improve:
         sweep(build_improvements(), "improve")
+    elif cli.ethguard:
+        sweep(build_eth_guard(), "ethguard")
     else:
         sweep(build_configs(), "sweep")
