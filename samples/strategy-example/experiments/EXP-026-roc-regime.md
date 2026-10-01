@@ -1,8 +1,8 @@
 # EXP-026: regime = n-day return > 0 (time-series momentum) instead of price above EMA(n) (v6.21)
 
-- Jira: QUAN-___
+- Jira: QUAN-878
 - Status: dropped-at-dev
-- Pre-registration commit: 5440347 · Result commit: ______
+- Pre-registration commit: 5440347 · Result commit: 8912e08
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending.
 
 ## Hypothesis

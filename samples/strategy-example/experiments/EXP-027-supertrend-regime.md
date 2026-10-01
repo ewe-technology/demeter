@@ -1,8 +1,8 @@
 # EXP-027: regime line = Supertrend (ATR(n) × 3 trailing band) instead of EMA(n) (v6.22)
 
-- Jira: QUAN-___
+- Jira: QUAN-879
 - Status: dropped-at-dev
-- Pre-registration commit: 5440347 · Result commit: ______
+- Pre-registration commit: 5440347 · Result commit: 8912e08
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending.
 
 ## Hypothesis

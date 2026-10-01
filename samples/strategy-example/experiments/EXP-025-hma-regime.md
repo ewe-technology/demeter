@@ -1,8 +1,8 @@
 # EXP-025: regime line = Hull MA(n) instead of EMA(n) (v6.20)
 
-- Jira: QUAN-___
+- Jira: QUAN-877
 - Status: dropped-at-dev
-- Pre-registration commit: 5440347 · Result commit: ______
+- Pre-registration commit: 5440347 · Result commit: 8912e08
 - Scope: the Uniswap strategy itself (Dino, 2026-10-01 and /goal 2026-10-02): LP mechanics and the regime signal only, no perps, no lending.
 
 ## Hypothesis
