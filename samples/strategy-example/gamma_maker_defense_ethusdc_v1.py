@@ -1789,10 +1789,12 @@ if __name__ == "__main__":
         #  2023/01/01~2023/12/31
         # (datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2023, 12, 31), "", []),
          # 2024/01/01~2024/09/30
-        (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2022, 12, 31), "", []),
-        (datetime(2023, 1, 1, 0, 0, 0), date(2023, 1, 1), date(2023, 12, 31), "", []),
-        (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2024, 12, 31), "", []),
-        (datetime(2025, 1, 1, 0, 0, 0), date(2025, 1, 1), date(2025, 12, 31), "", []),
+        # start on 1/2: the spec sheet's "1/1" join is priced at the close of the 1/1 daily candle (= 1/2 00:00 UTC), see
+        # GAMMA_MAKER_DEFENSE_ETHUSDC_V1.md 6.6. Start on 1/1 (12/31 close) and 2024 ends $6.0k below the spec sheet.
+        (datetime(2022, 1, 2, 0, 0, 0), date(2022, 1, 2), date(2022, 12, 31), "", []),
+        (datetime(2023, 1, 2, 0, 0, 0), date(2023, 1, 2), date(2023, 12, 31), "", []),
+        (datetime(2024, 1, 2, 0, 0, 0), date(2024, 1, 2), date(2024, 12, 31), "", []),
+        (datetime(2025, 1, 2, 0, 0, 0), date(2025, 1, 2), date(2025, 12, 31), "", []),
         # (datetime(2022, 1, 1, 0, 0, 0), date(2022, 1, 1), date(2025, 12, 31), "", []),
 
 
