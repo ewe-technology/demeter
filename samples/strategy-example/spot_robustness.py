@@ -8,7 +8,8 @@ BTC/USD close above its EMA100 -> 50% ETH + 50% BTC, otherwise USDC, trade only 
   --bench      against common trend-following and volatility-targeting rules
   --volscale   each coin's share cut when its own 30-day volatility is high, aimed at the ETH-only drop
   --bootstrap  paired block bootstrap of daily returns, base vs buy-and-hold 50/50
-  (no flag: all of them)
+  (no flag: all of the above)
+  --minute     the base and a few alternatives replayed on minute prices, against the hourly run
 
 Signals come from the hourly price cache (the price at the top of each hour), not the minute closes, so the base
 numbers differ slightly from section 11. 2026 was looked at in section 11 already: it is shown, never used to choose.
@@ -17,11 +18,14 @@ Run from samples/strategy-example after spot_btc_eth_gate.py has built the price
   PYTHONPATH=../.. python spot_robustness.py
 """
 import argparse
+import glob
+import os
 
 import numpy as np
 import pandas as pd
 
-from spot_btc_eth_gate import HOLDOUT, IN_SAMPLE, RESULT_DIR, load_prices, stats, yearly
+from spot_btc_eth_gate import END, HOLDOUT, IN_SAMPLE, RESULT_DIR, load_prices, stats, yearly
+from tri_btc_eth_gate import DATA_START, ETH_POOL, RATIO_POOL
 
 COST_BPS = 10
 DROP = ("2024-12-16", "2025-03-05")  # the ETH-only drop of section 9 the BTC gate does not cover
@@ -255,6 +259,52 @@ def run_bootstrap(prices, reps=2000, seed=11) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def load_minute_prices(prices: pd.DataFrame) -> pd.DataFrame:
+    """
+    Minute ETH and BTC prices from the closeTick column of the raw files, forward filled over minutes without
+    trades and shifted one minute, which is how Demeter builds its price. Checked against the hourly cache, whose
+    price is the first minute of each hour. Reading two columns keeps this small enough for the 7 GB backtest host.
+    """
+    cache = f"{RESULT_DIR}/prices_minute_{END}.parquet"
+    if os.path.exists(cache):
+        return pd.read_parquet(cache)
+    ticks = {}
+    for name, pool in (("eth", ETH_POOL), ("ratio", RATIO_POOL)):
+        files = sorted(glob.glob(f"../real-data/{pool}/ethereum-{pool}-*.minute.csv"))
+        frames = [pd.read_csv(f, usecols=["timestamp", "closeTick"], parse_dates=["timestamp"]) for f in files]
+        ticks[name] = pd.concat(frames).drop_duplicates("timestamp").set_index("timestamp")["closeTick"]
+    index = pd.date_range(f"{DATA_START} 00:00", f"{END} 23:59", freq="1min")
+    tick = pd.DataFrame({k: v.reindex(index.union(v.index)).ffill().reindex(index) for k, v in ticks.items()})
+    eth = 1e12 / 1.0001 ** tick["eth"]  # USDC (6 decimals) is token0, WETH (18) token1
+    frame = pd.DataFrame({"eth": eth, "btc": eth * 1.0001 ** tick["ratio"] / 1e10})  # WBTC (8) token0, WETH token1
+    frame = frame.shift(1).dropna()  # Demeter's price at minute t is the close of minute t-1
+    check = (frame.reindex(prices.index) / prices - 1).abs().max()
+    print(f"minute vs hourly cache at the top of each hour, max relative gap: eth {check['eth']:.2e}, btc {check['btc']:.2e}")
+    frame.to_parquet(cache)
+    return frame
+
+
+def run_minute(prices) -> pd.DataFrame:
+    """The same decisions replayed on minute prices: intraday moves the hourly bars smooth out."""
+    minute = load_minute_prices(prices)
+    base = gate(prices)
+    rules = {
+        BASE: (base, None),
+        "btc ema100 gate, eth 30%": (gate(prices, eth=0.3), None),
+        "base + vol cap 40%, both coins": (vol_scale_each(prices, base, 0.4), 0.10),
+        "btc sma200 gate 50/50": (gate(prices, span=200, ma="sma"), None),
+        "each coin own sma200": (gate(prices, span=200, ma="sma", each=True), None),
+        HOLD: (constant(prices), None),
+        "hold btc": (constant(prices, eth=0.0, btc=1.0), None),
+    }
+    rows = []
+    for name, (w, thr) in rules.items():
+        for bar, p in (("1h", prices), ("1min", minute)):
+            nav, trades = simulate(w, p, threshold=thr)
+            rows.append(summary(f"{name} [{bar}]", nav, trades, bar=bar))
+    return pd.DataFrame(rows).set_index("run")
+
+
 PCT = {"2022", "2023", "2024", "2025", "total", "annual", "maxDD", "drop window", "2026", "2026 maxDD"}
 MAIN = ["2022", "2023", "2024", "2025", "total", "maxDD", "calmar", "drop window", "2026", "2026 maxDD", "trades"]
 
@@ -274,10 +324,10 @@ def pivot(table: pd.DataFrame, value: str) -> str:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     names = ("hours", "plateau", "yield", "bench", "volscale", "bootstrap")
-    for flag in names:
+    for flag in names + ("minute",):
         parser.add_argument(f"--{flag}", action="store_true")
     cli = vars(parser.parse_args())
-    todo = [n for n in names if cli[n]] or list(names)
+    todo = [n for n in names + ("minute",) if cli[n]] or list(names)
     prices, _, _ = load_prices()
     pd.set_option("display.width", 250)
 
@@ -318,4 +368,9 @@ if __name__ == "__main__":
         for c in ("p5", "p25", "median", "p75", "p95"):
             shown[c] = [f"{v:+.2f}" if m == "calmar diff" else f"{v:+.1%}" for v, m in zip(shown[c], shown["measure"])]
         print(shown.to_string(index=False))
+    if "minute" in todo:
+        table = run_minute(prices)
+        table.to_csv(f"{RESULT_DIR}/robust_minute.csv")
+        print("\n== hourly vs minute bars ==")
+        print(show(table, MAIN))
     print("ROBUST_DONE")
