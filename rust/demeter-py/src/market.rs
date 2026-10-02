@@ -13,11 +13,7 @@ use pyo3::types::{PyBytes, PyList, PyTuple};
 use std::sync::Arc;
 
 fn to_market_type(v: i64) -> MarketType {
-    if v == 0 {
-        MarketType::Broker
-    } else {
-        MarketType::UniswapV3
-    }
+    MarketType::from_value(v)
 }
 
 /// Build an extra column from python values aligned to `rows` (None = missing).

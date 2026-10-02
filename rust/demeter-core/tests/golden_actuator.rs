@@ -162,9 +162,12 @@ fn scripted_lp_roundtrip() {
     let status = act.account_status.borrow();
     assert!(s.fees > dec::zero(), "fees accrued");
     let mid = &status[300];
-    assert_eq!(mid.market_balances[0].1.position_count, 1);
+    assert_eq!(mid.market_balances[0].1.as_uni().unwrap().position_count, 1);
     let last = status.last().unwrap();
-    assert_eq!(last.market_balances[0].1.position_count, 0);
+    assert_eq!(
+        last.market_balances[0].1.as_uni().unwrap().position_count,
+        0
+    );
     for (_, v) in &last.asset_balances {
         assert!(*v >= dec::zero());
     }

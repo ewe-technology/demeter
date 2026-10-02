@@ -81,6 +81,40 @@ pub enum ActionKind {
         fee_rate: Dec,
         fee: Ud,
     },
+    AaveSupply {
+        token: String,
+        amount: Ud,
+        collateral: bool,
+        deposit_after: Ud,
+    },
+    AaveWithdraw {
+        token: String,
+        amount: Ud,
+        deposit_after: Ud,
+    },
+    AaveBorrow {
+        token: String,
+        amount: Ud,
+        debt_after: Ud,
+    },
+    AaveRepay {
+        token: String,
+        amount: Ud,
+        debt_after: Ud,
+    },
+    AaveLiquidation {
+        collateral_token: String,
+        debt_token: String,
+        delt_to_cover: Ud,
+        collateral_used: Ud,
+        variable_delt_liquidated: Ud,
+        health_factor_before: Dec,
+        health_factor_after: Dec,
+        collateral_after: Ud,
+        variable_debt_after: Ud,
+        /// QUIRK (aave): python's `LiquidationAction.set_type` sets `aave_repay`
+        legacy_type: bool,
+    },
 }
 
 impl ActionKind {
@@ -94,6 +128,26 @@ impl ActionKind {
             ActionKind::Buy { .. } => "uni_lp_buy",
             ActionKind::Sell { .. } => "uni_lp_sell",
             ActionKind::BrokerSwap { .. } => "general_swap",
+            ActionKind::AaveSupply { .. } => "aave_supply",
+            ActionKind::AaveWithdraw { .. } => "aave_withdraw",
+            ActionKind::AaveBorrow { .. } => "aave_borrow",
+            ActionKind::AaveRepay { .. } => "aave_repay",
+            ActionKind::AaveLiquidation { legacy_type, .. } => {
+                if *legacy_type {
+                    "aave_repay"
+                } else {
+                    "aave_liquidation"
+                }
+            }
+        }
+    }
+
+    /// Which python action class the record becomes (differs from `type_name` only for the
+    /// liquidation, whose python type is `aave_repay`).
+    pub fn class_name(&self) -> &'static str {
+        match self {
+            ActionKind::AaveLiquidation { .. } => "aave_liquidation",
+            _ => self.type_name(),
         }
     }
 }

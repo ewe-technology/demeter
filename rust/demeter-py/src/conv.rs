@@ -3,7 +3,9 @@
 use demeter_core::dec::{self, Dec};
 use demeter_core::types::{naive_to_ts, ts_to_naive, Ts};
 use demeter_core::DemeterError;
-use pyo3::exceptions::{PyAssertionError, PyIOError, PyKeyError, PyRuntimeError, PyValueError};
+use pyo3::exceptions::{
+    PyAssertionError, PyAttributeError, PyIOError, PyKeyError, PyRuntimeError, PyValueError,
+};
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyBool, PyFloat, PyInt, PyType};
@@ -143,6 +145,23 @@ pub fn to_py_err(e: DemeterError) -> PyErr {
         DemeterError::Data(m) => {
             if let Some(rest) = m.strip_prefix("KeyError: ") {
                 PyKeyError::new_err(rest.to_string())
+            } else if let Some(rest) = m.strip_prefix("AttributeError: ") {
+                PyAttributeError::new_err(rest.to_string())
+            } else if let Some(class) = ["DivisionByZero", "InvalidOperation"]
+                .into_iter()
+                .find(|c| m.starts_with(&format!("decimal.{c}")))
+            {
+                // python's decimal signals (ArithmeticError subclasses)
+                Python::attach(|py| {
+                    let err = py
+                        .import("decimal")
+                        .and_then(|d| d.getattr(class))
+                        .and_then(|t| t.call1((m.clone(),)));
+                    match err {
+                        Ok(inst) => PyErr::from_value(inst),
+                        Err(e) => e,
+                    }
+                })
             } else if m.starts_with("resource file") {
                 PyIOError::new_err(m)
             } else {

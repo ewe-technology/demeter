@@ -31,7 +31,9 @@ from ..uniswap import PositionInfo
 from ..uniswap._typing import AddLiquidityAction, RemoveLiquidityAction, CollectFeeAction, SwapAction, BuyAction, SellAction
 import warnings
 
-from ..uniswap.market import overridden_engine_methods
+from ..uniswap.market import UniLpMarket, overridden_engine_methods
+from ..aave._typing import SupplyAction, WithdrawAction, BorrowAction, RepayAction, LiquidationAction
+from ..aave.market import AaveV3Market, overridden_engine_methods as aave_overridden_engine_methods
 from ..utils import get_formatted_predefined, STYLE, to_decimal, console_text, config_log
 
 config_log()
@@ -46,6 +48,11 @@ _ACTION_CLASSES = {
     "uni_lp_buy": BuyAction,
     "uni_lp_sell": SellAction,
     "general_swap": BrokerSwapAction,
+    "aave_supply": SupplyAction,
+    "aave_withdraw": WithdrawAction,
+    "aave_borrow": BorrowAction,
+    "aave_repay": RepayAction,
+    "aave_liquidation": LiquidationAction,
 }
 
 
@@ -62,8 +69,11 @@ def make_action(d: dict) -> BaseAction:
             kwargs[k] = TokenInfo(v, 0)
         else:
             kwargs[k] = v
-    action = _ACTION_CLASSES[d["type"]](market=market, **kwargs)
+    action = _ACTION_CLASSES[d.get("class", d["type"])](market=market, **kwargs)
     action.set_type()
+    if action.action_type.name != d["type"]:
+        # LiquidationAction.set_type says aave_repay (python quirk); legacy_quirks=False corrects it
+        action.action_type = ActionTypeEnum[d["type"]]
     action.timestamp = d["timestamp"]
     action.comment = d["comment"]
     return action
@@ -327,7 +337,12 @@ class Actuator(object):
         self.reset()
         self._actions._cache = []
         for market in self._broker.markets.values():
-            names = overridden_engine_methods(market) if hasattr(market, "_core") else []
+            if isinstance(market, UniLpMarket):
+                names = overridden_engine_methods(market)
+            elif isinstance(market, AaveV3Market):
+                names = aave_overridden_engine_methods(market)
+            else:
+                names = []
             if names:
                 warnings.warn(
                     f"{type(market).__name__} overrides {', '.join(names)}: the Rust engine calls its native "

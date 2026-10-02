@@ -16,6 +16,9 @@ use ruint::aliases::{U256, U512};
 
 pub type Dec = D128;
 
+/// 76 digit decimal, used where python's 35 digit rounding must be reproduced exactly.
+pub type Dec256 = fastnum::D256;
+
 /// Max significant digits kept by `Dec`.
 pub const MAX_DIGITS: usize = 38;
 
@@ -388,6 +391,104 @@ pub fn approx_eq(a: &Dec, b: &Dec, rel_tol: f64) -> bool {
         return true;
     }
     ((fa - fb).abs() / scale) <= rel_tol || (*a - *b).abs().to_f64() <= rel_tol * scale
+}
+
+/// python `d.quantize(Decimal(10) ** -places)` (half even). NaN, infinity and values that
+/// would need more than 38 digits are returned as is.
+///
+/// (fastnum's `rescale` with `RoundingMode::HalfEven` only looks at the first dropped digit, so
+/// 0.020856 rounds to 0.0208: rounding is done on the mantissa here.)
+pub fn quantize(d: &Dec, places: i16) -> Dec {
+    if d.is_nan() || d.is_infinite() {
+        return *d;
+    }
+    let (neg, m, e) = to_parts(d);
+    let target = -(places as i32);
+    if e == target {
+        return *d;
+    }
+    if e > target {
+        let shift = (e - target) as u32;
+        return match 10u128.checked_pow(shift).and_then(|p| m.checked_mul(p)) {
+            Some(v) if v < TEN38 => build(v, target, neg),
+            _ => *d,
+        };
+    }
+    let drop = (target - e) as u32;
+    let q = if drop > 38 {
+        0
+    } else {
+        let p = 10u128.pow(drop);
+        let (q, r) = (m / p, m % p);
+        if r > p - r || (r == p - r && q % 2 == 1) {
+            q + 1
+        } else {
+            q
+        }
+    };
+    if q >= TEN38 {
+        return *d;
+    }
+    build(q, target, neg)
+}
+
+fn parts_256(d: &Dec256) -> (bool, U256, i32) {
+    let limbs = d.digits();
+    (
+        d.is_sign_negative(),
+        U256::from_limbs(*limbs.digits()),
+        -(d.fractional_digits_count() as i32),
+    )
+}
+
+fn build_256(m: U256, exp: i32, negative: bool) -> Dec256 {
+    Dec256::from_parts(
+        UInt::<4>::from_digits(m.into_limbs()),
+        exp,
+        if negative { Sign::Minus } else { Sign::Plus },
+        Context::default(),
+    )
+}
+
+/// Round a `Dec256` to `digits` significant digits, half even.
+fn round_sig_256(d: Dec256, digits: u32) -> Dec256 {
+    if d.is_zero() || d.is_nan() || d.is_infinite() {
+        return d;
+    }
+    let (neg, m, e) = parts_256(&d);
+    let n = m.to_string().len() as u32;
+    if n <= digits {
+        return d;
+    }
+    let drop = n - digits;
+    let p = U256::from(10u8).pow(U256::from(drop));
+    let (mut q, r) = (m / p, m % p);
+    let rest = p - r;
+    if r > rest || (r == rest && q.bit(0)) {
+        q += U256::from(1u8);
+    }
+    let mut exp = e + drop as i32;
+    if q == U256::from(10u8).pow(U256::from(digits)) {
+        q /= U256::from(10u8);
+        exp += 1;
+    }
+    build_256(q, exp, neg)
+}
+
+/// python `(1 + rate / n) ** n - 1` under `getcontext().prec = 35`.
+///
+/// Every python step is rounded to 35 digits, and with n ~ 3e7 the rounding of the base decides
+/// the last ~8 digits of the result, so the steps are reproduced one by one. The power itself is
+/// evaluated with 76 digits so that rounding it to 35 gives python's (correctly rounded) value.
+pub fn py_compound(rate: &Dec, n: i32) -> Dec {
+    if rate.is_zero() {
+        return zero();
+    }
+    let r: Dec256 = rate.resize();
+    let q = round_sig_256(r / Dec256::from(n), 35);
+    let b = round_sig_256(Dec256::ONE + q, 35);
+    let p = round_sig_256(b.powi(n), 35);
+    round_sig_256(p - Dec256::ONE, 35).resize()
 }
 
 #[cfg(test)]

@@ -1,5 +1,6 @@
 //! `BrokerCore`, `ActuatorCore` and the adapter that drives a python `Strategy` from the Rust loop.
 
+use crate::aave::{aave_balance_tuple, PyAaveMarketCore};
 use crate::conv::*;
 use crate::market::{balance_tuple, price_frame, PyMarketCore};
 use crate::snapshot::{NativeTrigger, PySnapshot, SnapMarket};
@@ -8,15 +9,29 @@ use demeter_core::actuator::{Actuator, Ctx, PriceTable, Snapshot, Strategy};
 use demeter_core::broker::{shared, AccountRow, Broker, Shared};
 use demeter_core::data;
 use demeter_core::dec::{self, Dec};
-use demeter_core::types::{PositionInfo, TokenInfo, Ts};
+use demeter_core::market::{Market, MarketBalance};
+use demeter_core::types::{EngineCompat, PositionInfo, TokenInfo, Ts};
 use demeter_core::DemeterError;
-use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList, PyTuple};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 // ------------------------------------------------------------------ broker
+
+/// `MarketCore` / `AaveMarketCore` -> the core market
+pub fn market_from_py(obj: &Bound<'_, PyAny>) -> PyResult<Market> {
+    if let Ok(m) = obj.cast::<PyMarketCore>() {
+        return Ok(Market::Uni(m.borrow().inner.clone()));
+    }
+    if let Ok(m) = obj.cast::<PyAaveMarketCore>() {
+        return Ok(Market::Aave(m.borrow().inner.clone()));
+    }
+    Err(PyTypeError::new_err(
+        "expected a demeter._rs.MarketCore or demeter._rs.AaveMarketCore",
+    ))
+}
 
 #[pyclass(name = "BrokerCore", unsendable, module = "demeter._rs")]
 pub struct PyBrokerCore {
@@ -47,11 +62,9 @@ impl PyBrokerCore {
             .borrow_mut()
             .allow_negative_balance = v;
     }
-    fn add_market(&self, market: &PyMarketCore) -> PyResult<()> {
-        self.inner
-            .borrow_mut()
-            .add_market(market.inner.clone())
-            .py()
+    fn add_market(&self, market: &Bound<'_, PyAny>) -> PyResult<()> {
+        let m = market_from_py(market)?;
+        self.inner.borrow_mut().add_market(m).py()
     }
     fn set_balance(&self, name: &str, decimal: u32, amount: &Bound<'_, PyAny>) -> PyResult<()> {
         let t = TokenInfo::new(name, decimal);
@@ -209,6 +222,7 @@ fn position_tuple<'py>(py: Python<'py>, p: &PositionInfo) -> PyResult<Bound<'py,
 pub fn action_to_py<'py>(py: Python<'py>, a: &Action) -> PyResult<Bound<'py, PyDict>> {
     let d = PyDict::new(py);
     d.set_item("type", a.kind.type_name())?;
+    d.set_item("class", a.kind.class_name())?;
     d.set_item("market_name", &a.market.name)?;
     d.set_item("market_type", a.market.kind as i64)?;
     d.set_item("timestamp", ts_to_py(py, a.timestamp)?)?;
@@ -320,12 +334,72 @@ pub fn action_to_py<'py>(py: Python<'py>, a: &Action) -> PyResult<Bound<'py, PyD
             f.set_item("fee_rate", dec_to_py(py, fee_rate)?)?;
             f.set_item("fee", ud(py, fee)?)?;
         }
+        ActionKind::AaveSupply {
+            token,
+            amount,
+            collateral,
+            deposit_after,
+        } => {
+            f.set_item("token", token)?;
+            f.set_item("amount", ud(py, amount)?)?;
+            f.set_item("collateral", *collateral)?;
+            f.set_item("deposit_after", ud(py, deposit_after)?)?;
+        }
+        ActionKind::AaveWithdraw {
+            token,
+            amount,
+            deposit_after,
+        } => {
+            f.set_item("token", token)?;
+            f.set_item("amount", ud(py, amount)?)?;
+            f.set_item("deposit_after", ud(py, deposit_after)?)?;
+        }
+        ActionKind::AaveBorrow {
+            token,
+            amount,
+            debt_after,
+        }
+        | ActionKind::AaveRepay {
+            token,
+            amount,
+            debt_after,
+        } => {
+            f.set_item("token", token)?;
+            f.set_item("amount", ud(py, amount)?)?;
+            f.set_item("debt_after", ud(py, debt_after)?)?;
+        }
+        ActionKind::AaveLiquidation {
+            collateral_token,
+            debt_token,
+            delt_to_cover,
+            collateral_used,
+            variable_delt_liquidated,
+            health_factor_before,
+            health_factor_after,
+            collateral_after,
+            variable_debt_after,
+            legacy_type: _,
+        } => {
+            f.set_item("collateral_token", collateral_token)?;
+            f.set_item("debt_token", debt_token)?;
+            f.set_item("delt_to_cover", ud(py, delt_to_cover)?)?;
+            f.set_item("collateral_used", ud(py, collateral_used)?)?;
+            f.set_item(
+                "variable_delt_liquidated",
+                ud(py, variable_delt_liquidated)?,
+            )?;
+            f.set_item("health_factor_before", dec_to_py(py, health_factor_before)?)?;
+            f.set_item("health_factor_after", dec_to_py(py, health_factor_after)?)?;
+            f.set_item("collateral_after", ud(py, collateral_after)?)?;
+            f.set_item("variable_debt_after", ud(py, variable_debt_after)?)?;
+        }
     }
     d.set_item("fields", f)?;
     Ok(d)
 }
 
-/// (timestamp, net_value, asset_value, [(token, balance)], [(market, balance tuple)])
+/// (timestamp, net_value, asset_value, [(token, balance)], [(market, kind, balance tuple)]);
+/// kind is "uniswap_v3" or "aave_v3"
 fn account_row_tuple<'py>(py: Python<'py>, r: &AccountRow) -> PyResult<Bound<'py, PyTuple>> {
     let assets = PyList::empty(py);
     for (t, v) in &r.asset_balances {
@@ -333,7 +407,14 @@ fn account_row_tuple<'py>(py: Python<'py>, r: &AccountRow) -> PyResult<Bound<'py
     }
     let markets = PyList::empty(py);
     for (m, b) in &r.market_balances {
-        markets.append((m.name.clone(), balance_tuple(py, b)?))?;
+        match b {
+            MarketBalance::Uni(b) => {
+                markets.append((m.name.clone(), "uniswap_v3", balance_tuple(py, b)?))?
+            }
+            MarketBalance::Aave(b) => {
+                markets.append((m.name.clone(), "aave_v3", aave_balance_tuple(py, b)?))?
+            }
+        }
     }
     PyTuple::new(
         py,
@@ -616,10 +697,13 @@ impl PyActuatorCore {
             inner: self.broker.clone(),
         }
     }
-    fn add_market(&self, market: &PyMarketCore) -> PyResult<()> {
+    fn add_market(&self, market: &Bound<'_, PyAny>) -> PyResult<()> {
         let a = self.inner.try_borrow().map_err(|_| running_err())?;
-        market.inner.borrow_mut().compat.legacy_quirks = self.legacy.get();
-        a.add_market(market.inner.clone()).py()
+        let m = market_from_py(market)?;
+        m.set_compat(EngineCompat {
+            legacy_quirks: self.legacy.get(),
+        });
+        a.add_market(m).py()
     }
     #[getter]
     fn interval_secs(&self) -> i64 {
@@ -644,7 +728,7 @@ impl PyActuatorCore {
         a.compat.legacy_quirks = v;
         self.legacy.set(v);
         for (_, m) in &self.broker.borrow().markets {
-            m.borrow_mut().compat.legacy_quirks = v;
+            m.set_compat(EngineCompat { legacy_quirks: v });
         }
         Ok(())
     }
@@ -723,7 +807,7 @@ impl PyActuatorCore {
         &self,
         py: Python<'_>,
         strategy: Py<PyAny>,
-        markets: Vec<(Py<PyAny>, PyRef<'_, PyMarketCore>)>,
+        markets: Vec<(Py<PyAny>, Bound<'_, PyAny>)>,
         native_types: Vec<Py<PyAny>>,
         hooks: &Bound<'_, PyDict>,
         action_factory: Py<PyAny>,
@@ -743,7 +827,7 @@ impl PyActuatorCore {
                 Ok(SnapMarket {
                     key: k.clone_ref(py),
                     name: k.bind(py).getattr("name")?.extract()?,
-                    market: m.inner.clone(),
+                    market: market_from_py(m)?,
                 })
             })
             .collect::<PyResult<_>>()?;
@@ -753,7 +837,7 @@ impl PyActuatorCore {
             .map_err(|_| PyRuntimeError::new_err("backtest is already running"))?;
         let legacy = act.compat.legacy_quirks;
         for (_, m) in &act.broker.borrow().markets {
-            m.borrow_mut().compat = act.compat;
+            m.set_compat(act.compat);
         }
         // the price table may be replaced (resample) inside run, so give the adapter the final
         // one lazily: resampling happens before initialize, prices are read per iteration.

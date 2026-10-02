@@ -1,8 +1,9 @@
 //! `demeter._rs`: the compiled half of the python `demeter` package.
 //!
 //! The python modules under `rust/python/demeter` keep the original public API
-//! (`Actuator`, `Strategy`, `UniLpMarket`, ...) and delegate the heavy work to these classes.
+//! (`Actuator`, `Strategy`, `UniLpMarket`, `AaveV3Market`, ...) and delegate the heavy work to these classes.
 
+mod aave;
 mod conv;
 mod engine;
 mod market;
@@ -14,6 +15,10 @@ use pyo3::prelude::*;
 fn _rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<market::PyMarketCore>()?;
     m.add_class::<market::PyDataHandle>()?;
+    m.add_class::<aave::PyAaveMarketCore>()?;
+    m.add_class::<aave::PyAaveDataHandle>()?;
+    m.add_class::<aave::AaveStatusView>()?;
+    m.add_class::<aave::AaveTokenStatusView>()?;
     m.add_class::<engine::PyBrokerCore>()?;
     m.add_class::<engine::PyActuatorCore>()?;
     m.add_class::<snapshot::PySnapshot>()?;

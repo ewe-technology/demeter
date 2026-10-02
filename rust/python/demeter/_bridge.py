@@ -115,6 +115,12 @@ def series_timestamps(s: pd.Series) -> list[int]:
 
 def account_status_from_ipc(buf: bytes) -> pd.DataFrame:
     df = ipc_to_pandas(buf)
+    # columns that hold Infinity / NaN (aave health factor, ltv, ...) come as strings
+    for c in df.columns:
+        if df[c].dtype == object:
+            first = next((v for v in df[c] if v is not None), None)
+            if isinstance(first, str):
+                df[c] = [None if v is None else Decimal(v) for v in df[c]]
     df.columns = pd.MultiIndex.from_tuples([tuple(c.split("|", 1)) for c in df.columns], names=["l1", "l2"])
     return df
 

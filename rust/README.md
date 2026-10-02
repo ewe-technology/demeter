@@ -1,12 +1,12 @@
 # demeter in Rust
 
-A Rust port of the demeter backtesting engine (Uniswap v3 only), with Python bindings. The
+A Rust port of the demeter backtesting engine (Uniswap v3 and Aave v3), with Python bindings. The
 bindings are a drop-in replacement for the python `demeter` package.
 
 ```
 rust/
   demeter-core/        pure Rust engine (no python): math, data loading (polars), UniLpMarket,
-                       broker, triggers, actuator loop, Strategy trait
+                       AaveV3Market, broker, triggers, actuator loop, Strategy trait
     examples/gamma.rs  remix_dao_gamma.py written as a Rust strategy
     tests/             golden tests against outputs of the original python engine
   demeter-py/          PyO3 bindings -> extension module `demeter._rs`
@@ -68,6 +68,41 @@ Decimals handed to python are rounded to 35 significant digits: return values, s
 and the columns of `account_status_df` / `market.data`. That is the precision python demeter runs
 with (`getcontext().prec = 35`), so strategy code sees the same numbers as before. Internally the
 engine keeps 38 digits.
+
+## Aave v3
+
+`demeter.aave` (`AaveV3Market`, `load_aave_data`, `AaveV3CoreLib`, the action and balance
+classes) has the same public API as the original module. Supply / withdraw / borrow / repay
+(also with collateral), collateral switching, passive liquidation, balances, health factor and
+APYs run in Rust (`demeter-core/src/aave.rs`); a market can be used next to uniswap markets in
+the same backtest.
+
+| check | result |
+|---|---|
+| `21_aave_tutorial.py` (polygon data, supply / borrow / repay / withdraw) | every per-minute `account_status_df` value and every action matches, worst relative difference 1e-34 |
+| `22_aave_liquidate.py` (price drop, liquidation) | identical values and actions, including the liquidation |
+| `23_delta_hedging.py` (uniswap + aave, rebalancing) | every value matches, worst relative difference 4e-31; backtest loop 7.4 s → 0.7 s |
+| python unit tests `tests/aave_*.py` | 32 / 32 pass on the Rust package |
+| `cargo test --test golden_aave` | sample 22 numbers and the polygon data loader, without python |
+
+APYs (`(1 + rate / 31536000) ** 31536000 - 1`) are computed step by step with python's 35 digit
+rounding (the power in 76 digits), so they match python to the last digit.
+
+The balances in `get_market_balance` / `account_status_df` are rounded to 4 decimals like python.
+On an exact tie in the 5th decimal (round test numbers, practically never real data) the 38 digit
+Rust value and python's 35 digit value can round to neighbouring values (e.g. `1143.1967` vs
+`1143.1968`), so the ≤1e-30 precision note below does not hold for those rounded fields.
+
+Rust API changes for Rust strategies (no code in this repository depended on the old forms):
+
+- `Broker::markets` holds `market::Market` (`Uni` / `Aave`); `Broker::default_market()` returns
+  `Option<Market>`; `AccountRow::market_balances` holds `market::MarketBalance`
+  (`.as_uni()` / `.as_aave()`).
+- `Broker::market` / `market_by_name` and `Ctx::market` find uniswap markets only (an aave market
+  of that name gives `None` / `KeyError`); use `aave_by_name` / `Ctx::aave`, or `get` /
+  `get_by_name` for any kind.
+- `Actuator::add_market` / `Broker::add_market` take `impl Into<Market>` (a `Shared<UniLpMarket>`
+  still works as before).
 
 ## Performance
 
@@ -148,6 +183,13 @@ which mode your results should use, and do not compare numbers across modes.
 | 7 | `PeriodTrigger` fires only on an exact timestamp match; a missing minute stops it forever. | `strategy/trigger.py` | reproduced | fires on the first minute at or after the scheduled time |
 | 8 | `collect_fee` checks `if self._positions[position]:`, which is always true for a dataclass, so a collect action is always recorded. | `uniswap/market.py` | reproduced | same |
 | 9 | Precision: python Decimal uses 35 digits, Rust uses 38. Rust also takes some exact 512-bit products in 38 digit decimal steps (reassociated). | everywhere | Decimals handed to python are rounded to 35 digits; ≤1e-30 relative on internal values | same |
+| 10 | A `withdraw` rejected by the health factor check leaves the supply reduced: python lowers the base amount to test the withdraw and does not restore it when it raises. | `aave/market.py` `withdraw` | reproduced | supply restored |
+| 11 | `supply` to an existing supply with a different collateral flag takes the tokens from the wallet before it raises. | `aave/market.py` `supply` | reproduced | checked before taking the tokens |
+| 12 | `repay` checks `debt amount - payback base amount >= 0` (amount against base amount). With an index above 1 more than the debt can be repaid; the excess is lost. | `aave/market.py` `repay` | reproduced | `debt amount - payback amount >= 0` |
+| 13 | A liquidation reduces the collateral using the liquidity index of the *debt* token. | `aave/market.py` `_do_liquidate` | reproduced | index of the collateral token |
+| 14 | `LiquidationAction.set_type` sets `aave_repay`. | `aave/_typing.py` | reproduced | `aave_liquidation` |
+| 15 | Cached values: `change_collateral` refreshes only the collateral values, so `supplies[token].collateral` shows the old flag until the next minute or operation. | `aave/market.py` | reproduced | all values refreshed |
+| 16 | A liquidation compares the debt *value* to cover (USD) with the debt *amount* (tokens). No effect for USD stablecoin debt. | `aave/market.py` `_do_liquidate` | always reproduced | same |
 
 Also different, intentionally:
 
@@ -161,7 +203,14 @@ Also different, intentionally:
 - `market.data` is a proxy over the engine's data. Writes through `market.data[name] = series` or
   `market.data = frame` reach the engine; writes into the pandas frame it hands out
   (`market.data.loc[...] = x`) do not.
-- Dropped markets: aave, deribit, gmx, squeeth (not needed per requirements).
+- Aave `market.data` keeps only the five required columns of each token (`liquidity_rate`,
+  `stable_borrow_rate`, `variable_borrow_rate`, `liquidity_index`, `variable_borrow_index`);
+  other columns of the csv files are dropped. A missing value raises when the market uses it
+  (python would fail on `Decimal * nan`).
+- Aave `tokens` keeps insertion order (python uses a `set`, whose order changes between runs).
+- Decimals keep their value but not always python's exponent, e.g. `account_status_df` may show
+  `27600.15` where python shows `27600.1500` (arrow decimal columns have one scale per column).
+- Dropped markets: deribit, gmx, squeeth (not needed per requirements).
 
 ## Writing a strategy in Rust
 
@@ -171,7 +220,9 @@ See `demeter-core/examples/gamma.rs`:
   `run_triggers`, `notify`, `finalize`, `on_error`);
 - register built-in triggers with `Triggers<Self>` and `TriggerCond::{at_time, period, ...}`;
 - trade through `ctx.market("name")?.borrow_mut()`: `add_liquidity_by_tick`, `remove_liquidity`,
-  `collect_fee`, `buy`, `sell`, `swap`, `get_market_balance`, ...
+  `collect_fee`, `buy`, `sell`, `swap`, `get_market_balance`, ...;
+- aave through `ctx.aave("name")?.borrow_mut()`: `supply`, `withdraw`, `borrow`, `repay`,
+  `change_collateral`, `health_factor`, `get_market_balance`, ... (see `tests/golden_aave.rs`).
 
 ```bash
 cargo run --release -p demeter-core --example gamma -- 2022-01-01 2022-12-31 triangle 0.05 3600

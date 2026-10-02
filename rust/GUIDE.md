@@ -93,8 +93,9 @@ ln -sfn /path/to/demeter/tests tests && ln -sfn /path/to/demeter/tests/data data
   tests/uni_lp_market_test.py tests/uni_lp_market_test_token1_is_quote.py tests/uni_lp_add_liq_by_val.py \
   tests/uni_lp_add_liq_by_val_token1_is_quote.py tests/uni_lp_core_test.py tests/uni_lp_helper_test.py \
   tests/uni_lp_test_calc_liq.py tests/uni_lp_data_test.py tests/strategy_trigger_test.py \
-  tests/actuator_test.py tests/strategy_data_access_test.py tests/metric_test.py tests/indicator_test.py
-# 102 passed
+  tests/actuator_test.py tests/strategy_data_access_test.py tests/metric_test.py tests/indicator_test.py \
+  tests/aave_market_test.py tests/aave_liquidate_test.py tests/aave_strategy_test.py
+# 134 passed
 ```
 
 ---
@@ -145,7 +146,8 @@ Every sample was run on both the old python engine and the Rust engine (one-day 
 |---|---|
 | run on both engines, **all 229 result CSVs identical** | 01, 02, 04, 05, 06, 07, 12, 13, 14, 15, 61, 62, remix_dao_gamma, _gamma_single_side, _gamma_single_side_half_shape, _current_impl_in_usdc, _dca_weekly, _dca_weekly_btccbbtc_in_usdc, _dca_weekly_non_stable_in_usdc, _isao_percentage_B, _B_v2, _D, _D_v2, _isao_tick_B_stable_tick_gap, _isao_tick_C, _mark_perc_in_usdc, _mark_perc_in_usdc_v2, _refill, _valley_shape, _valley_shape_single_side, _with_short |
 | fail on the **old engine too**, same error; not caused by the port | `03_proprieties_access`, `11_deposit_by_SMA` (import `demeter.metrics`, which no longer exists → use `demeter.result`); `remix_dao`, `_chaos`, `_dca`, `_dca_weekly_btceth_*`, `_dca_weekly_double_sep`, `_new_strat` (import `RowData`, removed from demeter → use `Snapshot`); `_50p_non_stable_in_usdc` (`INIT_PRICE` not imported); `_with_short_continue` (a `KeyError` in the strategy's own logic); `_isao_tick_B_stable`, `_isao_tick_B_stable_dontuse` (pool data missing in `samples/real-data`) |
-| not supported (markets not ported) | `21_aave_*`, `22_aave_*`, `23_delta_hedging`, `24_delta_hedging_gmx_uni`, `31_deribit_*`, `51/52/53_gmx_*`, `gmx_v2_short_eth*` |
+| aave (ported later), run on both engines, **every value and action matches** | `21_aave_tutorial`, `22_aave_liquidate`, `23_delta_hedging` (uniswap + aave; needs `scipy`) |
+| not supported (markets not ported) | `24_delta_hedging_gmx_uni`, `31_deribit_*`, `51/52/53_gmx_*`, `gmx_v2_short_eth*` |
 
 ### 3.1 Behaviour differences to know when writing *new* python strategies
 
@@ -163,6 +165,9 @@ pandas-specific tricks behave differently:
 | `strategy.account_status_df` in `finalize` | DataFrame | built lazily on first use | all DataFrame access | — |
 | Decimals returned by the engine | 35-digit python `Decimal` | same, rounded to 35 digits | — | internal math uses 38 digits; values can differ from the old engine in the last 1–2 digits (≤1e-30 relative) |
 | `actuator.account_status`, `actuator.actions` | lists | list-like views | indexing, `len`, iteration | not `list` instances (`list(...)` if needed) |
+| aave `market.data`, `load_aave_data(...)` | `pd.DataFrame` with (token, column) columns | `AaveMarketData` proxy | `len`, `.index`, `.columns`, `("WETH", "liquidity_index") in data`, `data["WETH"]`, `.iloc` / `.loc`, `market.data = frame` | only the 5 required columns per token are kept; pandas access builds the full frame once; `to_pandas()` for a real DataFrame |
+| aave `market.market_status.data`, `snapshot.market_status[aave_key]` | `pd.Series` with (token, column) index | `AaveStatusView` | `row["WETH"].liquidity_index`, `row[("WETH", "liquidity_rate")]`, `.to_dict()`, `.keys()` | Series methods → `.to_dict()` first |
+| aave `market._supplies`, `market._borrows` | dicts of `SupplyInfo` / `BorrowInfo` | live dict-like views | `[token]`, `[token] = SupplyInfo(...)`, `del`, `in`, `len`, field reads / writes | — |
 
 **Market subclasses** (like `UniLpMarketV2`) work when they add methods, or override methods that
 your own strategy code calls. The engine does not see python overrides of the methods it calls
@@ -180,8 +185,13 @@ strategies do.
 `Pool`), but only data and settings travel: open positions and the current market status do not.
 The same holds for normal use, where markets are pickled before a run.
 
-When not to use this port: aave / deribit / gmx / squeeth markets are not ported. Keep the old
-python package (separate venv) for those strategies.
+When not to use this port: deribit / gmx / squeeth markets are not ported. Keep the old python
+package (separate venv) for those strategies.
+
+**Aave.** `AaveV3Market` subclasses work like uniswap ones: the engine calls its native `update`
+(liquidation), `set_market_status`, `get_market_balance` and `check_market`, and `Actuator.run`
+warns if a subclass overrides them. `actuator.legacy_quirks = False` also switches the aave
+corrections on (README, quirks 10–16).
 
 ### 3.2 Making python strategies faster (optional, no Rust needed)
 
@@ -245,8 +255,10 @@ Either:
 | `Actuator()` | `actuator::Actuator::new(allow_negative_balance)` |
 | `UniV3Pool(token0, token1, 0.05, quote)` | `types::UniV3Pool::new(token0, token1, dec("0.05"), quote, None /* tick spacing */)` |
 | `UniLpMarket(MarketInfo("lp"), pool)` | `uniswap::UniLpMarket::new(MarketInfo::new("lp"), pool)` → wrap with `broker::shared(...)` |
+| `AaveV3Market(MarketInfo("aave", MarketTypeEnum.aave_v3), risk_csv, [weth])` | `aave::AaveV3Market::from_risk_file(MarketInfo::aave("aave"), risk_csv, vec![weth])?` → `broker::shared(...)` |
+| `aave_market.data = load_aave_data(chain, tokens, start, end, path)` | `aave_market.load_data("polygon", &tokens, start, end)?` (set `data_path` first; tokens need `TokenInfo::with_address`) |
 | `market.load_data(chain, addr, start, end)` | `market.load_data("ethereum", addr, start_date, end_date)` (set `market.data_path` first) |
-| `broker.add_market(market)` | `actuator.add_market(market_handle.clone())` |
+| `broker.add_market(market)` | `actuator.add_market(market_handle.clone())` (uniswap or aave) |
 | `broker.set_balance(token, x)` | `actuator.broker.borrow().wallet.borrow_mut().set(&token, x)` |
 | `actuator.set_price(market.get_price_from_data())` | `data::price_from_data(...)` + `PriceTable::new(...)` + `actuator.set_price(table, quote)` (see below) |
 | `class S(Strategy)` | `struct S; impl actuator::Strategy for S { ... }` |
@@ -321,6 +333,24 @@ The same functions as python. `Option` replaces python's `None` / `-1` defaults.
 | `get_position_status(&pos)` / `get_position_amount(&pos)` | status / `(amount0, amount1)` |
 | `price()`, `price_to_tick(&p)`, `price_to_raw_tick(&p)`, `tick_to_price(t)` | |
 | `positions` | `Vec<(PositionInfo, Position)>` in insertion order |
+
+### 4.4b Market operations (`AaveV3Market`)
+
+Reach it with `ctx.aave("name")?` (`.borrow()` to read, `.borrow_mut()` to trade). Values are in
+USD; prices come from the actuator price table (`set_price` with `TokenInfo::usd()` as quote).
+
+| call | python |
+|---|---|
+| `supply(&token, amount, collateral)` / `withdraw(&token, amount: Option)` | `supply`, `withdraw` |
+| `borrow(&token, amount: Option)` / `repay(&token, amount: Option, with_collateral, collateral_token: Option<&TokenInfo>)` | `borrow`, `repay` |
+| `change_collateral(&token, collateral)` | `change_collateral` |
+| `get_max_borrow_amount(&t)`, `get_max_withdraw_amount(&t)`, `get_max_repay_amount(&t)` | same |
+| `supplies()?`, `borrows()?`, `get_supply(&t)?`, `get_borrow(&t)?` | `supplies`, `borrows`, ... (amount, value, apy) |
+| `health_factor()?`, `ltv()?`, `max_ltv()?`, `liquidation_threshold()?`, `supply_apy()?`, `borrow_apy()?` | properties of the same name |
+| `get_market_balance()?` | `AaveBalance` |
+
+Liquidation happens in the loop (`update`), as in python. `demeter-core/tests/golden_aave.rs` is
+a complete example (supply, borrow, liquidation).
 
 Math helpers (`demeter_core::math`): `get_sqrt_ratio_at_tick`, `get_liquidity`, `get_amounts`,
 `nearest_usable_tick`, `base_unit_price_to_tick`, `tick_to_base_unit_price`, `amounts_relation`,

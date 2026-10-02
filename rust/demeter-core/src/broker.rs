@@ -1,9 +1,11 @@
 //! Wallet (python `Broker.assets` + `Asset`), broker and account status.
 
+use crate::aave::AaveV3Market;
 use crate::actions::{ActionKind, ActionLog, Ud};
 use crate::dec::{self, Dec};
 use crate::error::{require, DemeterError, Result};
-use crate::types::{MarketInfo, MarketType, TokenInfo, Ts, UniLpBalance};
+use crate::market::{Market, MarketBalance};
+use crate::types::{MarketInfo, MarketType, TokenInfo, Ts};
 use crate::uniswap::UniLpMarket;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -114,14 +116,14 @@ pub struct AccountRow {
     pub net_value: Dec,
     pub asset_value: Dec,
     pub asset_balances: Vec<(TokenInfo, Dec)>,
-    pub market_balances: Vec<(MarketInfo, UniLpBalance)>,
+    pub market_balances: Vec<(MarketInfo, MarketBalance)>,
 }
 
 /// Broker: owns the wallet and the markets. Python `Broker`.
 pub struct Broker {
     pub wallet: Shared<Wallet>,
     pub log: Shared<ActionLog>,
-    pub markets: Vec<(MarketInfo, Shared<UniLpMarket>)>,
+    pub markets: Vec<(MarketInfo, Market)>,
     pub quote_token: Option<TokenInfo>,
 }
 
@@ -136,33 +138,50 @@ impl Broker {
     }
 
     /// python `add_market`
-    pub fn add_market(&mut self, market: Shared<UniLpMarket>) -> Result<()> {
-        let info = market.borrow().info.clone();
+    pub fn add_market(&mut self, market: impl Into<Market>) -> Result<()> {
+        let market = market.into();
+        let info = market.info();
         if self.markets.iter().any(|(k, _)| *k == info) {
             return Err(DemeterError::demeter("market has exist"));
         }
-        market
-            .borrow_mut()
-            .attach(self.wallet.clone(), self.log.clone());
+        market.attach(self.wallet.clone(), self.log.clone());
         self.markets.push((info, market));
         Ok(())
     }
 
-    pub fn market(&self, info: &MarketInfo) -> Option<Shared<UniLpMarket>> {
+    /// The market with this key, of any kind.
+    pub fn get(&self, info: &MarketInfo) -> Option<Market> {
         self.markets
             .iter()
             .find(|(k, _)| k == info)
             .map(|(_, m)| m.clone())
     }
 
-    pub fn market_by_name(&self, name: &str) -> Option<Shared<UniLpMarket>> {
+    /// The market with this name, of any kind.
+    pub fn get_by_name(&self, name: &str) -> Option<Market> {
         self.markets
             .iter()
             .find(|(k, _)| k.name == name)
             .map(|(_, m)| m.clone())
     }
 
-    pub fn default_market(&self) -> Option<Shared<UniLpMarket>> {
+    /// The uniswap market with this key.
+    pub fn market(&self, info: &MarketInfo) -> Option<Shared<UniLpMarket>> {
+        self.get(info).and_then(|m| m.as_uni().cloned())
+    }
+
+    /// The uniswap market with this name.
+    pub fn market_by_name(&self, name: &str) -> Option<Shared<UniLpMarket>> {
+        self.get_by_name(name).and_then(|m| m.as_uni().cloned())
+    }
+
+    /// The aave market with this name.
+    pub fn aave_by_name(&self, name: &str) -> Option<Shared<AaveV3Market>> {
+        self.get_by_name(name).and_then(|m| m.as_aave().cloned())
+    }
+
+    /// python `markets.default`: the first market added.
+    pub fn default_market(&self) -> Option<Market> {
         self.markets.first().map(|(_, m)| m.clone())
     }
 
@@ -170,7 +189,7 @@ impl Broker {
     pub fn check_backtest(&self) -> Result<()> {
         require(!self.markets.is_empty(), "No market assigned")?;
         for (_, m) in &self.markets {
-            m.borrow().check_market()?;
+            m.check_market()?;
         }
         require(self.quote_token.is_some(), "Quote token of broker not set")
     }
@@ -188,13 +207,13 @@ impl Broker {
         let mut market_sum = dec::zero();
         let mut market_balances = Vec::with_capacity(self.markets.len());
         for (info, m) in &self.markets {
-            let m = m.borrow();
             let bal = m.get_market_balance()?;
-            if m.pool.quote_token == quote {
-                market_sum += bal.net_value;
+            let market_quote = m.quote_token();
+            if market_quote == quote {
+                market_sum += bal.net_value();
             } else {
                 market_sum +=
-                    bal.net_value * price_of(&m.pool.quote_token.name)? / price_of(&quote.name)?;
+                    bal.net_value() * price_of(&market_quote.name)? / price_of(&quote.name)?;
             }
             market_balances.push((info.clone(), bal));
         }

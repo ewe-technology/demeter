@@ -65,6 +65,7 @@ impl Hash for TokenInfo {
 pub enum MarketType {
     Broker = 0,
     UniswapV3 = 1,
+    AaveV3 = 2,
 }
 
 impl MarketType {
@@ -72,6 +73,16 @@ impl MarketType {
         match self {
             MarketType::Broker => "broker",
             MarketType::UniswapV3 => "uniswap_v3",
+            MarketType::AaveV3 => "aave_v3",
+        }
+    }
+
+    /// python `MarketTypeEnum` value (unknown values map to uniswap, the default market type)
+    pub fn from_value(v: i64) -> Self {
+        match v {
+            0 => MarketType::Broker,
+            2 => MarketType::AaveV3,
+            _ => MarketType::UniswapV3,
         }
     }
 }
@@ -88,6 +99,14 @@ impl MarketInfo {
         MarketInfo {
             name: name.to_string(),
             kind: MarketType::UniswapV3,
+        }
+    }
+
+    /// python `MarketInfo(name, MarketTypeEnum.aave_v3)`
+    pub fn aave(name: &str) -> Self {
+        MarketInfo {
+            name: name.to_string(),
+            kind: MarketType::AaveV3,
         }
     }
 }
@@ -180,6 +199,25 @@ pub struct UniLpBalance {
     pub base_in_position: Dec,
     pub quote_in_position: Dec,
     pub position_count: usize,
+}
+
+/// Market balance of the aave market (python `AaveBalance`). Field order is the python
+/// dataclass order, which is also the column order of `account_status_df`.
+#[derive(Clone, Debug)]
+pub struct AaveBalance {
+    pub net_value: Dec,
+    pub supplies_count: usize,
+    pub borrows_count: usize,
+    pub borrows_value: Dec,
+    pub supplies_value: Dec,
+    pub collaterals_value: Dec,
+    pub health_factor: Dec,
+    pub max_ltv: Dec,
+    pub ltv: Dec,
+    pub liquidation_threshold: Dec,
+    pub supply_apy: Dec,
+    pub borrow_apy: Dec,
+    pub net_apy: Dec,
 }
 
 /// python `PositionStatus`.

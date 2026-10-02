@@ -135,7 +135,8 @@ class Broker:
         self._markets[market.market_info] = market
         market.broker = self
         market._record_action_callback = self._record_action_callback
-        for t in (market.token0, market.token1):
+        tokens = market.tokens if hasattr(market, "tokens") else (market.token0, market.token1)
+        for t in tokens:
             self._remember(t)
 
     def add_to_balance(self, token: TokenInfo, amount: Decimal | float) -> Asset:
@@ -198,7 +199,7 @@ class Broker:
 
 
 def account_status_from_row(row, broker: Broker) -> AccountStatus:
-    """(timestamp, net_value, asset_value, [(token, decimal, balance)], [(market, balance tuple)]) -> AccountStatus"""
+    """(timestamp, net_value, asset_value, [(token, decimal, balance)], [(market, kind, balance tuple)]) -> AccountStatus"""
     from ..uniswap._typing import UniLpBalance
 
     ts, net_value, asset_value, assets, markets = row
@@ -206,8 +207,14 @@ def account_status_from_row(row, broker: Broker) -> AccountStatus:
     for name, decimal, bal in assets:
         status.asset_balances[broker._token(name, decimal)] = bal
     by_name = {k.name: (k, m) for k, m in broker.markets.items()}
-    for mname, (nv, lv, bu, qu, bp, qp, count) in markets:
+    for mname, kind, balance in markets:
         key, market = by_name[mname]
+        if kind == "aave_v3":
+            from ..aave.market import aave_balance
+
+            status.market_status[key] = aave_balance(balance)
+            continue
+        nv, lv, bu, qu, bp, qp, count = balance
         b, q = market.base_token.name, market.quote_token.name
         status.market_status[key] = UniLpBalance(
             net_value=nv,

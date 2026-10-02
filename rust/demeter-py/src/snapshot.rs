@@ -3,11 +3,13 @@
 //! python demeter passes pandas rows (`pd.Series`) here; building one per minute is the main
 //! cost of the old engine. These classes are lazy views with the same attribute / item access.
 
+use crate::aave::status_view;
 use crate::conv::*;
 use demeter_core::actuator::PriceTable;
 use demeter_core::broker::Shared;
 use demeter_core::data::{Bar, ExtraColumn};
 use demeter_core::dec;
+use demeter_core::market::Market;
 use demeter_core::trigger::TriggerCond;
 use demeter_core::types::Ts;
 use demeter_core::uniswap::UniLpMarket;
@@ -227,7 +229,7 @@ impl PriceRow {
 pub struct SnapMarket {
     pub key: Py<PyAny>,
     pub name: String,
-    pub market: Shared<UniLpMarket>,
+    pub market: Market,
 }
 
 /// python `snapshot.market_status` (a `MarketDict` of rows).
@@ -245,30 +247,41 @@ impl MarketStatusMap {
         };
         Ok(self.markets.iter().position(|m| m.name == name))
     }
-    fn bar(&self, i: usize) -> PyResult<BarView> {
-        let m = &self.markets[i];
-        let mk = m.market.borrow();
-        let st = mk.status().py()?;
-        Ok(BarView {
-            market: m.market.clone(),
-            bar: st.bar.clone(),
-            ts: st.ts,
-            row: st.row,
-        })
+    /// the market row: `BarView` for uniswap, `AaveStatusView` for aave
+    fn bar(&self, py: Python<'_>, i: usize) -> PyResult<Py<PyAny>> {
+        match &self.markets[i].market {
+            Market::Uni(m) => {
+                let mk = m.borrow();
+                let st = mk.status().py()?;
+                let v = BarView {
+                    market: m.clone(),
+                    bar: st.bar.clone(),
+                    ts: st.ts,
+                    row: st.row,
+                };
+                Ok(Py::new(py, v)?.into_any())
+            }
+            Market::Aave(m) => {
+                let v = status_view(&m.borrow()).ok_or_else(|| {
+                    pyo3::exceptions::PyRuntimeError::new_err("aave market status is not set")
+                })?;
+                Ok(Py::new(py, v)?.into_any())
+            }
+        }
     }
 }
 
 #[pymethods]
 impl MarketStatusMap {
-    fn __getitem__(&self, key: &Bound<'_, PyAny>) -> PyResult<BarView> {
+    fn __getitem__(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         match self.find(key)? {
-            Some(i) => self.bar(i),
+            Some(i) => self.bar(py, i),
             None => Err(PyKeyError::new_err(key.str()?.to_string())),
         }
     }
-    fn __getattr__(&self, name: &str) -> PyResult<BarView> {
+    fn __getattr__(&self, py: Python<'_>, name: &str) -> PyResult<Py<PyAny>> {
         match self.markets.iter().position(|m| m.name == name) {
-            Some(i) => self.bar(i),
+            Some(i) => self.bar(py, i),
             None => Err(PyAttributeError::new_err(name.to_string())),
         }
     }
@@ -279,8 +292,8 @@ impl MarketStatusMap {
         self.markets.len()
     }
     #[getter]
-    fn default(&self) -> PyResult<BarView> {
-        self.bar(0)
+    fn default(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.bar(py, 0)
     }
     fn get_default_key(&self, py: Python<'_>) -> Py<PyAny> {
         self.markets[0].key.clone_ref(py)
@@ -288,12 +301,12 @@ impl MarketStatusMap {
     fn keys(&self, py: Python<'_>) -> Vec<Py<PyAny>> {
         self.markets.iter().map(|m| m.key.clone_ref(py)).collect()
     }
-    fn values(&self) -> PyResult<Vec<BarView>> {
-        (0..self.markets.len()).map(|i| self.bar(i)).collect()
+    fn values(&self, py: Python<'_>) -> PyResult<Vec<Py<PyAny>>> {
+        (0..self.markets.len()).map(|i| self.bar(py, i)).collect()
     }
-    fn items(&self, py: Python<'_>) -> PyResult<Vec<(Py<PyAny>, BarView)>> {
+    fn items(&self, py: Python<'_>) -> PyResult<Vec<(Py<PyAny>, Py<PyAny>)>> {
         (0..self.markets.len())
-            .map(|i| Ok((self.markets[i].key.clone_ref(py), self.bar(i)?)))
+            .map(|i| Ok((self.markets[i].key.clone_ref(py), self.bar(py, i)?)))
             .collect()
     }
 }

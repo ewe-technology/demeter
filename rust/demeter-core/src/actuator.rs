@@ -1,9 +1,11 @@
 //! The backtest loop (python `demeter/core/actuator.py`).
 
+use crate::aave::AaveV3Market;
 use crate::actions::{Action, ActionLog};
 use crate::broker::{shared, AccountRow, Broker, Shared};
 use crate::dec::{self, Dec};
 use crate::error::{DemeterError, Result};
+use crate::market::{Market, MarketBalance};
 use crate::types::{EngineCompat, TokenInfo, Ts};
 use crate::uniswap::UniLpMarket;
 use polars::prelude::*;
@@ -174,10 +176,19 @@ impl Ctx {
     pub fn price(&self, snapshot: &Snapshot, token: &str) -> Result<Dec> {
         self.prices.get(snapshot.price_row, &token.to_uppercase())
     }
+    /// The uniswap market with this name.
     pub fn market(&self, name: &str) -> Result<Shared<UniLpMarket>> {
         self.broker
             .borrow()
             .market_by_name(name)
+            .ok_or_else(|| DemeterError::Data(format!("KeyError: market {name}")))
+    }
+
+    /// The aave market with this name.
+    pub fn aave(&self, name: &str) -> Result<Shared<AaveV3Market>> {
+        self.broker
+            .borrow()
+            .aave_by_name(name)
             .ok_or_else(|| DemeterError::Data(format!("KeyError: market {name}")))
     }
 }
@@ -240,8 +251,10 @@ impl Actuator {
         }
     }
 
-    pub fn add_market(&self, market: Shared<UniLpMarket>) -> Result<()> {
-        market.borrow_mut().compat = self.compat;
+    /// Add a market (`Shared<UniLpMarket>` or `Shared<AaveV3Market>`).
+    pub fn add_market(&self, market: impl Into<Market>) -> Result<()> {
+        let market = market.into();
+        market.set_compat(self.compat);
         self.broker.borrow_mut().add_market(market)
     }
 
@@ -272,7 +285,7 @@ impl Actuator {
         })
     }
 
-    fn markets(&self) -> Vec<Shared<UniLpMarket>> {
+    fn markets(&self) -> Vec<Market> {
         self.broker
             .borrow()
             .markets
@@ -288,9 +301,9 @@ impl Actuator {
             ));
         }
         if self.prices.is_none() {
-            // python intends to take prices from the uniswap market automatically
-            let default = self.broker.borrow().default_market();
-            if let Some(m) = default {
+            // python takes prices from the (first) uniswap market automatically
+            let uni = self.markets().into_iter().find_map(|m| m.as_uni().cloned());
+            if let Some(m) = uni {
                 let (table, quote) = {
                     let m = m.borrow();
                     let (tokens, cols) = crate::data::price_from_data(m.data()?, &m.pool);
@@ -311,18 +324,14 @@ impl Actuator {
         let default = broker
             .default_market()
             .ok_or_else(|| DemeterError::assertion("No market assigned"))?;
-        let d = default.borrow();
-        let data = d.data()?;
-        if prices.ts.first() > data.ts.first() || prices.ts.last() < data.ts.last() {
+        let (first, last) = default.data_range()?;
+        if prices.ts.first().copied() > first || prices.ts.last().copied() < last {
             return Err(DemeterError::demeter(
                 "Time range of price doesn't cover market data",
             ));
         }
         for (info, m) in &broker.markets {
-            if prices
-                .token_index(&m.borrow().pool.quote_token.name)
-                .is_none()
-            {
+            if prices.token_index(&m.quote_token().name).is_none() {
                 return Err(DemeterError::demeter(format!(
                     "Quote token price of market '{}' is not contained in price dataframe.",
                     info.name
@@ -334,22 +343,33 @@ impl Actuator {
 
     /// python `get_test_range`: timestamps of the market with the most rows.
     fn test_range(&self) -> Result<Vec<Ts>> {
-        let mut best: Option<Vec<Ts>> = None;
+        let mut best: Option<Market> = None;
+        let mut best_len = 0;
         for m in self.markets() {
-            let m = m.borrow();
-            let ts = &m.data()?.ts;
-            if best.as_ref().map(|b| ts.len() > b.len()).unwrap_or(true) {
-                best = Some(ts.clone());
+            let n = m.data_len()?;
+            if best.is_none() || n > best_len {
+                best_len = n;
+                best = Some(m);
             }
         }
-        best.ok_or_else(|| DemeterError::assertion("No market assigned"))
+        best.ok_or_else(|| DemeterError::assertion("No market assigned"))?
+            .timestamps()
     }
 
-    fn set_market_snapshot(&self, ts: Ts, update: bool) -> Result<()> {
+    fn set_market_snapshot(&self, ts: Ts, price_row: usize, update: bool) -> Result<()> {
+        let prices = self
+            .prices
+            .clone()
+            .ok_or_else(|| DemeterError::demeter("token prices is not set"))?;
+        let quote = self
+            .broker
+            .borrow()
+            .quote_token
+            .clone()
+            .ok_or_else(|| DemeterError::assertion("Quote token of broker not set"))?;
         for m in self.markets() {
-            let mut m = m.borrow_mut();
-            if !update || m.has_update {
-                m.set_market_status(ts)?;
+            if !update || m.has_update() {
+                m.set_market_status(ts, &prices, price_row, &quote)?;
             }
         }
         Ok(())
@@ -376,7 +396,7 @@ impl Actuator {
         let mut index = self.test_range()?;
         if self.interval_secs != 60 {
             for m in self.markets() {
-                m.borrow_mut().resample(self.interval_secs)?;
+                m.resample(self.interval_secs)?;
             }
             let p = self.prices.as_ref().unwrap().resample(self.interval_secs)?;
             self.prices = Some(Rc::new(p));
@@ -387,7 +407,13 @@ impl Actuator {
         }
         let ctx = self.ctx()?;
 
-        self.set_market_snapshot(index[0], false)?;
+        let first_row = ctx.prices.row_of(index[0]).ok_or_else(|| {
+            DemeterError::Data(format!(
+                "KeyError: no price at {}",
+                crate::types::ts_to_string(index[0])
+            ))
+        })?;
+        self.set_market_snapshot(index[0], first_row, false)?;
         self.log.borrow_mut().set_ts(index[0]);
         // python uses the first row of the price table here, not the first backtest row
         self.init_account_status = Some(self.account_status_at(0, index[0])?);
@@ -402,7 +428,7 @@ impl Actuator {
                     crate::types::ts_to_string(ts)
                 ))
             })?;
-            self.set_market_snapshot(ts, false)?;
+            self.set_market_snapshot(ts, price_row, false)?;
             self.log.borrow_mut().set_ts(ts);
             let snapshot = Snapshot {
                 ts,
@@ -413,9 +439,9 @@ impl Actuator {
                 strategy.before_bar(&ctx, &snapshot)?;
                 strategy.run_triggers(&ctx, &snapshot)?;
                 strategy.on_bar(&ctx, &snapshot)?;
-                self.set_market_snapshot(ts, true)?;
+                self.set_market_snapshot(ts, price_row, true)?;
                 for m in self.markets() {
-                    m.borrow_mut().update()?;
+                    m.update()?;
                 }
                 strategy.after_bar(&ctx, &snapshot)?;
                 self.notify(strategy, &ctx)
@@ -496,57 +522,11 @@ pub fn account_status_frame(rows: &[AccountRow], prices: Option<&PriceTable>) ->
         )?;
     }
     if let Some(first) = rows.first() {
-        for (mi, (info, _)) in first.market_balances.iter().enumerate() {
-            let get = |f: fn(&crate::types::UniLpBalance) -> Dec| -> Vec<Option<Dec>> {
-                rows.iter()
-                    .map(|r| r.market_balances.get(mi).map(|(_, b)| f(b)))
-                    .collect()
-            };
-            dec_col(
-                &mut cols,
-                format!("{}|net_value", info.name),
-                get(|b| b.net_value),
-            )?;
-            dec_col(
-                &mut cols,
-                format!("{}|liquidity_value", info.name),
-                get(|b| b.liquidity_value),
-            )?;
-            dec_col(
-                &mut cols,
-                format!("{}|base_uncollected", info.name),
-                get(|b| b.base_uncollected),
-            )?;
-            dec_col(
-                &mut cols,
-                format!("{}|quote_uncollected", info.name),
-                get(|b| b.quote_uncollected),
-            )?;
-            dec_col(
-                &mut cols,
-                format!("{}|base_in_position", info.name),
-                get(|b| b.base_in_position),
-            )?;
-            dec_col(
-                &mut cols,
-                format!("{}|quote_in_position", info.name),
-                get(|b| b.quote_in_position),
-            )?;
-            let counts: Vec<Option<i64>> = rows
-                .iter()
-                .map(|r| {
-                    r.market_balances
-                        .get(mi)
-                        .map(|(_, b)| b.position_count as i64)
-                })
-                .collect();
-            cols.push(
-                Series::new(
-                    format!("{}|position_count", info.name).as_str().into(),
-                    counts,
-                )
-                .into(),
-            );
+        for (mi, (info, balance)) in first.market_balances.iter().enumerate() {
+            match balance {
+                MarketBalance::Uni(_) => uni_columns(&mut cols, rows, mi, &info.name)?,
+                MarketBalance::Aave(_) => aave_columns(&mut cols, rows, mi, &info.name)?,
+            }
         }
     }
     if let Some(p) = prices {
@@ -559,6 +539,109 @@ pub fn account_status_frame(rows: &[AccountRow], prices: Option<&PriceTable>) ->
         }
     }
     DataFrame::new_infer_height(cols).map_err(err)
+}
+
+/// (column name, field getter) of a market balance
+type Field<B> = (&'static str, fn(&B) -> Dec);
+
+fn count_column(name: String, v: Vec<Option<i64>>) -> Column {
+    Series::new(name.as_str().into(), v).into()
+}
+
+fn uni_columns(cols: &mut Vec<Column>, rows: &[AccountRow], mi: usize, name: &str) -> Result<()> {
+    type B = crate::types::UniLpBalance;
+    let get = |f: fn(&B) -> Dec| -> Vec<Option<Dec>> {
+        rows.iter()
+            .map(|r| {
+                r.market_balances
+                    .get(mi)
+                    .and_then(|(_, b)| b.as_uni())
+                    .map(f)
+            })
+            .collect()
+    };
+    let fields: [Field<B>; 6] = [
+        ("net_value", |b| b.net_value),
+        ("liquidity_value", |b| b.liquidity_value),
+        ("base_uncollected", |b| b.base_uncollected),
+        ("quote_uncollected", |b| b.quote_uncollected),
+        ("base_in_position", |b| b.base_in_position),
+        ("quote_in_position", |b| b.quote_in_position),
+    ];
+    for (field, f) in fields {
+        cols.push(decimal_column(&format!("{name}|{field}"), &get(f))?);
+    }
+    let counts = rows
+        .iter()
+        .map(|r| {
+            r.market_balances
+                .get(mi)
+                .and_then(|(_, b)| b.as_uni())
+                .map(|b| b.position_count as i64)
+        })
+        .collect();
+    cols.push(count_column(format!("{name}|position_count"), counts));
+    Ok(())
+}
+
+/// Columns of an aave market, in python `AaveBalance` field order. Health factor, ltv, ... can
+/// be infinite, which an arrow decimal can't hold: such columns are written as strings and
+/// turned back into `Decimal` on the python side.
+fn aave_columns(cols: &mut Vec<Column>, rows: &[AccountRow], mi: usize, name: &str) -> Result<()> {
+    type B = crate::types::AaveBalance;
+    fn bal(r: &AccountRow, mi: usize) -> Option<&crate::types::AaveBalance> {
+        r.market_balances.get(mi).and_then(|(_, b)| b.as_aave())
+    }
+    let get =
+        |f: fn(&B) -> Dec| -> Vec<Option<Dec>> { rows.iter().map(|r| bal(r, mi).map(f)).collect() };
+    let count = |f: fn(&B) -> usize| -> Vec<Option<i64>> {
+        rows.iter()
+            .map(|r| bal(r, mi).map(|b| f(b) as i64))
+            .collect()
+    };
+    cols.push(maybe_infinite_column(
+        &format!("{name}|net_value"),
+        &get(|b| b.net_value),
+    )?);
+    cols.push(count_column(
+        format!("{name}|supplies_count"),
+        count(|b| b.supplies_count),
+    ));
+    cols.push(count_column(
+        format!("{name}|borrows_count"),
+        count(|b| b.borrows_count),
+    ));
+    let fields: [Field<B>; 10] = [
+        ("borrows_value", |b| b.borrows_value),
+        ("supplies_value", |b| b.supplies_value),
+        ("collaterals_value", |b| b.collaterals_value),
+        ("health_factor", |b| b.health_factor),
+        ("max_ltv", |b| b.max_ltv),
+        ("ltv", |b| b.ltv),
+        ("liquidation_threshold", |b| b.liquidation_threshold),
+        ("supply_apy", |b| b.supply_apy),
+        ("borrow_apy", |b| b.borrow_apy),
+        ("net_apy", |b| b.net_apy),
+    ];
+    for (field, f) in fields {
+        cols.push(maybe_infinite_column(&format!("{name}|{field}"), &get(f))?);
+    }
+    Ok(())
+}
+
+fn maybe_infinite_column(name: &str, vals: &[Option<Dec>]) -> Result<Column> {
+    if vals
+        .iter()
+        .flatten()
+        .all(|d| !d.is_nan() && !d.is_infinite())
+    {
+        return decimal_column(name, vals);
+    }
+    let s: Vec<Option<String>> = vals
+        .iter()
+        .map(|v| v.map(|d| dec::to_py_string(&dec::round_sig(&d, crate::data::EXPORT_DIGITS))))
+        .collect();
+    Ok(Series::new(name.into(), s).into())
 }
 
 fn decimal_column(name: &str, vals: &[Option<Dec>]) -> Result<Column> {

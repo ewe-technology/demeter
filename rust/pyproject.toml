@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "zelos-demeter-rs"
 version = "2.0.0a1"
-description = "demeter DeFi backtesting (Uniswap v3) with a Rust engine; drop-in for the python `demeter` package"
+description = "demeter DeFi backtesting (Uniswap v3, Aave v3) with a Rust engine; drop-in for the python `demeter` package"
 requires-python = ">=3.11"
 dependencies = [
     "pandas>=2.2,<3",
