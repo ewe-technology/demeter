@@ -112,7 +112,15 @@ td .hyp { color: var(--ink-2); font-size: 13px; margin-top: 2px; max-width: 46ch
 .chip.warn { color: var(--warn); background: var(--warn-bg); }
 .chip.idle { color: var(--idle); background: var(--idle-bg); }
 .chip.info { color: var(--info); background: var(--info-bg); }
+.chip.alt { color: var(--accent); background: var(--accent-soft); }
 .pos { color: var(--good); } .neg { color: var(--bad); } .dim { color: var(--ink-3); }
+.lv { display: inline-block; margin-left: 6px; font: 500 10.5px/1 var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); border: 1px solid var(--rule-strong); border-radius: 4px; padding: 2px 5px; vertical-align: middle; }
+tr.base td { background: var(--accent-soft); }
+.find { margin: 0; padding-left: 20px; display: grid; gap: 8px; color: var(--ink-2); max-width: 92ch; }
+details.win { border-top: 1px solid var(--rule); padding: 8px 0; }
+details.win summary { cursor: pointer; font-weight: 600; font-size: 13.5px; }
+details.win summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+details.win table { min-width: 640px; margin-top: 6px; }
 
 .log { display: grid; gap: 0; }
 .entry { display: grid; grid-template-columns: 92px 1fr; gap: 4px 18px; padding: 14px 0; border-top: 1px solid var(--rule); }
@@ -137,7 +145,7 @@ td .hyp { color: var(--ink-2); font-size: 13px; margin-top: 2px; max-width: 46ch
   <header>
     <span class="eyebrow">Uniswap v3 · defense v6 · strategy research</span>
     <h1>v6 Optimization Lab</h1>
-    <p class="lede">Every structural change tried on the defense v6 valley LP, judged against v6 itself under a rule written down before the run. Net of pool fee and price impact; gas reported separately until the deployment chain is fixed.</p>
+    <p class="lede">Every structural change tried on the defense v6 valley LP, judged under a rule written down before the run, at one of two levels. <b>Improvement</b>: beats v6 itself. <b>Standalone</b>: clears an absolute bar on holdout windows, including a bear market the development data never held; it says a strategy is good alone, not better than v6. Net of pool fee and price impact; gas reported separately until the deployment chain is fixed.</p>
     <div class="meta">
       <span>Story <a href="https://ewetechnology.atlassian.net/browse/QUAN-834" target="_blank" rel="noopener">QUAN-834</a></span>
       <span>Branch <b>feat/dino-v6-opt</b></span>
@@ -148,7 +156,8 @@ td .hyp { color: var(--ink-2); font-size: 13px; margin-top: 2px; max-width: 46ch
       <span class="step">Pre-register rule</span><span class="arrow">→</span>
       <span class="step">Development years</span><span class="arrow">→</span>
       <span class="step">One pick</span><span class="arrow">→</span>
-      <span class="step">Holdout, run once</span>
+      <span class="step">Holdout, run once</span><span class="arrow">→</span>
+      <span class="step">Out-of-time window</span>
     </div>
   </header>
 
@@ -172,10 +181,28 @@ td .hyp { color: var(--ink-2); font-size: 13px; margin-top: 2px; max-width: 46ch
     <p class="note">Continuous runs; v6 pays fees out in USDC. Passing experiments add their own line here. WBTC is out of sample for v6's parameters.</p>
   </section>
 
+  <section class="panel" aria-labelledby="std-title">
+    <div class="panel-head">
+      <h2 id="std-title">Standalone strategies</h2>
+      <p>Holdout Calmar per pool; open a strategy for every window</p>
+    </div>
+    <div class="tablewrap" id="std"></div>
+    <div id="std-detail"></div>
+    <p class="note">Standalone bar: dev ETH and WBTC Calmar ≥ 0.60 with max DD within −30%; holdout Calmar ≥ 0.50 on 2 of 3 pools, return &gt; 0 and max DD within −35%, plus a positive return on the 2022 BTC bear window. Calmar = CAGR / |max DD|. Thresholds set after the first dev results; the seven are one family.</p>
+  </section>
+
+  <section class="panel" aria-labelledby="find-title">
+    <div class="panel-head">
+      <h2 id="find-title">What the series found</h2>
+      <p id="find-doc" class="mono">—</p>
+    </div>
+    <ul class="find" id="find"></ul>
+  </section>
+
   <section class="panel" aria-labelledby="board-title">
     <div class="panel-head">
       <h2 id="board-title">Leaderboard</h2>
-      <p>Gain = variant minus v6, net return points</p>
+      <p>Gain = variant minus v6, net return points (grey for standalone-level rows: the bar there is absolute, not v6)</p>
     </div>
     <div class="tablewrap" id="board"></div>
   </section>
@@ -214,7 +241,7 @@ td .hyp { color: var(--ink-2); font-size: 13px; margin-top: 2px; max-width: 46ch
       return { key: k, label, slot, color: "--s" + slot, values: c.series[k] };
     }).sort((a, b) => a.slot - b.slot);
   }
-  let experiments = [], curves = {}, asset = "eth";
+  let experiments = [], curves = {}, summary = {}, asset = "eth";
 
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -227,30 +254,41 @@ td .hyp { color: var(--ink-2); font-size: 13px; margin-top: 2px; max-width: 46ch
     const s = STATUS[status] || { cls: "idle", icon: "·", label: status || "Unknown" };
     return `<span class="chip ${s.cls}"><span aria-hidden="true">${s.icon}</span>${esc(s.label)}</span>`;
   }
+  // Level-aware chip: a standalone pass is not a win over v6, so it gets its own colour and wording.
+  function chipFor(e) {
+    if (e.status === "holdout-pass" && e.level === "standalone") return `<span class="chip alt"><span aria-hidden="true">✓</span>Standalone pass</span>`;
+    if (e.status === "holdout-pass" && e.level === "validation") return `<span class="chip info"><span aria-hidden="true">✓</span>Validated</span>`;
+    return chip(e.status);
+  }
+  const LEVEL = { improvement: "vs v6", standalone: "standalone", validation: "check", both: "both levels" };
+  const lvTag = (e) => (e.level && LEVEL[e.level] ? `<span class="lv">${esc(LEVEL[e.level])}</span>` : "");
 
   function renderKpis() {
     const base = experiments.find((e) => e.id === "EXP-000");
-    const scored = experiments.filter((e) => e.id !== "EXP-000" && e.eth_cagr != null && e.status === "holdout-pass");
-    const best = scored.sort((a, b) => b.eth_cagr - a.eth_cagr)[0];
     const run = experiments.filter((e) => e.id !== "EXP-000");
-    const passed = run.filter((e) => e.status === "holdout-pass");
+    const imp = run.filter((e) => e.status === "holdout-pass" && (e.level === "improvement" || !e.level));
+    const std = run.filter((e) => e.status === "holdout-pass" && e.level === "standalone");
+    const best = imp.filter((e) => e.eth_cagr != null).sort((a, b) => b.eth_cagr - a.eth_cagr)[0];
+    const stdBest = std.filter((e) => e.eth_maxdd != null).sort((a, b) => b.eth_maxdd - a.eth_maxdd)[0];
     $("kpis").innerHTML = [
       `<div class="kpi"><span class="label">v6 baseline · ETH CAGR</span><span class="value">${base ? pct(base.eth_cagr) : "—"}</span><span class="sub">max DD ${base ? pct(base.eth_maxdd) : "—"}</span></div>`,
-      `<div class="kpi lead"><span class="label">Best passing variant · ETH CAGR</span><span class="value">${best ? pct(best.eth_cagr) : "—"}</span><span class="sub">${best ? esc(best.id + " " + best.name) + " · max DD " + pct(best.eth_maxdd) : "None yet"}</span></div>`,
-      `<div class="kpi"><span class="label">Variants tested</span><span class="value">${run.length}</span><span class="sub">${passed.length} passed holdout</span></div>`,
-      `<div class="kpi"><span class="label">Plain valley LP · ETH</span><span class="value">−5.8%</span><span class="sub">CAGR, same period, for scale</span></div>`,
+      `<div class="kpi lead"><span class="label">Best improvement over v6 · ETH CAGR</span><span class="value">${best ? pct(best.eth_cagr) : "—"}</span><span class="sub">${best ? esc(best.id + " " + best.name) + " · max DD " + pct(best.eth_maxdd) : "None yet"}</span></div>`,
+      `<div class="kpi"><span class="label">Passed holdout</span><span class="value">${imp.length} · ${std.length}</span><span class="sub">${imp.length} beat v6 · ${std.length} standalone only</span></div>`,
+      `<div class="kpi"><span class="label">Shallowest drawdown, standalone pass</span><span class="value">${stdBest ? pct(stdBest.eth_maxdd) : "—"}</span><span class="sub">${stdBest ? esc(stdBest.id + " " + (stdBest.version || "")) + " · ETH CAGR " + pct(stdBest.eth_cagr) : "None yet"}</span></div>`,
+      `<div class="kpi"><span class="label">Variants tested</span><span class="value">${run.length}</span><span class="sub">Plain valley LP ETH CAGR −5.8%, for scale</span></div>`,
     ].join("");
   }
 
   function renderBoard() {
     if (!experiments.length) { $("board").innerHTML = `<div class="empty">No experiments recorded yet.</div>`; return; }
     const rows = experiments.map((e) => {
-      const dev = e.dev ? `<span class="num ${e.dev.median > 0 ? "pos" : "neg"}">${pts(e.dev.median)}</span> <span class="dim num">${esc(e.dev.wins)}</span>` : `<span class="dim">—</span>`;
-      const ho = e.holdout ? `<span class="num ${e.holdout.median > 0 ? "pos" : "neg"}">${pts(e.holdout.median)}</span> <span class="dim num">${esc(e.holdout.wins)}</span>` : `<span class="dim">—</span>`;
+      const col = (m) => (e.level === "standalone" || e.level === "both" ? "dim" : m > 0 ? "pos" : "neg");   // gain vs v6 is not the standalone criterion
+      const dev = e.dev ? `<span class="num ${col(e.dev.median)}">${pts(e.dev.median)}</span> <span class="dim num">${esc(e.dev.wins)}</span>` : `<span class="dim">—</span>`;
+      const ho = e.holdout ? `<span class="num ${col(e.holdout.median)}">${pts(e.holdout.median)}</span> <span class="dim num">${esc(e.holdout.wins)}</span>` : `<span class="dim">—</span>`;
       return `<tr>
         <td class="mono">${esc(e.id)}</td>
-        <td><div class="name">${e.version ? esc(e.version) + " · " : ""}${esc(e.name)}</div><div class="hyp">${esc(e.hypothesis)}</div></td>
-        <td>${chip(e.status)}</td>
+        <td><div class="name">${e.version ? esc(e.version) + " · " : ""}${esc(e.name)}${lvTag(e)}</div><div class="hyp">${esc(e.hypothesis)}</div></td>
+        <td>${chipFor(e)}</td>
         <td class="r">${dev}</td>
         <td class="r">${ho}</td>
         <td class="r num">${pct(e.eth_cagr)}</td>
@@ -258,7 +296,7 @@ td .hyp { color: var(--ink-2); font-size: 13px; margin-top: 2px; max-width: 46ch
         <td class="mono dim">${esc(e.commit)}</td>
       </tr>`;
     }).join("");
-    $("board").innerHTML = `<table><thead><tr><th>ID</th><th>Variant</th><th>Status</th><th class="r">Dev gain · wins</th><th class="r">Holdout gain · wins</th><th class="r">ETH CAGR</th><th class="r">ETH max DD</th><th>Commit</th></tr></thead><tbody>${rows}</tbody></table>`;
+    $("board").innerHTML = `<table><thead><tr><th>ID</th><th>Variant</th><th>Status</th><th class="r">Dev gain vs v6 · wins</th><th class="r">Holdout gain vs v6 · wins</th><th class="r">ETH CAGR</th><th class="r">ETH max DD</th><th>Commit</th></tr></thead><tbody>${rows}</tbody></table>`;
   }
 
   function renderLog() {
@@ -267,12 +305,50 @@ td .hyp { color: var(--ink-2); font-size: 13px; margin-top: 2px; max-width: 46ch
       <div class="entry">
         <div><div class="id">${esc(e.id)}</div><div class="when">${esc(e.date)}</div></div>
         <div>
-          <h3>${e.version ? esc(e.version) + " · " : ""}${esc(e.name)} ${chip(e.status)}</h3>
+          <h3>${e.version ? esc(e.version) + " · " : ""}${esc(e.name)} ${chipFor(e)}${lvTag(e)}</h3>
           <p><span class="k">Hypothesis</span>${esc(e.hypothesis)}</p>
           <p><span class="k">Verdict</span>${esc(e.verdict)}</p>
           <p class="note mono">${esc(e.doc)}</p>
         </div>
       </div>`).join("");
+  }
+
+  function renderSummary() {
+    const d = summary.standalone;
+    if (!d || !d.rows || !d.rows.length) { $("std").innerHTML = `<div class="empty">No standalone strategies recorded yet.</div>`; $("std-detail").innerHTML = ""; return; }
+    const f2 = (x) => (x == null ? "—" : x.toFixed(2));
+    const wcal = (r, i) => (r.windows[i] ? f2(r.windows[i].this.calmar) : "—");
+    const wtot = (r, key) => { const w = r.windows.find((x) => x.label.indexOf(key) === 0); return w ? pct(w.this.total) : "—"; };
+    const rd = { baseline: ["idle", "Baseline"], credible: ["good", "Credible"], weak: ["warn", "Weak"], fragile: ["bad", "Fragile"] };
+    const body = d.rows.map((r) => {
+      const c = rd[r.reading] || ["idle", r.reading];
+      const neg = (t) => (t.startsWith("−") ? "neg" : "");
+      return `<tr class="${r.level === "baseline" ? "base" : ""}">
+        <td><div class="name">${esc(r.version)} · ${esc(r.name)}</div><div class="hyp mono">${esc(r.exp)}</div></td>
+        <td><span class="chip ${c[0]}">${esc(c[1])}</span></td>
+        <td class="r num">${f2(r.devEth.calmar)} <span class="dim">(${pct(r.devEth.dd)})</span></td>
+        <td class="r num">${f2(r.devBtc.calmar)} <span class="dim">(${pct(r.devBtc.dd)})</span></td>
+        <td class="r num">${wcal(r, 0)}</td><td class="r num">${wcal(r, 1)}</td><td class="r num">${wcal(r, 2)}</td>
+        <td class="r num ${neg(wtot(r, "WBTC 2022"))}">${wtot(r, "WBTC 2022")}</td>
+        <td class="r num ${neg(wtot(r, "ETH 2021"))}">${wtot(r, "ETH 2021")}</td>
+        <td><div class="hyp">${esc(r.note)}</div></td></tr>`;
+    }).join("");
+    $("std").innerHTML = `<table><thead><tr><th>Strategy</th><th>Reading</th><th class="r">Dev ETH Calmar (DD)</th><th class="r">Dev WBTC Calmar (DD)</th><th class="r">Arbitrum</th><th class="r">Base WETH</th><th class="r">Base cbBTC</th><th class="r">2022 bear</th><th class="r">2021 bull</th><th>Note</th></tr></thead><tbody>${body}</tbody></table>`;
+    $("std-detail").innerHTML = d.rows.filter((r) => r.level !== "baseline").map((r) => {
+      const trs = r.windows.map((w) => `<tr><td>${esc(w.label)}</td>
+        <td class="r num">${pct(w.v6.total)}</td><td class="r num">${pct(w.this.total)}</td>
+        <td class="r num">${pct(w.v6.dd)}</td><td class="r num">${pct(w.this.dd)}</td>
+        <td class="r num">${f2(w.v6.calmar)}</td><td class="r num">${f2(w.this.calmar)}</td>
+        <td class="r num">${w.this.sharpe == null ? "—" : f2(w.this.sharpe)}</td>
+        <td class="r num">${w.this.fees == null ? "—" : money(w.this.fees)}</td><td class="r num">${w.this.rebuilds == null ? "—" : w.this.rebuilds}</td></tr>`).join("");
+      return `<details class="win"><summary>${esc(r.version)} · ${esc(r.name)} <span class="dim mono">${esc(r.exp)}</span></summary><div class="tablewrap"><table><thead><tr><th>Window</th><th class="r">Total v6</th><th class="r">Total this</th><th class="r">Max DD v6</th><th class="r">Max DD this</th><th class="r">Calmar v6</th><th class="r">Calmar this</th><th class="r">Sharpe</th><th class="r">LP fees</th><th class="r">Rebuilds</th></tr></thead><tbody>${trs}</tbody></table></div></details>`;
+    }).join("");
+  }
+
+  function renderFindings() {
+    const d = summary.findings;
+    $("find").innerHTML = d && d.items ? d.items.map((t) => `<li>${esc(t)}</li>`).join("") : `<li class="dim">No findings recorded yet.</li>`;
+    $("find-doc").textContent = d && d.doc ? d.doc : "—";
   }
 
   function renderChart() {
@@ -357,7 +433,7 @@ td .hyp { color: var(--ink-2); font-size: 13px; margin-top: 2px; max-width: 46ch
   $("btn-btc").setAttribute("aria-pressed", String(asset === "btc"));
 
   function renderAll() {
-    renderKpis(); renderBoard(); renderLog(); renderChart();
+    renderKpis(); renderBoard(); renderLog(); renderChart(); renderSummary(); renderFindings();
     const dates = experiments.map((e) => e.date).filter(Boolean).sort();
     $("updated").textContent = dates.length ? "Last experiment " + dates[dates.length - 1] : "No experiments yet";
   }
@@ -371,6 +447,9 @@ td .hyp { color: var(--ink-2); font-size: 13px; margin-top: 2px; max-width: 46ch
     db.collection("experiments").orderBy("order").onSnapshot(
       (snap) => { experiments = snap.docs.map((d) => d.data()); renderAll(); },
       () => fail("Lost the connection to the experiment records. Reload the page to reconnect."));
+    db.collection("summary").onSnapshot(
+      (snap) => { summary = {}; snap.docs.forEach((d) => { summary[d.id] = d.data(); }); renderSummary(); renderFindings(); },
+      () => fail("Lost the connection to the strategy summary. Reload the page to reconnect."));
     db.collection("curves").onSnapshot(
       (snap) => { curves = {}; snap.docs.forEach((d) => { curves[d.id] = d.data(); }); renderChart(); },
       () => fail("Lost the connection to the equity curves. Reload the page to reconnect."));

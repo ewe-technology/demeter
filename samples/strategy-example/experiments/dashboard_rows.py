@@ -32,7 +32,8 @@ def row(exp_id: str, version: str, order: str, hypothesis: str, verdict: str, ou
            "date": r["date"], "hypothesis": hypothesis, "verdict": verdict,
            "dev": stage("dev_wins", "dev_median_gain_pts"), "holdout": stage("holdout_wins", "holdout_median_gain_pts"),
            "eth_total": num("eth_cont_total"), "eth_cagr": num("eth_cont_cagr"), "eth_maxdd": num("eth_cont_maxdd"),
-           "commit": r["result_commit"] or r["prereg_commit"], "doc": f"experiments/{r['doc']}" if r["doc"] else ""}
+           "commit": r["result_commit"] or r["prereg_commit"], "doc": f"experiments/{r['doc']}" if r["doc"] else "",
+           "level": r.get("level") or None}   # improvement / standalone / validation / both (both levels failed at dev)
     json.dump(doc, open(out, "w"))
     print(json.dumps(doc, ensure_ascii=False)[:300])
 

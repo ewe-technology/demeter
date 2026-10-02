@@ -57,3 +57,5 @@ Two different questions, never mixed in a verdict:
 A re-judged experiment reuses the dev numbers of the original (already seen: say so under *Deviations*) and runs its
 holdout once. Variants that are near-copies of each other (signal correlation, same price path) are reported with their
 correlation to v6 and to each other; they do not count as independent evidence.
+
+The registry's `level` column says at which level a verdict stands (`improvement`, `standalone`, `validation` for a check of v6 itself, `both` when both levels failed at dev; blank for the early experiments judged before the levels existed). The dashboard separates the levels with it.

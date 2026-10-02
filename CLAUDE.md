@@ -53,6 +53,9 @@ Dino names versions `v6.1`, `v6.2`, ...; each is one experiment `EXP-NNN` (next 
    New curves take slot 2, 5, 6, 7, 8 in that order; at most five experiment lines, drop the oldest failed one
    (`{"__delete__": true}` on its series/labels/slots keys) before adding a sixth. The page itself never needs
    republishing; its source is `experiments/dashboard/index.html` (republish with `url` only for layout changes).
+   `level` (registry column, `improvement` / `standalone` / `validation` / `both`) separates the two success levels on the page; the strategy
+   comparison lives in the `summary/standalone` and `summary/findings` documents (`experiments/dashboard_summary.py`): update them when a
+   strategy passes the standalone level.
 6. Tell Dino the result in Chinese: pass/fail, the numbers vs v6, the Jira key, the dashboard link.
 
 ## Rules for experiments
