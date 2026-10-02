@@ -46,6 +46,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 
+import numpy as np
 import pandas as pd
 
 from demeter import Actuator, ChainType, MarketInfo, Snapshot, Strategy, TokenInfo
@@ -337,8 +338,7 @@ def gas_usd(actions, prices: pd.DataFrame) -> pd.Series:
     return pd.Series(rows, index=pd.DatetimeIndex(list(rows)), dtype=float).sort_index().cumsum()
 
 
-def run_one(cfg: Config, data: dict, prices: pd.DataFrame, signal: pd.DataFrame, trade_start: datetime):
-    started = time.time()
+def run_actuator(cfg: Config, data: dict, prices: pd.DataFrame, signal: pd.DataFrame, trade_start: datetime):
     actuator = Actuator()
     for key, pool, _ in MARKETS:
         market = UniLpMarket(key, pool)
@@ -349,6 +349,11 @@ def run_one(cfg: Config, data: dict, prices: pd.DataFrame, signal: pd.DataFrame,
     strategy = TriGate(cfg, signal, trade_start)
     actuator.strategy = strategy
     actuator.run(print_result=False)
+    return actuator, strategy
+
+
+def net_nav(actuator: Actuator, prices: pd.DataFrame) -> tuple[pd.Series, float, float]:
+    """Net value after estimated gas, total swap fees and total gas in USD."""
     nav = actuator.account_status_df[("net_value", "")].astype(float)
     nav.index = pd.DatetimeIndex(nav.index)
     # every swap, including the ones add_liquidity_by_value makes, leaves an action with its fee
@@ -356,7 +361,14 @@ def run_one(cfg: Config, data: dict, prices: pd.DataFrame, signal: pd.DataFrame,
                    for a in actuator.actions if type(a).__name__ in ("SwapAction", "BuyAction", "SellAction"))
     gas = gas_usd(actuator.actions, prices)
     nav_net = nav - gas.reindex(nav.index, method="ffill").fillna(0.0)
-    return cfg.name, nav_net, strategy.rebuilds, swap_fee, float(gas.iloc[-1]) if len(gas) else 0.0, time.time() - started
+    return nav_net, swap_fee, float(gas.iloc[-1]) if len(gas) else 0.0
+
+
+def run_one(cfg: Config, data: dict, prices: pd.DataFrame, signal: pd.DataFrame, trade_start: datetime):
+    started = time.time()
+    actuator, strategy = run_actuator(cfg, data, prices, signal, trade_start)
+    nav, swap_fee, gas = net_nav(actuator, prices)
+    return cfg.name, nav, strategy.rebuilds, swap_fee, gas, time.time() - started
 
 
 YEARS = [("2022", "2022-01-01", "2023-01-01"), ("2023", "2023-01-01", "2024-01-01"),
@@ -448,6 +460,159 @@ def start_sweep(first: str = "2022-01-01", last: str = "2025-01-01"):
     print(table.pivot(index="start", columns="run", values="annual").map(lambda v: f"{v:+.1%}").to_string())
 
 
+def leg_base_share(width: float) -> float:
+    """Value share of the base token in a fresh v3 position spanning price x (1 -/+ width), centred on the price."""
+    a, b = 1 - (1 + width) ** -0.5, 1 - (1 - width) ** 0.5
+    return a / (a + b)
+
+
+def spot_mix(cfg: Config, target: tuple | None) -> dict:
+    """(eth, btc, usdc) value shares of what a TriGate rebuild places, as spot holdings."""
+    if target is None:
+        return {"eth": 0.0, "btc": 0.0, "usdc": 1.0}
+    w_eth, w_ratio = target
+    s_eth, s_btc = leg_base_share(cfg.eth_range), leg_base_share(cfg.ratio_range)
+    return {"eth": w_eth * s_eth + w_ratio * (1 - s_btc), "btc": w_ratio * s_btc,
+            "usdc": w_eth * (1 - s_eth) + (1 - w_eth - w_ratio)}
+
+
+def run_spot(cfg: Config, prices: pd.DataFrame, signal: pd.DataFrame, trade_start: datetime) -> dict:
+    """
+    TriGate's decisions and rebuild times, but holding spot instead of LP: every rebuild resets the holdings to the
+    token mix the LP would have just placed. LP minus this = fees - impermanent loss - the LP's extra costs.
+    Swaps route like the pools (BTC <-> ETH, then ETH <-> USDC), each paying 0.05%. No parking.
+    """
+    strat = TriGate(cfg, signal, trade_start)
+    fee = 0.0005
+    p = prices.loc[trade_start:]
+    p_eth, p_btc = p[weth.name].to_numpy(), p[wbtc.name].to_numpy()
+    qty = {"eth": 0.0, "btc": 0.0, "usdc": float(INITIAL_USDC)}
+    target, bounds, started = "unset", {}, False
+    rebuilds, swap_cost, gas, nav, btc_share = 0, 0.0, 0.0, [], []
+    for i, t in enumerate(p.index):
+        pe, pb = p_eth[i], p_btc[i]
+        value = qty["eth"] * pe + qty["btc"] * pb + qty["usdc"]
+        if t.hour == 0:
+            new = strat.wanted(signal.loc[pd.Timestamp(t.date())])
+            now = {"eth": pe, "ratio": pb / pe}
+            left = any(not (lo <= now[k] <= hi) for k, (lo, hi) in bounds.items())
+            if not started or new != target or left:
+                started, target = True, new
+                mix = spot_mix(cfg, new)
+                d_btc = mix["btc"] * value - qty["btc"] * pb
+                d_usdc = mix["usdc"] * value - qty["usdc"]
+                cost = fee * (abs(d_btc) + abs(d_usdc))
+                swaps = (abs(d_btc) > 1) + (abs(d_usdc) > 1)
+                gas_now = swaps * GAS_UNITS["SwapAction"] * GAS_GWEI[t.year] * 1e-9 * pe
+                value -= cost + gas_now
+                qty = {"eth": mix["eth"] * value / pe, "btc": mix["btc"] * value / pb, "usdc": mix["usdc"] * value}
+                bounds = {}
+                if new is not None and new[0] > 0:
+                    bounds["eth"] = (pe * (1 - cfg.eth_range), pe * (1 + cfg.eth_range))
+                if new is not None and new[1] > 0:
+                    bounds["ratio"] = (pb / pe * (1 - cfg.ratio_range), pb / pe * (1 + cfg.ratio_range))
+                rebuilds += (swaps > 0)
+                swap_cost += cost
+                gas += gas_now
+        nav.append(value)
+        btc_share.append(qty["btc"] * pb / value)
+    nav = pd.Series(nav, index=p.index)
+    return {"nav": nav, "rebuilds": rebuilds, "swap $": swap_cost, "gas $": gas,
+            "avg btc": float(pd.Series(btc_share, index=p.index)[nav.index >= trade_start].mean())}
+
+
+def lp_fees_usd(actuator: Actuator, prices: pd.DataFrame) -> float:
+    """Fees earned by the LP positions: collected minus the principal removed just before, plus what is still pending."""
+    total = 0.0
+    for a in actuator.actions:
+        kind = type(a).__name__
+        if kind in ("CollectFeeAction", "RemoveLiquidityAction"):
+            row = prices.loc[pd.Timestamp(a.timestamp)]
+            usd = float(a.base_amount) * row[a.base_amount.unit] + float(a.quote_amount) * row[a.quote_amount.unit]
+            total += usd if kind == "CollectFeeAction" else -usd
+    last = prices.iloc[-1]
+    for market in actuator.broker.markets.values():
+        bal = market.get_market_balance()
+        total += float(bal.base_uncollected) * last[bal.base_uncollected.unit] + \
+            float(bal.quote_uncollected) * last[bal.quote_uncollected.unit]
+    return total
+
+
+def run_lp_detail(cfg: Config, data: dict, prices: pd.DataFrame, signal: pd.DataFrame, trade_start: datetime):
+    actuator, strategy = run_actuator(cfg, data, prices, signal, trade_start)
+    nav, swap_fee, gas = net_nav(actuator, prices)
+    return cfg.name, nav, strategy.rebuilds, swap_fee, gas, lp_fees_usd(actuator, prices)
+
+
+def build_decompose() -> list[Config]:
+    """Gate off/on, fixed / tilted / always-one-way weights, and the chosen band. No parking, so spot can mirror it."""
+    btc = dict(gate="btc", ema_span=100)
+    return [
+        Config("none_fixed", "none"),
+        Config("btc_fixed", **btc),
+        Config("btc_follow", tilt="follow", **btc),
+        Config("btc_fade", tilt="fade", **btc),
+        Config("btc_always_weak", weights=TILT_WEAK, **btc),
+        Config("btc_always_strong", weights=TILT_STRONG, **btc),
+        Config("btc_follow_band1", tilt="follow", band=0.01, **btc),
+    ]
+
+
+def shift_signal(signal: pd.DataFrame, column: str, offset: int) -> pd.DataFrame:
+    shifted = signal.copy()
+    shifted[column] = np.roll(signal[column].to_numpy(), offset)
+    return shifted
+
+
+def decompose(shuffles: int = 200, seed: int = 7):
+    """
+    Where the return of the tilted BTC gate comes from:
+      exposure (no gate) -> + BTC gate -> + ETH/BTC tilt -> + LP instead of spot (fees - IL - LP costs)
+    and whether the tilt beats the same ETH/BTC signal shifted to random dates (same share of weak days and
+    same persistence, but no timing).
+    """
+    data, prices, eth_close, ratio_close = load_all(DATA_START, END, "1h")
+    signal = build_signal(eth_close, ratio_close)
+    configs = build_decompose()
+    with multiprocessing.Pool(WORKERS) as pool:
+        lp = pool.starmap(run_lp_detail, [(c, data, prices, signal, TRADE_START) for c in configs])
+    start = "2022-01-01"
+    rows, navs = [], {}
+    for cfg, (name, nav, rebuilds, swap_fee, gas, fees) in zip(configs, lp):
+        spot = run_spot(cfg, prices, signal, TRADE_START)
+        s_stats, l_stats = period_stats(spot["nav"], start), period_stats(nav, start)
+        rows.append({"run": name, **{f"spot {k}": v for k, v in s_stats.items()}, **{f"lp {k}": v for k, v in l_stats.items()},
+                     "lp - spot $": nav.iloc[-1] - spot["nav"].iloc[-1], "fees $": fees,
+                     "IL+costs $": nav.iloc[-1] - spot["nav"].iloc[-1] - fees,
+                     "lp swap+gas $": swap_fee + gas, "spot swap+gas $": spot["swap $"] + spot["gas $"],
+                     "rebuilds": rebuilds, "avg btc share": spot["avg btc"]})
+        navs[f"lp_{name}"], navs[f"spot_{name}"] = nav, spot["nav"]
+    table = pd.DataFrame(rows).set_index("run")
+    pd.DataFrame(navs).to_csv(f"{RESULT_DIR}/nav_decompose.csv")
+    table.to_csv(f"{RESULT_DIR}/summary_decompose.csv")
+    with pd.option_context("display.width", 250, "display.max_columns", 40):
+        print(table.round(3).to_string())
+
+    # tilt timing test, spot only: shift the ETH/BTC signal by a random number of days
+    cfg = next(c for c in configs if c.name == "btc_follow")
+    column = signal_column("ethbtc", cfg.ema_span, cfg.band)
+    rng = np.random.default_rng(seed)
+    n = len(signal)
+    offsets = rng.integers(60, n - 60, size=shuffles)  # at least two months away from the real dates
+    totals = []
+    for k, off in enumerate(offsets):
+        res = run_spot(cfg, prices, shift_signal(signal, column, int(off)), TRADE_START)
+        totals.append({"offset": int(off), **period_stats(res["nav"], start), "avg btc": res["avg btc"]})
+        if (k + 1) % 50 == 0:
+            print(f"shuffle {k + 1}/{shuffles}")
+    shuffled = pd.DataFrame(totals)
+    shuffled.to_csv(f"{RESULT_DIR}/tilt_shuffle.csv", index=False)
+    real = table.loc["btc_follow", "spot total"]
+    print(f"\nspot btc_follow total {real:+.1%}; shifted signal: median {shuffled['total'].median():+.1%}, "
+          f"5%-95% {shuffled['total'].quantile(0.05):+.1%} ~ {shuffled['total'].quantile(0.95):+.1%}, "
+          f"real beats {(shuffled['total'] < real).mean():.0%} of {shuffles}")
+
+
 def minute_check(names: list[str], window_start: str):
     """Same configs on minute and hourly bars over [window_start, END], signal from the full history."""
     configs = [c for c in build_configs() + build_grid() + build_improvements() if c.name in names]
@@ -475,9 +640,12 @@ if __name__ == "__main__":
     parser.add_argument("--improve", action="store_true", help="run build_improvements()")
     parser.add_argument("--starts", action="store_true", help="START_CONFIGS started on the first of every month")
     parser.add_argument("--ethguard", action="store_true", help="run build_eth_guard()")
+    parser.add_argument("--decompose", action="store_true", help="split the return into gate / tilt / LP, see decompose()")
     cli = parser.parse_args()
     os.makedirs(RESULT_DIR, exist_ok=True)
-    if cli.minute:
+    if cli.decompose:
+        decompose()
+    elif cli.minute:
         minute_check(cli.minute.split(","), cli.window)
     elif cli.starts:
         start_sweep()
