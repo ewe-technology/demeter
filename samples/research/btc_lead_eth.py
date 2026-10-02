@@ -3,7 +3,7 @@ Does BTC lead ETH? Lead-lag study on Uniswap v3 minute data.
 
 Pools (read from samples/real-data/<address>/):
   ETH  : 0x88e6... USDC/WETH 0.05% (token0 USDC 6, token1 WETH 18) -> log ETH/USD = -tick * ln(1.0001) + c
-  BTC  : 0x5653... WBTC/USDC       (token0 WBTC 8, token1 USDC 6)  -> log BTC/USD = +tick * ln(1.0001) + c
+  BTC  : 0x5653... WBTC/USDT 0.05% (token0 WBTC 8, token1 USDT 6)  -> log BTC/USD = +tick * ln(1.0001) + c
   RATIO: 0x4585... WBTC/WETH 0.05% (token0 WBTC 8, token1 WETH 18) -> log WETH per WBTC = +tick * ln(1.0001) + c
 
 Only log returns are used, so the decimal constants cancel out.
