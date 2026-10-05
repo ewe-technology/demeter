@@ -1,8 +1,8 @@
 # EXP-060: scheduled FOMC / CPI pause with an exact restore of the ladder (v6.47)
 
-- Jira: QUAN-___
+- Jira: QUAN-942
 - Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Pre-registration commit: 1ac1ba4 · Result commit: ______
 - Scope: /goal 2026-10-05 "beat v6 at the improvement level, pure LP, time-split out-of-time holdout" (Dino); idle-capital
   yield excluded (ruling 2026-10-05).
 
