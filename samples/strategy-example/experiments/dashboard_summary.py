@@ -59,11 +59,12 @@ notes = {"credible": "Holdout Calmar within about 0.05 of v6, max DD shallower, 
 for r in rows: r["note"] = notes.get(r["reading"], "Reference.")
 json.dump({"title": "Standalone strategies", "updated": "2026-10-02", "rows": rows}, open(os.path.join(D, "s_standalone.json"), "w"))
 findings = [
- "No variant beats v6's return out-of-time. 0 of 28 experiments (EXP-024..051) passed the improvement level; 7 passed the standalone level.",
+ "First improvement-level pass (2026-10-05): v6.39 (EXP-052) LPs the idle reserve in the USDC/USDT pool ±0.1% and beats v6's CAGR and Calmar on ETH and WBTC and on the time-split holdout (H5 ETH 2021, H4 WBTC 2022). The ladder is v6's to the dollar: a better cash leg (+0.3 to +1.5 pts a year), not a better trading rule.",
+ "Before it: 0 of 28 experiments (EXP-024..051) passed the improvement level; 7 passed the standalone level. Also dropped at dev on 2026-10-05: downside vol targeting of F (v6.40) and an efficiency-ratio gate on the EMA exit (v6.41, ETH Calmar 0.24): the EMA exit is v6's protection.",
  "Standalone = absolute bar (dev Calmar >= 0.60, max DD > -30%; holdout Calmar >= 0.50 on 2 of 3 pools, return > 0, max DD > -35%, plus a positive 2022 bear-market out-of-time window). It says a strategy is good alone, not better than v6.",
  "Strongest: v6.35 (ETH share 50% + 2-day exit confirmation) and v6.33 (share 50%): v6-level holdout Calmar with 3-8 pts shallower max DD, lower return. v6.31 is neutral. v6.36, v6.38, v6.25r pass weakly. v6.19r (Donchian) is fragile.",
  "Faster regime lines (Hull, ROC, Supertrend) lose. Slow lines (SMA 200, Ichimoku, Aroon, ROC) beat v6 on WBTC at dev but lose the 2022 BTC bear window (-5.8% to -14.3% vs v6 +2.4%): a bull-market fit.",
  "The seven are one family (same EMA signal, same pools), not independent evidence. Thresholds were set after seeing dev results. The clean test is the forward window 2026-09-18..12-31 (not yet available).",
 ]
-json.dump({"title": "What the series found", "updated": "2026-10-02", "items": findings, "doc": "samples/strategy-example/experiments/FINDINGS-2026-10-02.md"}, open(os.path.join(D, "s_findings.json"), "w"))
+json.dump({"title": "What the series found", "updated": "2026-10-05", "items": findings, "doc": "samples/strategy-example/experiments/FINDINGS-2026-10-05.md"}, open(os.path.join(D, "s_findings.json"), "w"))
 print(len(rows), [ (r["exp"], len(r["windows"])) for r in rows])

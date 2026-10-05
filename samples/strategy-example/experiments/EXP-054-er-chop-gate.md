@@ -2,7 +2,7 @@
 
 - Jira: QUAN-935
 - Status: dropped-at-dev
-- Pre-registration commit: 990a6ad · Result commit: ______
+- Pre-registration commit: 990a6ad · Result commit: d51d2e4
 - Scope: /goal 2026-10-05 "beat v6 at the improvement level, pure LP, time-split out-of-time holdout" (Dino).
 
 ## Hypothesis
