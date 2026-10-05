@@ -1,8 +1,8 @@
 # EXP-053: downside volatility targeting of F (v6.40)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-934
+- Status: dropped-at-dev
+- Pre-registration commit: 990a6ad · Result commit: ______
 - Scope: /goal 2026-10-05 "beat v6 at the improvement level, pure LP, time-split out-of-time holdout" (Dino).
 
 ## Hypothesis
@@ -42,7 +42,30 @@ Pre-registered together with EXP-052 and EXP-054 and run in the same invocations
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, `A,AO,AP,AQ`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | -0.2% | -7.8 |
+| 2023 | +32.2% | +32.2% | 0.0 |
+| 2024 | +36.4% | +35.6% | -0.8 |
+| 2025 | +16.3% | +14.5% | -1.8 |
+| 2026-01..09-17 | +18.7% | +19.2% | +0.5 |
+
+Wins 1/5, median −0.77 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds | mean F |
+|---|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 | 0.650 |
+| ETH this | +72.9% | 12.3% | -23.0% | 0.67 | 0.54 | $78.9k | $0.27k | 163 | 0.634 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 | 0.672 |
+| WBTC this | +84.4% | 17.1% | -18.0% | 1.00 | 0.95 | $61.2k | $0.71k | 108 | 0.667 |
+
+Verdict: **dropped-at-dev** — ETH CAGR 12.3% vs 14.0%, Calmar 0.54 vs 0.61, yearly wins 1/5; WBTC CAGR and Calmar slightly
+below v6's; max DD not shallower on either asset. Holdout not run. Reading: the cut lands where v6 earns (2022, −7.8 pts:
+`V6_VALIDATION.md` §5 down / high-vol +9.4% a year) and the extra follow rebuilds (163 vs 147) cost fees; the drawdowns are
+not in the high-vol down days the rule trims (v6's max DD comes from ladders held through grinding declines). Fee / LVR in
+sell-offs is not the drawdown driver for this ladder.
 
 ## Deviations
 

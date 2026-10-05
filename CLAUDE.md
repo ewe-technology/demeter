@@ -15,9 +15,11 @@ EMA 90–120 four-account engine. Every change is an experiment, recorded in thr
   `experiments/<EXP-id>` (registry fields + `hypothesis`, `verdict`, `order`), `curves/eth`, `curves/btc`
   (weekly net value per series key). Only editors write; the page never needs republishing for new rows.
 
-State as of 2026-10-02: EXP-001..051 recorded (`registry.csv`). v6 baseline (EXP-000): ETH continuous 2022-01..2026-09 +85.4%, CAGR 14.0%,
-max DD −22.8%; WBTC continuous +85.6%. No variant has beaten v6's return out-of-time; the best standalone strategies are lower-risk versions of v6
-(ETH share 50%, two-day exit confirmation): see `experiments/FINDINGS-2026-10-02.md`. Pure-LP scope (no perps, no lending) since 2026-10-01.
+State as of 2026-10-05: EXP-001..054 recorded (`registry.csv`). v6 baseline (EXP-000): ETH continuous 2022-01..2026-09 +85.4%, CAGR 14.0%,
+max DD −22.8%; WBTC continuous +85.6%. First improvement-level pass: v6.39 (EXP-052) LPs the idle reserve in the USDC/USDT pool ±0.1% and beats
+v6's CAGR and Calmar on both assets and on the time-split holdout (H5 ETH 2021, H4 WBTC 2022) — a better cash leg, not a better ladder: see
+`experiments/FINDINGS-2026-10-05.md`. The best standalone strategies are lower-risk versions of v6 (ETH share 50%, two-day exit confirmation):
+`experiments/FINDINGS-2026-10-02.md`. Pure-LP scope (no perps, no lending) since 2026-10-01.
 Earlier trials (momentum width, fee compounding, EMA exit band) were discarded on purpose. Background: `V6_VALIDATION.md` (PBO 0.56, DSR < 0.95,
 regimes, capacity).
 
@@ -72,7 +74,8 @@ Dino names versions `v6.1`, `v6.2`, ...; each is one experiment `EXP-NNN` (next 
 
     uv venv -p 3.12 .venv-lab && uv pip install -p .venv-lab/bin/python -r samples/strategy-example/requirements-lab.txt
     # pool minute data is gitignored: samples/real-data (ETH pool) and samples/holdout-data (WBTC pools) live in the
-    # main checkout /Users/dinohuang/Desktop/demeter-momentum; a worktree symlinks both from there.
+    # main checkout /Users/dinohuang/Desktop/demeter-momentum; a worktree symlinks both from there (and samples/stable-data, the
+    # USDC/USDT pools behind samples/stable_lp_daily.csv for v6.39).
     # samples/fetch_uni_minute.py downloads more (e.g. data after 2026-09-17 for a fresh holdout).
     # gas and ETH/USD hourly CSVs are committed in samples/ (regenerate with samples/fetch_gas.py).
     # samples/strategy-example/experiments/INVENTORY.md lists every pool and series (downloaded, in the team S3 bucket, fit for v6): read it before

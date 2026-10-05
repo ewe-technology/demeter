@@ -1,8 +1,8 @@
 # EXP-054: chop gate on the EMA exit (efficiency ratio) (v6.41)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-935
+- Status: dropped-at-dev
+- Pre-registration commit: 990a6ad · Result commit: ______
 - Scope: /goal 2026-10-05 "beat v6 at the improvement level, pure LP, time-split out-of-time holdout" (Dino).
 
 ## Hypothesis
@@ -42,7 +42,30 @@ Pre-registered together with EXP-052 and EXP-053 and run in the same invocations
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, `A,AO,AP,AQ`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | -6.2% | -13.8 |
+| 2023 | +32.2% | +22.6% | -9.6 |
+| 2024 | +36.4% | +19.9% | -16.5 |
+| 2025 | +16.3% | +11.2% | -5.1 |
+| 2026-01..09-17 | +18.7% | +14.9% | -3.8 |
+
+Wins 0/5, median −9.60 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds | mean F |
+|---|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 | 0.650 |
+| ETH this | +35.1% | 6.6% | -27.9% | 0.41 | 0.24 | $74.6k | $0.23k | 138 | 0.685 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 | 0.672 |
+| WBTC this | +81.4% | 16.6% | -19.5% | 0.90 | 0.85 | $60.4k | $0.65k | 76 | 0.753 |
+
+Verdict: **dropped-at-dev** — wins 0/5 (median −9.6 pts), ETH CAGR 6.6% vs 14.0%, Calmar 0.24 vs 0.61, max DD 5.1 pts deeper;
+WBTC also worse on all three. Holdout not run. Reading: the EMA exit is v6's protection, not its cost. A low efficiency ratio
+does not mean "going nowhere": slow, noisy declines also have a low ER, and gating the exit there kept the ladder deployed
+(mean F 0.685 vs 0.650) through them (2022 −6.2% vs +7.6%). The whipsaw loss in up / low-vol markets is smaller than what
+the exit saves in grinding declines, and a market-state filter cannot tell the two apart on the day of the cross.
 
 ## Deviations
 

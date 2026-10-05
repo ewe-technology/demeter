@@ -1,8 +1,8 @@
 # EXP-052: idle reserve LP'd in the Uniswap USDC/USDT pool (v6.39)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-933
+- Status: holdout-pass
+- Pre-registration commit: 990a6ad · Result commit: ______
 - Scope: /goal 2026-10-05 "beat v6 at the improvement level, pure LP, time-split out-of-time holdout" (Dino).
 
 ## Hypothesis
@@ -53,7 +53,45 @@ Pre-registered together with EXP-053 and EXP-054 and run in the same invocations
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, `A,AO,AP,AQ`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +7.9% | +0.3 |
+| 2023 | +32.2% | +32.9% | +0.7 |
+| 2024 | +36.4% | +37.6% | +1.2 |
+| 2025 | +16.3% | +17.7% | +1.5 |
+| 2026-01..09-17 | +18.7% | +19.1% | +0.4 |
+
+Wins 5/5, median +0.71 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | stable LP income | rebuilds | mean F |
+|---|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | — | 147 | 0.650 |
+| ETH this | +89.1% | 14.5% | -22.2% | 0.75 | 0.65 | $86.5k | $3.70k | 147 | 0.650 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | — | 106 | 0.672 |
+| WBTC this | +89.0% | 17.9% | -17.1% | 1.04 | 1.04 | $61.7k | $3.48k | 106 | 0.672 |
+
+(The "LP fees" column of the run CSV includes the stable income for this variant: $90.2k / $65.1k; the ladder's own fees
+are v6's, since the ladder is identical.)
+
+Holdout, time-split out-of-time (`BINANCE_WARM=1`, `A,AO`, run once):
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | stable LP income |
+|---|---|---|---|---|---|---|
+| H5 ETH 2021-05-06..12-31 v6 | +4.5% | 7.0% | -30.7% | 0.37 | 0.23 | — |
+| H5 ETH 2021-05-06..12-31 this | +5.6% | 8.7% | -29.8% | 0.41 | 0.29 | $1.08k |
+| H4 WBTC 2022-01-01..10-31 v6 | +2.4% | 2.9% | -12.5% | 0.24 | 0.23 | — |
+| H4 WBTC 2022-01-01..10-31 this | +2.6% | 3.2% | -12.4% | 0.25 | 0.26 | $0.26k |
+
+Verdict: **holdout-pass** (improvement level) — dev: ETH CAGR 14.5% vs 14.0%, Calmar 0.65 vs 0.61, max DD −22.2% vs −22.8%;
+WBTC CAGR 17.9% vs 17.3%, Calmar 1.04 vs 0.97, max DD −17.1% vs −17.8%; ETH yearly wins 5/5. Time-split holdout: H5 ETH 2021
+CAGR 8.7% vs 7.0%, Calmar 0.29 vs 0.23; H4 WBTC 2022 CAGR 3.2% vs 2.9%, Calmar 0.26 vs 0.23; max DD shallower on both.
+Reading: the gain is the idle reserve's yield (+0.3 to +1.5 pts a year, larger in years with more cash and higher stable
+volume: 2024 6.4% stable fee APR), not a better ETH/BTC ladder — rebuilds, F and the ladder's fees are v6's to the dollar,
+so the equity curve is v6's plus a small, almost riskless income stream. It is a deployable improvement of v6's cash
+handling; it is not evidence of a better trading rule. The H4 margin (+0.25 pts in ten months) is small; the sign follows
+mechanically from a positive stable yield, so the out-of-time pass confirms the mechanism, not a forecastable edge.
 
 ## Deviations
 
