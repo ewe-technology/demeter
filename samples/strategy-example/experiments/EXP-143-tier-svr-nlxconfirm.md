@@ -1,7 +1,7 @@
 # EXP-143: fee tier: EXP-124's WBTC half, EXP-130's ETH half + two-day exit confirmation (v6.129)
 
 - Jira: QUAN-1028
-- Status: pre-registered
+- Status: dropped-at-dev
 - Pre-registration commit: 50be075 · Result commit: ______
 - Scope: /goal round 2 (Dino, 2026-10-05: "再繼續找30個"): beat v6 at the improvement level on ETH and WBTC, pure LP, time-split
   out-of-time holdout; idle-capital yield and swap routing excluded (rulings / assumption of 2026-10-05).
@@ -32,7 +32,26 @@ Pre-registered together with EXP-139..143 (same commit), run with `A` (v6) in `A
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `AEAEBECEDEE`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +14.9% | +7.3 |
+| 2023 | +32.2% | +24.4% | -7.8 |
+| 2024 | +36.4% | +33.1% | -3.3 |
+| 2025 | +16.3% | +26.9% | +10.6 |
+| 2026-01..09-17 | +18.7% | +14.4% | -4.3 |
+
+Wins 2/5, median -3.32 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +121.7% | 18.4% | -21.7% | 0.93 | 0.85 | $103.8k | $0.34k | 132 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +109.6% | 21.0% | -13.8% | 1.22 | 1.52 | $64.4k | $-5.05k | 97 |
+
+Verdict: **dropped-at-dev (fee-tier rule)** — ETH CAGR 18.4% (highest so far), Calmar 0.85, max DD −21.7%, but yearly wins 2/5: the two-day exit confirmation concentrates the gain in a few years (as in EXP-106). WBTC = EXP-124. Holdout not run.
 
 ## Deviations
 
