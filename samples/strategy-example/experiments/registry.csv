@@ -75,3 +75,9 @@ EXP-072,2026-10-05,follow events below EMA100 resize in place; v6 recentre above
 EXP-073,2026-10-05,ETH share 70% in both trend states (ablation of the EMA100 share switch) (v6.60),QUAN-956,holdout-fail,3.61,4/5,1/2 windows (time-split),-0.36,1.105,0.171,-0.247,5bb711c,,EXP-073-share-70.md,improvement
 EXP-074,2026-10-05,no range-exit rebuild (ablation) (v6.61),QUAN-957,dropped-at-dev,-3.56,0/5,,,0.663,0.114,-0.170,5bb711c,,EXP-074-no-exit-rebuild.md,improvement
 EXP-075,2026-10-05,no rebuild after downward range exits (ablation) (v6.62),QUAN-958,dropped-at-dev,0.00,0/5,,,0.843,0.139,-0.228,5bb711c,,EXP-075-no-down-exit-rebuild.md,improvement
+EXP-076,2026-10-05,one EMA100 account instead of four (ensemble ablation) (v6.63),,pre-registered,,,,,,,,,,EXP-076-single-account.md,improvement
+EXP-077,2026-10-05,F = the lowest account's deployed fraction (aggregation ablation) (v6.64),,pre-registered,,,,,,,,,,EXP-077-f-min.md,improvement
+EXP-078,2026-10-05,F = the highest account's deployed fraction (aggregation ablation) (v6.65),,pre-registered,,,,,,,,,,EXP-078-f-max.md,improvement
+EXP-079,2026-10-05,full ladder while any account is deployed (binarisation ablation) (v6.66),,pre-registered,,,,,,,,,,EXP-079-f-any.md,improvement
+EXP-080,2026-10-05,full ladder only while every account is fully deployed (binarisation ablation) (v6.67),,pre-registered,,,,,,,,,,EXP-080-f-all.md,improvement
+EXP-081,2026-10-05,the first refill stage deploys the account fully (staging ablation) (v6.68),,pre-registered,,,,,,,,,,EXP-081-refill-one-stage.md,improvement

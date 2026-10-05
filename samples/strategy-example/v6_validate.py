@@ -183,7 +183,13 @@ OPT = {"A": Variant("A_v6"),
        "BJ": Variant("BJ_resize_below_ema", {"RESIZE_BELOW_EMA": True}),   # EXP-072: follow by resize below EMA100, v6 above
        "BL": Variant("BL_share_70", {"SHARE_BELOW_EMA": Decimal("0.7")}),   # EXP-073: ETH share 70% in both trend states
        "BM": Variant("BM_no_exit_rebuild", {"NO_EXIT_REBUILD": "all"}),   # EXP-074: no range-exit rebuild
-       "BN": Variant("BN_no_down_exit_rebuild", {"NO_EXIT_REBUILD": "down"})}   # EXP-075: no rebuild after downward exits
+       "BN": Variant("BN_no_down_exit_rebuild", {"NO_EXIT_REBUILD": "down"}),   # EXP-075: no rebuild after downward exits
+       "BO": Variant("BO_single_account", {"EMA_SPANS": (100,)}),   # EXP-076: one EMA100 account instead of four
+       "BP": Variant("BP_f_min", {"F_AGG": "min"}),   # EXP-077: F = lowest account
+       "BQ": Variant("BQ_f_max", {"F_AGG": "max"}),   # EXP-078: F = highest account
+       "BR": Variant("BR_f_any", {"F_BINARY": "any"}),   # EXP-079: full ladder while any account is deployed
+       "BS": Variant("BS_f_all", {"F_BINARY": "all"}),   # EXP-080: full ladder only while all accounts are fully deployed
+       "BT": Variant("BT_refill_one_stage", {"REFILL_ONE_STAGE": True})}   # EXP-081: first refill stage deploys fully
 MACRO_CSV = "../macro_events_utc.csv"   # EXP-059
 # EXP-052: daily net return per $ of the USDC/USDT LP (samples/make_stable_lp_series.py), for USDC-quoted pools
 STABLE_LP_CSV = "../stable_lp_daily.csv"
@@ -192,7 +198,7 @@ VOL_TARGET_BY_ASSET = {"ETHUSDT": 0.04179, "BTCUSDT": 0.03219}
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL", "EXIT_CONFIRM", "F_WEEKLY", "F_FLOOR", "STABLE_LP", "VOL_TARGET", "ER_GATE", "RESIZE_IN_PLACE", "EXIT_CHECK_HOURLY", "SWAPLESS_EXIT", "RESIZE_NEAR_CENTRE", "MACRO_EVENTS", "MACRO_RESTORE", "TRANCHE_ADD", "FOLLOW_ASYM", "ACCOUNT_TRANCHES", "CPPI_FLOOR", "WEEKLY_RECENTRE", "NO_LOWER_STOP", "REFILL_ARMED_ONLY", "REARM_FULL", "NO_UPPER_REBUILD", "WEEKLY_RECENTRE_UP", "RESIZE_BELOW_EMA", "SHARE_BELOW_EMA", "NO_EXIT_REBUILD"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL", "EXIT_CONFIRM", "F_WEEKLY", "F_FLOOR", "STABLE_LP", "VOL_TARGET", "ER_GATE", "RESIZE_IN_PLACE", "EXIT_CHECK_HOURLY", "SWAPLESS_EXIT", "RESIZE_NEAR_CENTRE", "MACRO_EVENTS", "MACRO_RESTORE", "TRANCHE_ADD", "FOLLOW_ASYM", "ACCOUNT_TRANCHES", "CPPI_FLOOR", "WEEKLY_RECENTRE", "NO_LOWER_STOP", "REFILL_ARMED_ONLY", "REARM_FULL", "NO_UPPER_REBUILD", "WEEKLY_RECENTRE_UP", "RESIZE_BELOW_EMA", "SHARE_BELOW_EMA", "NO_EXIT_REBUILD", "F_AGG", "F_BINARY", "REFILL_ONE_STAGE"]}
 
 
 def sens_grid():

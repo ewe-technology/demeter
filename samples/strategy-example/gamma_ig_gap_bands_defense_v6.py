@@ -278,6 +278,14 @@ RESIZE_BELOW_EMA = False
 # rebuilt for that reason (it waits, out of range, for the next follow event); "down": only exits below the ladder are skipped
 # (the ladder, now all base, waits), exits above are v6's. False = v6.
 NO_EXIT_REBUILD: str | bool = False
+# EXP-077..081 (v6.64..v6.68): ablations of how the engine turns its accounts into F. F_AGG "min" / "max": F = the lowest /
+# highest account's deployed fraction instead of their mean. F_BINARY "any": F = 1 while any account is deployed, else 0; "all":
+# F = 1 only while every account is fully deployed, else 0. REFILL_ONE_STAGE: the staged refill's first stage (close >= 1.05 x
+# low for 3 days) deploys the account fully (no stages 2-4). (EXP-076, one EMA100 account, is EMA_SPANS = (100,).) v6 = mean,
+# no binarisation, four stages.
+F_AGG = "mean"
+F_BINARY: str | None = None
+REFILL_ONE_STAGE = False
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -328,6 +336,8 @@ class VirtualAccount:
                 advance = close >= self.low * REFILL_STAGES[nxt - 1][1]
             if advance:
                 self.stage, self.deployed, self.centre = nxt, nxt / 4, close
+                if REFILL_ONE_STAGE:   # EXP-081
+                    self.stage, self.deployed = 4, 1.0
 
 
 def share_label(eth_share: Decimal | str | None) -> str:
@@ -437,7 +447,13 @@ def daily_ema_frame(minute_price: pd.Series) -> pd.DataFrame:
     for day, c in close.items():
         for k, a in accounts:
             a.step(float(c), float(lines[k][a.span][day]), bool(trend_ok[day]) if k == "ema" else True)
-        fractions.append(sum(a.deployed for _, a in accounts) / len(accounts))
+        deps = [a.deployed for _, a in accounts]
+        f = min(deps) if F_AGG == "min" else max(deps) if F_AGG == "max" else sum(deps) / len(deps)   # EXP-077 / 078
+        if F_BINARY == "any":   # EXP-079
+            f = 1.0 if f > 0 and max(deps) > 0 else 0.0
+        elif F_BINARY == "all":   # EXP-080
+            f = 1.0 if min(deps) >= 1.0 else 0.0
+        fractions.append(f)
         if ACCOUNT_TRANCHES:
             for j, (_, a) in enumerate([x for x in accounts if x[0] == "ema"]):
                 states[f"dep{j}"].append(a.deployed)
