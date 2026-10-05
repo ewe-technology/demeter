@@ -132,3 +132,4 @@ EXP-129,2026-10-06,fee tier: stop + volume + routing on 0.3% and v6.75 + breadth
 EXP-130,2026-10-06,fee tier: stop + volume + routing on 0.3% and v6.75 + cross-asset refill on 0.05% (v6.116),,pre-registered,,,,,,,,,,EXP-130-tier-svr-nolowxasset.md,improvement
 EXP-131,2026-10-06,fee tier: stop + volume + routing on 0.3% and v6.75 + funding cap on 0.05% (v6.117),,pre-registered,,,,,,,,,,EXP-131-tier-svr-nolowfundcap.md,improvement
 EXP-132,2026-10-06,fee tier: stop + volume + routing on 0.3% and v6.75 + strong-close refill on 0.05% (v6.118),,pre-registered,,,,,,,,,,EXP-132-tier-svr-nolowstrong.md,improvement
+EXP-133,2026-10-06,idle reserve held as a basis trade (spot + short USDT-M perp) earning funding (v6.119),,pre-registered,,,,,,,,,,EXP-133-basis-reserve.md,standalone
