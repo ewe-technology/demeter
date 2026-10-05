@@ -1,8 +1,8 @@
 # EXP-108: no refill stage while pool liquidity is crowded (v6.95)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-992
+- Status: holdout-fail
+- Pre-registration commit: 26a4143 · Result commit: ______
 - Scope: /goal round 2 (Dino, 2026-10-05: "再繼續找30個"): beat v6 at the improvement level on ETH and WBTC, pure LP, time-split
   out-of-time holdout; idle-capital yield and swap routing excluded (rulings / assumption of 2026-10-05).
 
@@ -32,7 +32,35 @@ Pre-registered together with EXP-107..111 (same commit), run with `A` (v6) in `A
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ACTCUCVCWCX`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +10.2% | +2.6 |
+| 2023 | +32.2% | +32.2% | +0.0 |
+| 2024 | +36.4% | +36.6% | +0.3 |
+| 2025 | +16.3% | +26.6% | +10.4 |
+| 2026-01..09-17 | +18.7% | +16.7% | -2.0 |
+
+Wins 3/5, median +0.25 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +101.5% | 16.0% | -22.8% | 0.82 | 0.70 | $88.9k | $0.32k | 143 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +94.9% | 18.8% | -14.4% | 1.10 | 1.30 | $60.6k | $0.62k | 96 |
+
+Holdout, time-split out-of-time (`BINANCE_WARM=1`, run once):
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| H5 ETH 2021-05-06..12-31 v6 | +4.5% | 7.0% | -30.7% | 0.37 | 0.23 | $21.0k | $3.70k | 37 |
+| H5 ETH 2021-05-06..12-31 this | +4.5% | 7.0% | -30.7% | 0.37 | 0.23 | $21.0k | $3.70k | 37 |
+| H4 WBTC 2022-01-01..10-31 v6 | +2.4% | 2.9% | -12.5% | 0.24 | 0.23 | $14.3k | $0.04k | 17 |
+| H4 WBTC 2022-01-01..10-31 this | -9.9% | -11.8% | -13.0% | -0.45 | -0.91 | $10.9k | $0.15k | 18 |
+
+Verdict: **holdout-fail** — dev passed the improvement level on both pools with one symmetric rule (ETH CAGR 16.0% vs 14.0%, Calmar 0.70; WBTC 18.8% vs 17.3%, Calmar 1.30, max DD −14.4%; wins 3/5). Time-split holdout (run once): H5 ETH 2021 identical to v6 (the window starts on the pool's first data day; the crowding flag needs 90 days of liquidity history and never fired afterwards, so H5 says nothing); **H4 WBTC 2022 total −9.9% vs +2.4%** (CAGR −11.8%, max DD −13.0%; mean F 0.484 vs 0.630, 18 vs 17 rebuilds, fees $10.9k vs $14.3k, measured). Blocking refills while the 2022 pool was crowded lowered exposure and still lost more than v6 (not decomposed). The dev gain does not hold out of time.
 
 ## Deviations
 

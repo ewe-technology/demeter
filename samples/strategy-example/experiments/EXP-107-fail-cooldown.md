@@ -1,8 +1,8 @@
 # EXP-107: longer stage-1 wait after a refill that failed fast (v6.94)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-991
+- Status: dropped-at-dev
+- Pre-registration commit: 26a4143 · Result commit: ______
 - Scope: /goal round 2 (Dino, 2026-10-05: "再繼續找30個"): beat v6 at the improvement level on ETH and WBTC, pure LP, time-split
   out-of-time holdout; idle-capital yield and swap routing excluded (rulings / assumption of 2026-10-05).
 
@@ -32,7 +32,26 @@ Pre-registered together with EXP-107..111 (same commit), run with `A` (v6) in `A
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ACTCUCVCWCX`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | -0.6% | -8.2 |
+| 2023 | +32.2% | +33.3% | +1.1 |
+| 2024 | +36.4% | +30.3% | -6.1 |
+| 2025 | +16.3% | +15.9% | -0.4 |
+| 2026-01..09-17 | +18.7% | +18.4% | -0.3 |
+
+Wins 1/5, median -0.36 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +65.5% | 11.3% | -25.0% | 0.62 | 0.45 | $77.2k | $0.24k | 149 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +75.9% | 15.7% | -18.2% | 0.91 | 0.86 | $55.7k | $0.67k | 110 |
+
+Verdict: **dropped-at-dev** — both worse: ETH CAGR 11.3% vs 14.0%, Calmar 0.45; WBTC 15.7% vs 17.3%; wins 1/5. Holdout not run. Reading (interpretation, not measured): the refill after a fast failure is not more likely to fail; doubling its wait misses the rebound that follows a washout. The smoke-test coincidence (CT = CU = CV over 2023-09..10) is resolved: the three differ over the dev period.
 
 ## Deviations
 
