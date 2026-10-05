@@ -2,9 +2,9 @@
 
 Standalone level (README *Success levels*): a re-judge of EXP-117 on its own fresh holdouts, run once each.
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-1013
+- Status: dev-done (H-a pass, H-b pending)
+- Pre-registration commit: fda7278 · Result commit (H-a): 93058b1
 - Scope: Dino, 2026-10-06: "開" — open v6.104r, a standalone re-judge of EXP-117 validated on forward data. Number EXP-128 reserved with
   the goal3 session.
 
@@ -47,6 +47,30 @@ route's reserve formula accepts hop pools whose token0 is WETH (Base `d0b5`): WE
   (README: near-copies are not independent evidence).
 
 ## Result
+
+### H-a — Base, 2025-01-01..2026-09-17 (run once, code `4909136`)
+
+`opt:A,DD` on `0x6c56` (tag `ADD`) and `opt:A` on `0xd0b5` (tag `A`), same code.
+
+| run | total | CAGR | max DD | Sharpe | Calmar | LP fees | rebuilds | route fee credit | impact (net ledger) |
+|---|---|---|---|---|---|---|---|---|---|
+| v6.104r (`6c56` ladder, `d0b5` route) | +32.2% | 17.7% | −20.9% | 0.77 | 0.85 | $22.6k | 55 | $3.5k | −$3.12k |
+| v6 in `6c56`, swaps at 0.3% (ablation) | +28.1% | 15.6% | −22.0% | 0.69 | 0.71 | $22.6k | 55 | — | $1.98k |
+| v6 (`d0b5`) | +32.2% | 17.7% | −21.2% | 0.77 | 0.84 | $24.5k | 55 | — | $0.34k |
+
+Calendar years: 2025 +13.8% (v6 +13.4%, ablation +10.4%); 2026-01..09-17 +16.2% (v6 +16.6%, ablation +16.1%).
+
+H-a rule: total +32.2% > 0, Calmar 0.85 ≥ 0.50, max DD −20.9% ≥ −35% → **pass**.
+
+Reported: daily-return correlation with v6 on `d0b5` **0.998** — on Base the variant is a near-copy of v6 (same return, Calmar
+0.85 vs 0.84). The ablation repeats EXP-015's finding (0.3% swaps cost ~4 pts over 21 months) and shows routing recovering it.
+Unlike mainnet ETH, the Base 0.3% pool gave no gain over v6 in the 0.05% pool on this window: fees $22.6k vs $24.5k, and the
+lower LVR the fee/LVR scan measured (2.53 vs 1.13) did not show up as a higher result.
+
+Status: **dev-done — H-a pass, H-b pending** (forward window 2026-09-18..12-31, run once after the data to 2026-12-31 is
+fetched, not before 2027-01-01).
+
+### H-b — forward window
 
 Pending.
 
