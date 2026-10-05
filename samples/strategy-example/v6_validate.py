@@ -289,7 +289,14 @@ OPT = {"A": Variant("A_v6"),
        "DR": Variant("DR_tier_svr_nolowxasset", {"TIER": {"hi": HI_SVR, "lo": {"REFILL_NO_NEW_LOW": True, "REFILL_GATE": "xasset", "EXTRA": "pool"}}}),   # EXP-130
        "DS": Variant("DS_tier_svr_nolowfundcap", {"TIER": {"hi": HI_SVR, "lo": {"REFILL_NO_NEW_LOW": True, "FUND_CAP": True, "EXTRA": "pool"}}}),   # EXP-131
        "DT": Variant("DT_tier_svr_nolowstrong", {"TIER": {"hi": HI_SVR, "lo": {"REFILL_NO_NEW_LOW": True, "STRONG_CLOSE_REFILL": True}}}),   # EXP-132
-       "DE": Variant("DE_basis_reserve", {"BASIS": "pool"})}   # EXP-133: reserve held as spot + short perp, earning funding
+       "DE": Variant("DE_basis_reserve", {"BASIS": "pool"}),   # EXP-133: reserve held as spot + short perp, earning funding
+       # EXP-134..138: rebuild mechanics (rise rebuild, share-flip rebuild, swap tolerance)
+       "DV": Variant("DV_tier_svr_nolowrise", {"TIER": {"hi": HI_SVR, "lo": {"REFILL_NO_NEW_LOW": True, "REBUILD_ON_RISE": True}}}),   # EXP-134
+       "DW": Variant("DW_nolow_route_flip", {"REFILL_NO_NEW_LOW": True, "SWAP_ROUTE": "pool", "SHARE_FLIP_REBUILD": True}),   # EXP-135
+       "DX": Variant("DX_tier_svr_nolowflip", {"TIER": {"hi": HI_SVR, "lo": {"REFILL_NO_NEW_LOW": True, "SHARE_FLIP_REBUILD": True}}}),   # EXP-136
+       "DY": Variant("DY_nolow_route_rise", {"REFILL_NO_NEW_LOW": True, "SWAP_ROUTE": "pool", "REBUILD_ON_RISE": True}),   # EXP-137
+       "DZ": Variant("DZ_tier_svr_nolowriseflip", {"TIER": {"hi": HI_SVR, "lo": {"REFILL_NO_NEW_LOW": True, "REBUILD_ON_RISE": True,
+                                                                                 "SHARE_FLIP_REBUILD": True}}})}   # EXP-138
 # EXP-082..: daily non-price inputs (samples/fetch_deribit_dvol.py, fetch_binance_funding.py, fetch_binance_daily.py)
 DVOL_CSV = "../deribit_dvol_daily.csv"
 FUND_LONG_CSV = {"ETHUSDT": "../binance_funding_ETHUSDT_long.csv", "BTCUSDT": "../binance_funding_BTCUSDT_long.csv"}
@@ -346,7 +353,7 @@ VOL_TARGET_BY_ASSET = {"ETHUSDT": 0.04179, "BTCUSDT": 0.03219}
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL", "EXIT_CONFIRM", "F_WEEKLY", "F_FLOOR", "STABLE_LP", "VOL_TARGET", "ER_GATE", "RESIZE_IN_PLACE", "EXIT_CHECK_HOURLY", "SWAPLESS_EXIT", "RESIZE_NEAR_CENTRE", "MACRO_EVENTS", "MACRO_RESTORE", "TRANCHE_ADD", "FOLLOW_ASYM", "ACCOUNT_TRANCHES", "CPPI_FLOOR", "WEEKLY_RECENTRE", "NO_LOWER_STOP", "REFILL_ARMED_ONLY", "REARM_FULL", "NO_UPPER_REBUILD", "WEEKLY_RECENTRE_UP", "RESIZE_BELOW_EMA", "SHARE_BELOW_EMA", "NO_EXIT_REBUILD", "F_AGG", "F_BINARY", "REFILL_ONE_STAGE", "EXTRA", "REFILL_GATE", "FUND_REFILL", "FUND_CAP", "REFILL_VOL_CONFIRM", "REFILL_NO_NEW_LOW", "TWAP_ENGINE", "VRP_PULL", "BREADTH_CAP", "GAS_PANIC_HOLD", "STABLE_FLOW_REFILL", "NO_WEEKEND_REFILL", "EXIT_VOL_CONFIRM", "FLOW_REFILL", "EXIT_FULL_DAY", "LOW_FROM_WICK", "UP_DAY_REFILL", "STRONG_CLOSE_REFILL", "INTRADAY_STOP", "CROWD_CAP", "FAIL_COOLDOWN", "CROWD_REFILL", "SWAP_ROUTE", "BASIS"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL", "EXIT_CONFIRM", "F_WEEKLY", "F_FLOOR", "STABLE_LP", "VOL_TARGET", "ER_GATE", "RESIZE_IN_PLACE", "EXIT_CHECK_HOURLY", "SWAPLESS_EXIT", "RESIZE_NEAR_CENTRE", "MACRO_EVENTS", "MACRO_RESTORE", "TRANCHE_ADD", "FOLLOW_ASYM", "ACCOUNT_TRANCHES", "CPPI_FLOOR", "WEEKLY_RECENTRE", "NO_LOWER_STOP", "REFILL_ARMED_ONLY", "REARM_FULL", "NO_UPPER_REBUILD", "WEEKLY_RECENTRE_UP", "RESIZE_BELOW_EMA", "SHARE_BELOW_EMA", "NO_EXIT_REBUILD", "F_AGG", "F_BINARY", "REFILL_ONE_STAGE", "EXTRA", "REFILL_GATE", "FUND_REFILL", "FUND_CAP", "REFILL_VOL_CONFIRM", "REFILL_NO_NEW_LOW", "TWAP_ENGINE", "VRP_PULL", "BREADTH_CAP", "GAS_PANIC_HOLD", "STABLE_FLOW_REFILL", "NO_WEEKEND_REFILL", "EXIT_VOL_CONFIRM", "FLOW_REFILL", "EXIT_FULL_DAY", "LOW_FROM_WICK", "UP_DAY_REFILL", "STRONG_CLOSE_REFILL", "INTRADAY_STOP", "CROWD_CAP", "FAIL_COOLDOWN", "CROWD_REFILL", "SWAP_ROUTE", "REBUILD_ON_RISE", "SHARE_FLIP_REBUILD", "BASIS"]}
 
 
 def sens_grid():

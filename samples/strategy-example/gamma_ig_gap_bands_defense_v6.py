@@ -346,6 +346,11 @@ CROWD_CAP = False
 # EXP-105's definition); F is not capped. False = v6.
 FAIL_COOLDOWN = False
 CROWD_REFILL = False
+# EXP-134..138 (v6.120..v6.124): REBUILD_ON_RISE: any rise of F by one account stage (>= 6%, a stage is 1/16) rebuilds the
+# ladder that day; falls still need FOLLOW_THRESHOLD. SHARE_FLIP_REBUILD: when the EMA100 state flips (target ETH share
+# 50% <-> 70%), rebuild that day. False = v6.
+REBUILD_ON_RISE = False
+SHARE_FLIP_REBUILD = False
 # EXP-117 (v6.104): SWAP_ROUTE = "pool": the ladder lives in the pair's 0.3% pool and every swap is charged as if routed
 # through the 0.05% tier (v6_validate.SWAP_ROUTES: fee difference credited, impact on the route's hops). The strategy
 # itself is unchanged; v6_validate's cost ledger applies the route. None = v6.
@@ -1250,7 +1255,21 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             if self.sleeve_stopped:
                 target = target * (ONE - SPOT_SLEEVE)   # the ladder half only; the sleeve's share stays quote
                 current = lp_value / equity
+        if SHARE_FLIP_REBUILD and self.eth_share == EMA_SHARE and current > FULL_TOLERANCE and target > ZERO:   # EXP-135 / 136
+            _, _r = daily_row_for(self.daily_ema, row_data.timestamp)
+            up_now = bool(_r["close"] > _r["ema"])
+            prev = getattr(self, "share_up_prev", None)
+            self.share_up_prev = up_now
+            if prev is not None and up_now != prev:
+                self.share_flip_rebuilds = getattr(self, "share_flip_rebuilds", 0) + 1
+                self.force_rebuild = True
+                try:
+                    self.rescale_work(row_data)
+                finally:
+                    self.force_rebuild = False
+                return
         due = (abs(target - current) >= FOLLOW_THRESHOLD
+               or (REBUILD_ON_RISE and target - current >= Decimal("0.06"))   # EXP-134
                or (target == ZERO and current > FULL_TOLERANCE)
                or (target >= ONE - FULL_TOLERANCE and current < ONE - FULL_TOLERANCE))
         if not due:
