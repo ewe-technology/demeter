@@ -171,7 +171,9 @@ OPT = {"A": Variant("A_v6"),
        "AW": Variant("AW_macro_pause_restore", {"MACRO_EVENTS": "csv", "MACRO_RESTORE": True}),   # EXP-060: EXP-059 + exact restore
        "AX": Variant("AX_tranche_add", {"TRANCHE_ADD": True}),   # EXP-061: F up -> new tranche at today's price; F down -> shrink
        "AY": Variant("AY_follow_asym", {"FOLLOW_ASYM": True}),   # EXP-062: F down -> shrink in place; F up -> v6 recentre
-       "BA": Variant("BA_account_tranches", {"ACCOUNT_TRANCHES": True})}   # EXP-063: one real sub-ladder per virtual account
+       "BA": Variant("BA_account_tranches", {"ACCOUNT_TRANCHES": True}),   # EXP-063: one real sub-ladder per virtual account
+       "BB": Variant("BB_cppi", {"CPPI_FLOOR": 0.8}),   # EXP-064: F x clip((W/HWM - 0.8)/0.2, 0, 1)
+       "BC": Variant("BC_weekly_recentre", {"WEEKLY_RECENTRE": True})}   # EXP-065: full recentre every Sunday 00:00
 MACRO_CSV = "../macro_events_utc.csv"   # EXP-059
 # EXP-052: daily net return per $ of the USDC/USDT LP (samples/make_stable_lp_series.py), for USDC-quoted pools
 STABLE_LP_CSV = "../stable_lp_daily.csv"
@@ -180,7 +182,7 @@ VOL_TARGET_BY_ASSET = {"ETHUSDT": 0.04179, "BTCUSDT": 0.03219}
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL", "EXIT_CONFIRM", "F_WEEKLY", "F_FLOOR", "STABLE_LP", "VOL_TARGET", "ER_GATE", "RESIZE_IN_PLACE", "EXIT_CHECK_HOURLY", "SWAPLESS_EXIT", "RESIZE_NEAR_CENTRE", "MACRO_EVENTS", "MACRO_RESTORE", "TRANCHE_ADD", "FOLLOW_ASYM", "ACCOUNT_TRANCHES"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL", "EXIT_CONFIRM", "F_WEEKLY", "F_FLOOR", "STABLE_LP", "VOL_TARGET", "ER_GATE", "RESIZE_IN_PLACE", "EXIT_CHECK_HOURLY", "SWAPLESS_EXIT", "RESIZE_NEAR_CENTRE", "MACRO_EVENTS", "MACRO_RESTORE", "TRANCHE_ADD", "FOLLOW_ASYM", "ACCOUNT_TRANCHES", "CPPI_FLOOR", "WEEKLY_RECENTRE"]}
 
 
 def sens_grid():
@@ -414,7 +416,7 @@ def run_variant(args):
             "hedge_pnl": float(s.hedge_pnl), "hedge_funding": float(s.hedge_funding), "hedge_fees": float(s.hedge_fees),
             "hedge_trades": s.hedge_trades, "hedge_max_ratio": s.hedge_max_ratio,
             "hedge_min_cash": float(s.hedge_min_cash) if s.hedge_min_cash is not None else float("nan"),
-            "stable_income": float(s.total_interest) if V.STABLE_LP is not None else 0.0, "pauses": s.pauses, "pause_minutes": s.pause_minutes, "bear_short_days": s.bear_short_days, "recentres": s.recentre_count, "resizes": s.resize_count, "swapless_exits": s.swapless_exits, "tranche_adds": s.tranche_adds, "tranche_rebuilds": s.tranche_rebuilds,
+            "stable_income": float(s.total_interest) if V.STABLE_LP is not None else 0.0, "pauses": s.pauses, "pause_minutes": s.pause_minutes, "bear_short_days": s.bear_short_days, "recentres": s.recentre_count, "resizes": s.resize_count, "swapless_exits": s.swapless_exits, "tranche_adds": s.tranche_adds, "tranche_rebuilds": s.tranche_rebuilds, "cppi_min_m": s.cppi_min_m, "weekly_recentres": s.weekly_recentres,
             "benchmark_return": float(m["benchmark_rate"]), "secs": round(time.time() - t0)}
 
 

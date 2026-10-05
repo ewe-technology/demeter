@@ -2,7 +2,7 @@
 
 - Jira: QUAN-945
 - Status: holdout-fail
-- Pre-registration commit: 85e4da4 · Result commit: ______
+- Pre-registration commit: 85e4da4 · Result commit: ffb21b1
 - Scope: /goal 2026-10-05 "beat v6 at the improvement level, pure LP, time-split out-of-time holdout" (Dino); idle-capital
   yield excluded (ruling 2026-10-05).
 

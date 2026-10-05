@@ -251,6 +251,13 @@ FOLLOW_ASYM = False
 # on the last completed day. v6's single-ladder range exit and follow rule are off. Each sub-ladder tracks the liquidity it
 # added, so bands shared by two sub-ladders are reduced only by the rebuilt one's part. False = v6.
 ACCOUNT_TRANCHES = False
+# EXP-064 (v6.51): CPPI-style floor on the strategy's own net value. The follow rule's target becomes F x m, m = clip((W / HWM -
+# CPPI_FLOOR) / (1 - CPPI_FLOOR), 0, 1), W = total book value (LP + wallet, paid-out fees included), HWM = its high since the
+# start, both read at the daily 00:00 check. CPPI_FLOOR = 0.8 = v6's own lower stop (LOWER_STOP). None = v6.
+CPPI_FLOOR: float | None = None
+# EXP-065 (v6.52): time-based recentre in addition to v6's triggers: every Sunday at 00:00 UTC a deployed ladder gets v6's full
+# rebuild (recentre at today's price, swap to the target share, size F x equity). False = v6.
+WEEKLY_RECENTRE = False
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -734,6 +741,9 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.tranche_adds = 0            # EXP-061: follow events handled by tranche_add
         self.tranches = None             # EXP-063: per-account sub-ladders
         self.tranche_rebuilds = 0
+        self.cppi_hwm = ZERO             # EXP-064
+        self.cppi_min_m = 1.0
+        self.weekly_recentres = 0        # EXP-065
         self.tranche_io = (0, 0)
         self.fee_log: List[dict] = []    # daily: collected fees (quote) + pending fees still in the positions
         # spec sheet s: base (ETH) share of total value before the bands are placed. None keeps the
@@ -999,6 +1009,20 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         # with a spot sleeve the free base is deployed capital too
         current = (lp_value + (free_base * price if (SPOT_SLEEVE > ZERO or HALF_LADDER or HALF_WHEN_ACCEL) else ZERO)) / equity
         target = target_fraction_for(self.daily_ema, row_data.timestamp)
+        if CPPI_FLOOR is not None:   # EXP-064
+            total = lp_value + self.broker.get_token_balance(self.gp.base_token) * price + self.broker.get_token_balance(self.gp.quote_token)
+            self.cppi_hwm = max(self.cppi_hwm, total)
+            m = (total / self.cppi_hwm - Decimal(str(CPPI_FLOOR))) / (ONE - Decimal(str(CPPI_FLOOR)))
+            target = target * min(ONE, max(ZERO, m))
+            self.cppi_min_m = min(self.cppi_min_m, float(min(ONE, max(ZERO, m))))
+        if WEEKLY_RECENTRE and row_data.timestamp.weekday() == 6 and current > FULL_TOLERANCE and target > ZERO:   # EXP-065
+            self.weekly_recentres += 1
+            self.force_rebuild = True
+            try:
+                self.rescale_work(row_data)
+            finally:
+                self.force_rebuild = False
+            return
         if HEDGE > ZERO and self.eth_share is not None:   # EXP-014: the build keeps the short's margin out of the ladder
             share_now = ema_share_for(self.daily_ema, row_data.timestamp)[0] if self.eth_share == EMA_SHARE else self.eth_share
             target = target * (ONE - HEDGE * share_now / HEDGE_LEVERAGE)
