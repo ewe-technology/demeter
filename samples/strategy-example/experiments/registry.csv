@@ -106,8 +106,8 @@ EXP-103,2026-10-05,fee tier: intraday stop on 0.3% and no-new-low refill on 0.05
 EXP-104,2026-10-05,fee tier: volume-confirmed refill on 0.3% and no-new-low refill on 0.05% (v6.91),QUAN-988,holdout-pass,0.47,4/5,2/2 windows (time-split),6.78,0.966,0.154,-0.243,89f53b2,26a4143,EXP-104-tier-vol-nolow.md,improvement
 EXP-105,2026-10-05,F capped at 50% while pool liquidity is crowded (v6.92),QUAN-989,dropped-at-dev,-0.01,2/5,,,0.970,0.155,-0.170,89f53b2,26a4143,EXP-105-crowd-cap.md,improvement
 EXP-106,2026-10-05,v6.75 plus two-day range-exit confirmation (v6.93),QUAN-990,dropped-at-dev,-2.42,2/5,,,1.107,0.172,-0.212,89f53b2,26a4143,EXP-106-nolow-exit-confirm.md,improvement
-EXP-107,2026-10-05,longer stage-1 wait after a refill that failed fast (v6.94),QUAN-991,dropped-at-dev,-0.36,1/5,,,0.655,0.113,-0.250,26a4143,,EXP-107-fail-cooldown.md,improvement
-EXP-108,2026-10-05,no refill stage while pool liquidity is crowded (v6.95),QUAN-992,holdout-fail,0.25,3/5,0/2 windows (time-split),-6.14,1.015,0.160,-0.228,26a4143,,EXP-108-crowd-refill.md,improvement
-EXP-109,2026-10-05,crowd-gated refill plus v6.75 (v6.96),QUAN-993,holdout-fail,3.07,4/5,1/2 windows (time-split),-1.45,1.142,0.176,-0.241,26a4143,,EXP-109-crowd-refill-nolow.md,improvement
-EXP-110,2026-10-05,fee tier: wick-anchored refill on 0.3% and no-new-low refill on 0.05% (v6.97),QUAN-994,holdout-fail,0.47,4/5,1/2 windows (time-split),-2.19,0.966,0.154,-0.243,26a4143,,EXP-110-tier-wick-nolow.md,improvement
-EXP-111,2026-10-05,fee tier: volume refill on 0.3% and v6.75 + exit confirmation on 0.05% (v6.98),QUAN-995,dropped-at-dev,-2.42,2/5,,,1.107,0.172,-0.212,26a4143,,EXP-111-tier-vol-nolowconfirm.md,improvement
+EXP-107,2026-10-05,longer stage-1 wait after a refill that failed fast (v6.94),QUAN-991,dropped-at-dev,-0.36,1/5,,,0.655,0.113,-0.250,26a4143,2458528,EXP-107-fail-cooldown.md,improvement
+EXP-108,2026-10-05,no refill stage while pool liquidity is crowded (v6.95),QUAN-992,holdout-fail,0.25,3/5,0/2 windows (time-split),-6.14,1.015,0.160,-0.228,26a4143,2458528,EXP-108-crowd-refill.md,improvement
+EXP-109,2026-10-05,crowd-gated refill plus v6.75 (v6.96),QUAN-993,holdout-fail,3.07,4/5,1/2 windows (time-split),-1.45,1.142,0.176,-0.241,26a4143,2458528,EXP-109-crowd-refill-nolow.md,improvement
+EXP-110,2026-10-05,fee tier: wick-anchored refill on 0.3% and no-new-low refill on 0.05% (v6.97),QUAN-994,holdout-fail,0.47,4/5,1/2 windows (time-split),-2.19,0.966,0.154,-0.243,26a4143,2458528,EXP-110-tier-wick-nolow.md,improvement
+EXP-111,2026-10-05,fee tier: volume refill on 0.3% and v6.75 + exit confirmation on 0.05% (v6.98),QUAN-995,dropped-at-dev,-2.42,2/5,,,1.107,0.172,-0.212,26a4143,2458528,EXP-111-tier-vol-nolowconfirm.md,improvement
