@@ -2,7 +2,7 @@
 
 - Jira: QUAN-1002
 - Status: dropped-at-dev
-- Pre-registration commit: 0180340 · Result commit: see registry
+- Pre-registration commit: 0180340 · Result commit: 66ec841
 - Scope: Dino, 2026-10-05: "算，開始下載資料並寫 pre-registration" — moving the liquidity to another pool and routing the
   rebuild swap through a cheaper pool counts as a strategy change (it changes where the ETH/BTC liquidity is placed).
   Number EXP-117 / v6.104 and OPT key `DD` reserved with the goal3 session.
