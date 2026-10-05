@@ -15,7 +15,7 @@ EMA 90–120 four-account engine. Every change is an experiment, recorded in thr
   `experiments/<EXP-id>` (registry fields + `hypothesis`, `verdict`, `order`), `curves/eth`, `curves/btc`
   (weekly net value per series key). Only editors write; the page never needs republishing for new rows.
 
-State as of 2026-10-05: EXP-001..122 recorded (`registry.csv`). v6 baseline (EXP-000): ETH continuous 2022-01..2026-09 +85.4%, CAGR 14.0%,
+State as of 2026-10-06: EXP-001..152 recorded (`registry.csv`). v6 baseline (EXP-000): ETH continuous 2022-01..2026-09 +85.4%, CAGR 14.0%,
 max DD −22.8%; WBTC continuous +85.6%. The /goal of 2026-10-05 (EXP-052..081, 30 experiments) found **no improvement-level pass** on the
 time-split holdout (H5 ETH 2021, H4 WBTC 2022): four dev passes each lost one window; v6.39 (idle reserve in a stablecoin LP) does not count
 (ruling). v6 is a range harvester whose edge is the staged refill below the EMA; ETH and WBTC disagree about recentring (valley shape, pool
@@ -24,9 +24,13 @@ only without a new intraday low, `REFILL_NO_NEW_LOW`) passes the improvement lev
 7.0%, H4 WBTC 3.4% vs 2.9%); the gain is ETH's, WBTC is nearly unchanged; it is a candidate until the forward window (after 2026-09-17)
 confirms it: see `experiments/FINDINGS-2026-10-05-round2.md`. Round 3 (EXP-092..122, goal "10 improvement passes", reached):
 11 passes, 2 clean (EXP-088 v6.75, EXP-122 v6.75 + macro restore) and 9 fee-tier rules (v6.75 on 0.05% pools, combinations of
-intraday stop / volume-confirmed refill / no lower stop / account tranches on 0.3% pools; Dino's ruling on fee-tier rules still
-open). It amounts to ~4 independent findings; both clean passes are ETH gains, WBTC within noise; next: forward window
-(after 2026-09-17) and routing (EXP-117): `experiments/FINDINGS-2026-10-05-round3.md`. The best standalone strategies are lower-risk versions of v6:
+intraday stop / volume-confirmed refill / no lower stop / account tranches on 0.3% pools). It amounts to ~4 independent findings;
+both clean passes are ETH gains, WBTC within noise: `experiments/FINDINGS-2026-10-05-round3.md`. Round 4 (EXP-123..152, goal "30 more",
+fee-tier rules count): 16 passes (4 clean, all v6.75 + routing variants), ~4 small new findings: routing the WBTC swap through the 0.05%
+tier (+1 pt H4), cross-asset refill on ETH only (H5 +16.0% vs v6.75 +13.5%; fails on WBTC), macro restore +0.4 pt on ETH, no-new-low
+on the best WBTC half (+0.5 pt H4). Rebuild-timing rules (rise, share flip) and account tranches on ETH do not hold out of time.
+Candidates: clean EXP-126, fee-tier EXP-140 / EXP-150 (H5 +16.4%, H4 +10.1%). Next: forward window (after 2026-09-17) and a third
+pool, no more H4 / H5 recombinations: `experiments/FINDINGS-2026-10-06-round4.md`. The best standalone strategies are lower-risk versions of v6:
 `experiments/FINDINGS-2026-10-02.md`. Pure-LP scope (no perps, no lending) since 2026-10-01.
 Earlier trials (momentum width, fee compounding, EMA exit band) were discarded on purpose. Background: `V6_VALIDATION.md` (PBO 0.56, DSR < 0.95,
 regimes, capacity).

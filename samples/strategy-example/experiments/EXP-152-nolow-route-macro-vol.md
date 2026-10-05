@@ -1,7 +1,7 @@
 # EXP-152: v6.75 + routing + macro restore + volume-confirmed refill (one rule for both pools) (v6.138)
 
 - Jira: QUAN-1037
-- Status: pre-registered
+- Status: dropped-at-dev
 - Pre-registration commit: 8428450 · Result commit: ______
 - Scope: /goal round 2 (Dino, 2026-10-05: "再繼續找30個"): beat v6 at the improvement level on ETH and WBTC, pure LP, time-split
   out-of-time holdout; idle-capital yield and swap routing excluded (rulings / assumption of 2026-10-05).
@@ -32,7 +32,26 @@ Pre-registered together with EXP-149..152 (same commit), run with `A` (v6) in `A
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `AEKELEMEN`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +4.5% | -3.1 |
+| 2023 | +32.2% | +40.5% | +8.3 |
+| 2024 | +36.4% | +35.1% | -1.2 |
+| 2025 | +16.3% | +9.6% | -6.7 |
+| 2026-01..09-17 | +18.7% | +12.6% | -6.1 |
+
+Wins 1/5, median -3.11 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +83.4% | 13.7% | -22.2% | 0.74 | 0.62 | $76.8k | $0.34k | 250 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +100.2% | 19.6% | -13.6% | 1.14 | 1.44 | $60.2k | $-5.04k | 208 |
+
+Verdict: **dropped-at-dev** — ETH CAGR 13.7% < v6 14.0%, yearly wins 1/5: the volume-confirmed refill slows ETH's refills, which is where its edge is. WBTC 19.6% vs 17.3% (Calmar 1.44). Volume confirmation is a WBTC-only rule. Holdout not run.
 
 ## Deviations
 
