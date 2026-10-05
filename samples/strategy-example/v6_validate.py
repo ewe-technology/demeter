@@ -268,7 +268,16 @@ OPT = {"A": Variant("A_v6"),
                                                                        "EXTRA": "pool"},
                                                                 "lo": {"REFILL_NO_NEW_LOW": True}}}),   # EXP-121
        "DK": Variant("DK_nolow_macro", {"REFILL_NO_NEW_LOW": True, "MACRO_EVENTS": "csv", "MACRO_RESTORE": True}),   # EXP-122: v6.75 + v6.47
-       "DD": Variant("DD_lp03_swap005", {"SWAP_ROUTE": "pool"})}   # EXP-117: ladder in the 0.3% pool, swaps on the 0.05% route
+       "DD": Variant("DD_lp03_swap005", {"SWAP_ROUTE": "pool"}),   # EXP-117: ladder in the 0.3% pool, swaps on the 0.05% route
+       # EXP-123..127: cheapest-tier routing (SWAP_ROUTE "pool" is a no-op on pools without a route, e.g. 0x88e6 0.05%)
+       "DL": Variant("DL_nolow_route", {"REFILL_NO_NEW_LOW": True, "SWAP_ROUTE": "pool"}),   # EXP-123: one rule for both pools
+       "DM": Variant("DM_tier_svroute_nolow", {"TIER": {"hi": {"INTRADAY_STOP": True, "REFILL_VOL_CONFIRM": True, "SWAP_ROUTE": "pool", "EXTRA": "pool"},
+                                                         "lo": {"REFILL_NO_NEW_LOW": True}}}),   # EXP-124
+       "DN": Variant("DN_tier_nostoproute_nolow", {"TIER": {"hi": {"NO_LOWER_STOP": True, "SWAP_ROUTE": "pool"},
+                                                             "lo": {"REFILL_NO_NEW_LOW": True}}}),   # EXP-125
+       "DO": Variant("DO_nolow_macro_route", {"REFILL_NO_NEW_LOW": True, "MACRO_EVENTS": "csv", "MACRO_RESTORE": True, "SWAP_ROUTE": "pool"}),   # EXP-126
+       "DP": Variant("DP_tier_svroute_nolowupday", {"TIER": {"hi": {"INTRADAY_STOP": True, "REFILL_VOL_CONFIRM": True, "SWAP_ROUTE": "pool", "EXTRA": "pool"},
+                                                              "lo": {"REFILL_NO_NEW_LOW": True, "UP_DAY_REFILL": True}}})}   # EXP-127
 # EXP-082..: daily non-price inputs (samples/fetch_deribit_dvol.py, fetch_binance_funding.py, fetch_binance_daily.py)
 DVOL_CSV = "../deribit_dvol_daily.csv"
 FUND_LONG_CSV = {"ETHUSDT": "../binance_funding_ETHUSDT_long.csv", "BTCUSDT": "../binance_funding_BTCUSDT_long.csv"}
@@ -389,7 +398,7 @@ class Checked(V.RemixDaoDcaWeekStratStrategy):
         elif quote_in > 0:
             impact = float(quote_in) * 10 ** self.gp.quote_token.decimal / (x1 if base_is_0 else x0) * float(quote_in)
         notional = float(base_in) * price + float(quote_in)
-        if V.SWAP_ROUTE is not None and notional > 0:   # EXP-117: the swap is charged on the 0.05% route instead
+        if ROUTE_DATA and notional > 0:   # EXP-117: the swap is charged on the 0.05% route instead (only when the pool has a route)
             eth_usd = float(ETH_USD.asof(ts))
             side = float(base_in) * price if base_in > 0 else float(quote_in)   # same side as v6's impact above
             route = 0.0
@@ -548,8 +557,9 @@ def run_variant(args):
         setattr(V, k, v)
     global ROUTE_DATA
     ROUTE_DATA = None
-    if V.SWAP_ROUTE == "pool":   # EXP-117: hop pools' minute liquidity for the route's impact
-        ROUTE_DATA = [(fee, route_frame(hop, start - timedelta(days=1), end)) for hop, fee in SWAP_ROUTES[POOL]]
+    route = SWAP_ROUTES.get(POOL) if V.SWAP_ROUTE == "pool" else None   # EXP-123..: no route entry -> v6's own ledger
+    if route:   # EXP-117: hop pools' minute liquidity for the route's impact
+        ROUTE_DATA = [(fee, route_frame(hop, start - timedelta(days=1), end)) for hop, fee in route]
     if V.BREADTH_CAP and V.EXTRA is not None:   # EXP-091: the other asset's F, computed with v6's engine
         V.EXTRA = V.EXTRA.copy()
         V.EXTRA["other_F"] = other_fraction().reindex(V.EXTRA.index)

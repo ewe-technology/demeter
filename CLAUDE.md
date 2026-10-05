@@ -74,6 +74,9 @@ Dino names versions `v6.1`, `v6.2`, ...; each is one experiment `EXP-NNN` (next 
 - Structural changes only; no parameter tuning inside v6's family (PBO 0.56).
 - Idle-capital yield (lending, a stablecoin LP or any other income on the (1 − F) reserve) is not a strategy change and never counts
   as an improvement (Dino, 2026-10-05): an experiment must change how the ETH/BTC liquidity itself is placed, sized, rebuilt or timed.
+- Fee-tier rules count as one strategy (Dino, 2026-10-06): a variant may apply one switch set on pools with fee >= 0.3% and another
+  on cheaper pools (`TIER` in `v6_validate.py`). Routing the rebuild swap through a cheaper pool also counts as a strategy change
+  (Dino, ruling relayed by the EXP-117 session). Every fee-tier pair must have at least one half not yet run on its holdout window.
 - Baseline v6 runs in the same invocation. Costs: pool fee + price impact; gas reported, not charged.
 - ETH/USDC 0.05% (2021-05..2026-09-17) and WBTC/USDC 0.3% (2021-11..2026-09-17) are in-sample now: every new
   pre-registration names a fresh holdout (another pool or chain, or data after 2026-09-17).
