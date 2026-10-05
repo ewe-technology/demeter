@@ -1,8 +1,8 @@
 # EXP-140: fee tier: EXP-124's WBTC half, EXP-130's ETH half + macro restore (v6.126)
 
-- Jira: QUAN-___
+- Jira: QUAN-1025
 - Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Pre-registration commit: 50be075 · Result commit: ______
 - Scope: /goal round 2 (Dino, 2026-10-05: "再繼續找30個"): beat v6 at the improvement level on ETH and WBTC, pure LP, time-split
   out-of-time holdout; idle-capital yield and swap routing excluded (rulings / assumption of 2026-10-05).
 
