@@ -1,8 +1,8 @@
 # EXP-072: follow events below EMA100 resize in place; v6 recentre above (v6.59)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-955
+- Status: dropped-at-dev
+- Pre-registration commit: fee36c2 · Result commit: ______
 - Scope: /goal 2026-10-05 "beat v6 at the improvement level, pure LP, time-split out-of-time holdout" (Dino); idle-capital
   yield excluded (ruling 2026-10-05).
 
@@ -32,7 +32,26 @@ Pre-registered together with the other experiment of the same commit (EXP-071 / 
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ABIBJ`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | -1.2% | -8.8 |
+| 2023 | +32.2% | +32.2% | -0.0 |
+| 2024 | +36.4% | +34.5% | -1.9 |
+| 2025 | +16.3% | +12.9% | -3.4 |
+| 2026-01..09-17 | +18.7% | +18.6% | -0.1 |
+
+Wins 0/5, median -1.87 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +62.2% | 10.8% | -22.1% | 0.62 | 0.49 | $81.7k | $0.22k | 150 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +84.8% | 17.2% | -17.7% | 1.00 | 0.97 | $61.5k | $0.67k | 106 |
+
+Verdict: **dropped-at-dev** — ETH CAGR 10.8% vs 14.0%, Calmar 0.49, wins 0/5; WBTC = v6 (17.2% vs 17.3%, Calmar 0.97). Holdout not run. Reading: below EMA100 the follow events are the staged refills (46 ETH resizes); adding the refill capital at the old ticks instead of around the rebound price loses ETH fees (.7k vs .5k). The refill's recentre at the rebound is part of v6's edge, consistent with EXP-067/068.
 
 ## Deviations
 

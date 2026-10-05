@@ -1,8 +1,8 @@
 # EXP-071: weekly recentre only above EMA100 (v6.58)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-954
+- Status: dropped-at-dev
+- Pre-registration commit: fee36c2 · Result commit: ______
 - Scope: /goal 2026-10-05 "beat v6 at the improvement level, pure LP, time-split out-of-time holdout" (Dino); idle-capital
   yield excluded (ruling 2026-10-05).
 
@@ -32,7 +32,26 @@ Pre-registered together with the other experiment of the same commit (EXP-071 / 
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ABIBJ`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +8.5% | +0.9 |
+| 2023 | +32.2% | +29.5% | -2.8 |
+| 2024 | +36.4% | +33.1% | -3.3 |
+| 2025 | +16.3% | +18.9% | +2.6 |
+| 2026-01..09-17 | +18.7% | +18.7% | +0.0 |
+
+Wins 3/5, median +0.02 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +114.0% | 17.5% | -24.5% | 0.82 | 0.72 | $81.1k | $0.40k | 236 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +92.7% | 18.4% | -21.9% | 0.91 | 0.84 | $32.9k | $0.88k | 215 |
+
+Verdict: **dropped-at-dev** — ETH passes every part of the rule (CAGR 17.5% vs 14.0%, Calmar 0.72 vs 0.61, max DD −24.5% vs −22.8%, within 3 pts; wins 3/5) but WBTC fails Calmar and drawdown (CAGR 18.4% vs 17.3%, Calmar 0.84 vs 0.97, max DD −21.9% vs −17.8%). Holdout not run. Reading: restricting the weekly recentre to the uptrend state kept all of ETH's gain and improved its yearly consistency (3/5 vs EXP-065's 2/5), but WBTC spent most of 2023-25 above its EMA100, so it still recentred 117 times and lost half its fee income (.9k vs .7k) to the valley's thin centre and 0.3% swaps.
 
 ## Deviations
 

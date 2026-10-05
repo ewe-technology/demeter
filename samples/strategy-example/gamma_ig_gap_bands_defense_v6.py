@@ -274,6 +274,10 @@ WEEKLY_RECENTRE_UP = False
 # EXP-072 (v6.59): follow events below EMA100 (last completed close <= EMA100) resize the ladder in place (EXP-055); above it,
 # v6's full rebuild. False = v6.
 RESIZE_BELOW_EMA = False
+# EXP-074..075 (v6.61..v6.62): ablations of the real ladder's range-exit rebuild. "all": a ladder the price has left is never
+# rebuilt for that reason (it waits, out of range, for the next follow event); "down": only exits below the ladder are skipped
+# (the ladder, now all base, waits), exits above are v6's. False = v6.
+NO_EXIT_REBUILD: str | bool = False
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -762,6 +766,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.cppi_hwm = ZERO             # EXP-064
         self.cppi_min_m = 1.0
         self.weekly_recentres = 0        # EXP-065
+        self.skipped_exits = 0           # EXP-074 / EXP-075
         self.tranche_io = (0, 0)
         self.fee_log: List[dict] = []    # daily: collected fees (quote) + pending fees still in the positions
         # spec sheet s: base (ETH) share of total value before the bands are placed. None keeps the
@@ -1604,6 +1609,12 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         if not (lo <= current_tick < hi):
             self.exit_streak += 1
             rebalance = self.exit_streak >= EXIT_CONFIRM
+            if NO_EXIT_REBUILD and not self.force_rebuild:   # EXP-074 / EXP-075
+                base_is_0 = self.gp.base_token.name == self.gp.token0.name
+                up = (current_tick >= hi) if base_is_0 else (current_tick < lo)
+                if NO_EXIT_REBUILD == "all" or (NO_EXIT_REBUILD == "down" and not up):
+                    self.skipped_exits += rebalance
+                    rebalance = False
             if rebalance:
                 print("allow rescale", self.positions[0][0], current_tick, self.positions[-1][1])
         else:
