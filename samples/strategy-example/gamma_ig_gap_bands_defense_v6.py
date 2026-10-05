@@ -265,6 +265,9 @@ WEEKLY_RECENTRE = False
 NO_LOWER_STOP = False
 REFILL_ARMED_ONLY = False
 REARM_FULL = False
+# EXP-069 (v6.56): ablation of rule 4 (upper rebuild: close > 1.2 x centre moves the virtual centre up); the centre then stays
+# at the price of the last refill stage, so the lower stop (0.8 x centre) does not trail a rally. False = v6.
+NO_UPPER_REBUILD = False
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -301,7 +304,7 @@ class VirtualAccount:
                 self.deployed, self.stage, self.centre = 1.0, 4, close
         if not NO_LOWER_STOP and self.deployed > 0 and close < self.centre * LOWER_STOP:      # 3 lower stop (EXP-066 drops it)
             self.exit(close)
-        elif self.deployed > 0 and close > self.centre * UPPER_REBUILD: # 4 upper rebuild, same size
+        elif not NO_UPPER_REBUILD and self.deployed > 0 and close > self.centre * UPPER_REBUILD: # 4 upper rebuild (EXP-069 drops it)
             self.centre = close
         if self.deployed < 1 and not REARM_FULL and (self.armed or not REFILL_ARMED_ONLY):   # 5 staged refill (EXP-067 / 068)
             self.low = min(self.low, close)
