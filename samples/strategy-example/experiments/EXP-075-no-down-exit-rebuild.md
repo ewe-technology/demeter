@@ -1,8 +1,8 @@
 # EXP-075: no rebuild after downward range exits (ablation) (v6.62)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-958
+- Status: dropped-at-dev
+- Pre-registration commit: 5bb711c · Result commit: ______
 - Scope: /goal 2026-10-05 "beat v6 at the improvement level, pure LP, time-split out-of-time holdout" (Dino); idle-capital
   yield excluded (ruling 2026-10-05).
 
@@ -32,8 +32,28 @@ Pre-registered together with the other two ablations of the same commit (EXP-073
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ABLBMBN`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +7.6% | +0.0 |
+| 2023 | +32.2% | +32.2% | +0.0 |
+| 2024 | +36.4% | +36.4% | +0.0 |
+| 2025 | +16.3% | +16.3% | +0.0 |
+| 2026-01..09-17 | +18.7% | +17.5% | -1.2 |
+
+Wins 0/5, median +0.00 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +84.3% | 13.9% | -22.8% | 0.72 | 0.61 | $86.3k | $0.29k | 146 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+
+Verdict: **dropped-at-dev** — practically v6 (ETH CAGR 13.9% vs 14.0%, Calmar 0.61; WBTC identical). Holdout not run. Reading: downward exits are rare (6 skipped on ETH, none mattering on WBTC) and the engine's own exits already handle the falls that cause them; the downward exit rebuild is inert on this data.
 
 ## Deviations
 
 - Ablations chosen after EXP-052..072 (this goal's results: every rebuild-rule change moved ETH and WBTC in opposite directions; the engine ablations showed which rules carry v6's edge). Smoke test ETH 2022-05-01..06-30 (`BL,BM,BN`, inside the dev data; v6's total there, −7.9%, was seen in EXP-055's smoke test): share 70% −10.5%, the two exit ablations −7.9% with one skipped exit each. The ablations have no constant to adjust.
+- The WBTC continuous segment crashed on the shared `~/.demeter` cache before any backtest ran and was rerun alone (CLAUDE.md gotcha).
