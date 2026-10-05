@@ -1,7 +1,7 @@
 # EXP-146: fee tier: EXP-124's WBTC half + cross-asset refill, EXP-130's ETH half (v6.132)
 
 - Jira: QUAN-1031
-- Status: pre-registered
+- Status: holdout-fail
 - Pre-registration commit: f35df2e · Result commit: ______
 - Scope: /goal round 2 (Dino, 2026-10-05: "再繼續找30個"): beat v6 at the improvement level on ETH and WBTC, pure LP, time-split
   out-of-time holdout; idle-capital yield and swap routing excluded (rulings / assumption of 2026-10-05).
@@ -32,7 +32,35 @@ Pre-registered together with EXP-144..148 (same commit), run with `A` (v6) in `A
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `AEFEGEHEIEJ`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +13.7% | +6.1 |
+| 2023 | +32.2% | +38.9% | +6.7 |
+| 2024 | +36.4% | +34.9% | -1.4 |
+| 2025 | +16.3% | +17.3% | +1.0 |
+| 2026-01..09-17 | +18.7% | +19.1% | +0.4 |
+
+Wins 4/5, median +1.04 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +108.6% | 16.9% | -24.7% | 0.85 | 0.68 | $94.5k | $0.34k | 136 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +90.0% | 18.0% | -15.0% | 1.04 | 1.20 | $53.3k | $-4.83k | 94 |
+
+Holdout, time-split out-of-time (`BINANCE_WARM=1`, run once):
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| H5 ETH 2021-05-06..12-31 v6 | +4.5% | 7.0% | -30.7% | 0.37 | 0.23 | $21.0k | $3.70k | 37 |
+| H5 ETH 2021-05-06..12-31 this | +16.0% | 25.4% | -25.4% | 0.80 | 1.00 | $25.3k | $3.33k | 31 |
+| H4 WBTC 2022-01-01..10-31 v6 | +2.4% | 2.9% | -12.5% | 0.24 | 0.23 | $14.3k | $0.04k | 17 |
+| H4 WBTC 2022-01-01..10-31 this | +1.5% | 1.8% | -11.3% | 0.19 | 0.16 | $11.8k | $-0.52k | 15 |
+
+Verdict: **holdout-fail (fee-tier rule)** — dev passed: ETH = EXP-130 (16.9%), WBTC 18.0% vs 17.3% (EXP-124 without the cross-asset filter: 21.0%). Holdout: H5 ETH = EXP-130 (+16.0%); H4 WBTC 2022 +1.5% vs v6 +2.4% (EXP-124: +9.6%). The cross-asset refill costs the WBTC half 8 pts out of time: it belongs on the ETH pool only.
 
 ## Deviations
 

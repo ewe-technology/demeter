@@ -1,7 +1,7 @@
 # EXP-148: v6.75 + cross-asset refill + routing + macro restore (one rule for both pools) (v6.134)
 
 - Jira: QUAN-1033
-- Status: pre-registered
+- Status: dropped-at-dev
 - Pre-registration commit: f35df2e · Result commit: ______
 - Scope: /goal round 2 (Dino, 2026-10-05: "再繼續找30個"): beat v6 at the improvement level on ETH and WBTC, pure LP, time-split
   out-of-time holdout; idle-capital yield and swap routing excluded (rulings / assumption of 2026-10-05).
@@ -32,7 +32,26 @@ Pre-registered together with EXP-144..148 (same commit), run with `A` (v6) in `A
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `AEFEGEHEIEJ`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +12.9% | +5.3 |
+| 2023 | +32.2% | +39.3% | +7.1 |
+| 2024 | +36.4% | +36.1% | -0.2 |
+| 2025 | +16.3% | +17.4% | +1.1 |
+| 2026-01..09-17 | +18.7% | +19.2% | +0.5 |
+
+Wins 4/5, median +1.15 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +110.4% | 17.1% | -24.9% | 0.86 | 0.69 | $92.9k | $0.36k | 266 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +83.6% | 17.0% | -16.9% | 0.98 | 1.01 | $54.1k | $-4.89k | 224 |
+
+Verdict: **dropped-at-dev** — ETH CAGR 17.1%, Calmar 0.69, wins 4/5; WBTC 17.0% < v6 17.3% (Calmar 1.01). Same WBTC failure as EXP-144: the cross-asset refill cancels the routing and macro gains on the 0.3% pool. Holdout not run.
 
 ## Deviations
 
