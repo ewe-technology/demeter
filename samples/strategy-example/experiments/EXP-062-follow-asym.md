@@ -1,8 +1,8 @@
 # EXP-062: asymmetric follow: shrink in place when F falls, v6 recentre when F rises (v6.49)
 
-- Jira: QUAN-___
+- Jira: QUAN-944
 - Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Pre-registration commit: c4f9b71 · Result commit: ______
 - Scope: /goal 2026-10-05 "beat v6 at the improvement level, pure LP, time-split out-of-time holdout" (Dino); idle-capital
   yield excluded (ruling 2026-10-05).
 
