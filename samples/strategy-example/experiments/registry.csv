@@ -75,9 +75,9 @@ EXP-072,2026-10-05,follow events below EMA100 resize in place; v6 recentre above
 EXP-073,2026-10-05,ETH share 70% in both trend states (ablation of the EMA100 share switch) (v6.60),QUAN-956,holdout-fail,3.61,4/5,1/2 windows (time-split),-0.36,1.105,0.171,-0.247,5bb711c,79ce351,EXP-073-share-70.md,improvement
 EXP-074,2026-10-05,no range-exit rebuild (ablation) (v6.61),QUAN-957,dropped-at-dev,-3.56,0/5,,,0.663,0.114,-0.170,5bb711c,79ce351,EXP-074-no-exit-rebuild.md,improvement
 EXP-075,2026-10-05,no rebuild after downward range exits (ablation) (v6.62),QUAN-958,dropped-at-dev,0.00,0/5,,,0.843,0.139,-0.228,5bb711c,79ce351,EXP-075-no-down-exit-rebuild.md,improvement
-EXP-076,2026-10-05,one EMA100 account instead of four (ensemble ablation) (v6.63),QUAN-959,dropped-at-dev,0.80,4/5,,,0.808,0.134,-0.213,d33e312,,EXP-076-single-account.md,improvement
-EXP-077,2026-10-05,F = the lowest account's deployed fraction (aggregation ablation) (v6.64),QUAN-960,dropped-at-dev,-2.92,2/5,,,0.861,0.141,-0.229,d33e312,,EXP-077-f-min.md,improvement
-EXP-078,2026-10-05,F = the highest account's deployed fraction (aggregation ablation) (v6.65),QUAN-961,dropped-at-dev,-3.71,1/5,,,0.639,0.111,-0.231,d33e312,,EXP-078-f-max.md,improvement
-EXP-079,2026-10-05,full ladder while any account is deployed (binarisation ablation) (v6.66),QUAN-962,dropped-at-dev,-7.92,2/5,,,0.298,0.057,-0.243,d33e312,,EXP-079-f-any.md,improvement
-EXP-080,2026-10-05,full ladder only while every account is fully deployed (binarisation ablation) (v6.67),QUAN-963,dropped-at-dev,-4.74,1/5,,,0.867,0.142,-0.247,d33e312,,EXP-080-f-all.md,improvement
-EXP-081,2026-10-05,the first refill stage deploys the account fully (staging ablation) (v6.68),QUAN-964,dropped-at-dev,1.58,3/5,,,0.424,0.078,-0.300,d33e312,,EXP-081-refill-one-stage.md,improvement
+EXP-076,2026-10-05,one EMA100 account instead of four (ensemble ablation) (v6.63),QUAN-959,dropped-at-dev,0.80,4/5,,,0.808,0.134,-0.213,d33e312,5baddb3,EXP-076-single-account.md,improvement
+EXP-077,2026-10-05,F = the lowest account's deployed fraction (aggregation ablation) (v6.64),QUAN-960,dropped-at-dev,-2.92,2/5,,,0.861,0.141,-0.229,d33e312,5baddb3,EXP-077-f-min.md,improvement
+EXP-078,2026-10-05,F = the highest account's deployed fraction (aggregation ablation) (v6.65),QUAN-961,dropped-at-dev,-3.71,1/5,,,0.639,0.111,-0.231,d33e312,5baddb3,EXP-078-f-max.md,improvement
+EXP-079,2026-10-05,full ladder while any account is deployed (binarisation ablation) (v6.66),QUAN-962,dropped-at-dev,-7.92,2/5,,,0.298,0.057,-0.243,d33e312,5baddb3,EXP-079-f-any.md,improvement
+EXP-080,2026-10-05,full ladder only while every account is fully deployed (binarisation ablation) (v6.67),QUAN-963,dropped-at-dev,-4.74,1/5,,,0.867,0.142,-0.247,d33e312,5baddb3,EXP-080-f-all.md,improvement
+EXP-081,2026-10-05,the first refill stage deploys the account fully (staging ablation) (v6.68),QUAN-964,dropped-at-dev,1.58,3/5,,,0.424,0.078,-0.300,d33e312,5baddb3,EXP-081-refill-one-stage.md,improvement

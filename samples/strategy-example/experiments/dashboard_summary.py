@@ -59,7 +59,8 @@ notes = {"credible": "Holdout Calmar within about 0.05 of v6, max DD shallower, 
 for r in rows: r["note"] = notes.get(r["reading"], "Reference.")
 json.dump({"title": "Standalone strategies", "updated": "2026-10-02", "rows": rows}, open(os.path.join(D, "s_standalone.json"), "w"))
 findings = [
- "No improvement over v6's ladder yet. v6.39 (EXP-052, idle reserve LP'd in USDC/USDT) beats v6 on its rule, but idle-capital yield does not count (Dino, 2026-10-05): the ladder is v6's to the dollar. The search continues from v6.42 (EXP-055).",
+ "Goal of 2026-10-05 (EXP-052..081, 30 experiments): no improvement-level pass on the time-split holdout (H5 ETH 2021, H4 WBTC 2022). Four dev passes (v6.47, v6.50, v6.53, v6.60) each won one window and lost the other; v6.39 (idle reserve in a stablecoin LP) does not count.",
+ "v6 is a range harvester: its edge is the staged refill below the EMA (ablations: ETH CAGR 2-8% without it); the lower stop saves it in fast crashes (May 2021). ETH (0.05%) gains from more recentring, WBTC (0.3%, valley fees at the edges, fee/LVR 3.5 vs 1.2) loses: no rebuild rule improved both.",
  "Before it: 0 of 28 experiments (EXP-024..051) passed the improvement level; 7 passed the standalone level. Also dropped at dev on 2026-10-05: downside vol targeting of F (v6.40) and an efficiency-ratio gate on the EMA exit (v6.41, ETH Calmar 0.24): the EMA exit is v6's protection.",
  "Standalone = absolute bar (dev Calmar >= 0.60, max DD > -30%; holdout Calmar >= 0.50 on 2 of 3 pools, return > 0, max DD > -35%, plus a positive 2022 bear-market out-of-time window). It says a strategy is good alone, not better than v6.",
  "Strongest: v6.35 (ETH share 50% + 2-day exit confirmation) and v6.33 (share 50%): v6-level holdout Calmar with 3-8 pts shallower max DD, lower return. v6.31 is neutral. v6.36, v6.38, v6.25r pass weakly. v6.19r (Donchian) is fragile.",
