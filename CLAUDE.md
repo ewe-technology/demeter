@@ -15,11 +15,14 @@ EMA 90–120 four-account engine. Every change is an experiment, recorded in thr
   `experiments/<EXP-id>` (registry fields + `hypothesis`, `verdict`, `order`), `curves/eth`, `curves/btc`
   (weekly net value per series key). Only editors write; the page never needs republishing for new rows.
 
-State as of 2026-10-05: EXP-001..081 recorded (`registry.csv`). v6 baseline (EXP-000): ETH continuous 2022-01..2026-09 +85.4%, CAGR 14.0%,
+State as of 2026-10-05: EXP-001..091 recorded (`registry.csv`). v6 baseline (EXP-000): ETH continuous 2022-01..2026-09 +85.4%, CAGR 14.0%,
 max DD −22.8%; WBTC continuous +85.6%. The /goal of 2026-10-05 (EXP-052..081, 30 experiments) found **no improvement-level pass** on the
 time-split holdout (H5 ETH 2021, H4 WBTC 2022): four dev passes each lost one window; v6.39 (idle reserve in a stablecoin LP) does not count
 (ruling). v6 is a range harvester whose edge is the staged refill below the EMA; ETH and WBTC disagree about recentring (valley shape, pool
-fee tier): see `experiments/FINDINGS-2026-10-05.md`. The best standalone strategies are lower-risk versions of v6:
+fee tier): see `experiments/FINDINGS-2026-10-05.md`. Round 2 (EXP-082..091) stopped at the first pass: **v6.75 (EXP-088, refill days count
+only without a new intraday low, `REFILL_NO_NEW_LOW`) passes the improvement level on dev and the time-split holdout** (H5 ETH CAGR 21.4% vs
+7.0%, H4 WBTC 3.4% vs 2.9%); the gain is ETH's, WBTC is nearly unchanged; it is a candidate until the forward window (after 2026-09-17)
+confirms it: see `experiments/FINDINGS-2026-10-05-round2.md`. The best standalone strategies are lower-risk versions of v6:
 `experiments/FINDINGS-2026-10-02.md`. Pure-LP scope (no perps, no lending) since 2026-10-01.
 Earlier trials (momentum width, fee compounding, EMA exit band) were discarded on purpose. Background: `V6_VALIDATION.md` (PBO 0.56, DSR < 0.95,
 regimes, capacity).

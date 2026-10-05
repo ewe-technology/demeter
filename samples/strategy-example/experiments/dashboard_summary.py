@@ -59,6 +59,8 @@ notes = {"credible": "Holdout Calmar within about 0.05 of v6, max DD shallower, 
 for r in rows: r["note"] = notes.get(r["reading"], "Reference.")
 json.dump({"title": "Standalone strategies", "updated": "2026-10-02", "rows": rows}, open(os.path.join(D, "s_standalone.json"), "w"))
 findings = [
+ "Round 2 of 2026-10-05 (EXP-082..091): v6.75 (EXP-088, a refill day counts only if its intraday low stays above the low since the exit) passes the improvement level on dev and on the time-split holdout: H5 ETH 2021 CAGR 21.4% vs 7.0% (Calmar 0.79 vs 0.23), H4 WBTC 2022 3.4% vs 2.9%. The gain is ETH's; on WBTC the rule barely binds (same rebuild count). First pass in 40 experiments: a candidate until the forward window confirms it.",
+ "Round 2's other nine (DVOL, funding, cross-asset, pool volume, TWAP, realised-vs-implied vol, breadth) all dropped at dev: outside information moves ETH and WBTC in opposite directions, like recentring in round 1.",
  "Goal of 2026-10-05 (EXP-052..081, 30 experiments): no improvement-level pass on the time-split holdout (H5 ETH 2021, H4 WBTC 2022). Four dev passes (v6.47, v6.50, v6.53, v6.60) each won one window and lost the other; v6.39 (idle reserve in a stablecoin LP) does not count.",
  "v6 is a range harvester: its edge is the staged refill below the EMA (ablations: ETH CAGR 2-8% without it); the lower stop saves it in fast crashes (May 2021). ETH (0.05%) gains from more recentring, WBTC (0.3%, valley fees at the edges, fee/LVR 3.5 vs 1.2) loses: no rebuild rule improved both.",
  "Before it: 0 of 28 experiments (EXP-024..051) passed the improvement level; 7 passed the standalone level. Also dropped at dev on 2026-10-05: downside vol targeting of F (v6.40) and an efficiency-ratio gate on the EMA exit (v6.41, ETH Calmar 0.24): the EMA exit is v6's protection.",
@@ -67,5 +69,5 @@ findings = [
  "Faster regime lines (Hull, ROC, Supertrend) lose. Slow lines (SMA 200, Ichimoku, Aroon, ROC) beat v6 on WBTC at dev but lose the 2022 BTC bear window (-5.8% to -14.3% vs v6 +2.4%): a bull-market fit.",
  "The seven are one family (same EMA signal, same pools), not independent evidence. Thresholds were set after seeing dev results. The clean test is the forward window 2026-09-18..12-31 (not yet available).",
 ]
-json.dump({"title": "What the series found", "updated": "2026-10-05", "items": findings, "doc": "samples/strategy-example/experiments/FINDINGS-2026-10-05.md"}, open(os.path.join(D, "s_findings.json"), "w"))
+json.dump({"title": "What the series found", "updated": "2026-10-05", "items": findings, "doc": "samples/strategy-example/experiments/FINDINGS-2026-10-05-round2.md"}, open(os.path.join(D, "s_findings.json"), "w"))
 print(len(rows), [ (r["exp"], len(r["windows"])) for r in rows])
