@@ -208,6 +208,20 @@ VOL_TARGET_DAYS = 14
 # random walk: chop, the exit would be a whipsaw). The lower stop, re-arm and refill rules are unchanged. False = v6.
 ER_GATE = False
 ER_DAYS = 30
+# EXP-055 (v6.42): a follow rebuild (|F - deployed| >= FOLLOW_THRESHOLD) resizes the ladder in place instead of rebuilding it:
+# every band keeps its ticks and its liquidity is scaled by target / current (fees collected first). Shrinking sells the
+# withdrawn base for quote (the reserve stays quote); growing buys the base the bands need at their current composition and
+# adds liquidity to the same ticks. No recentre and no swap back to the target ETH share on F changes; range exits, the
+# first build and builds from an empty book are v6's full rebuilds. False = v6.
+RESIZE_IN_PLACE = False
+# EXP-056 (v6.43): the range-exit check (price outside the ladder -> full rebuild) runs every hour instead of once a day at
+# 00:00 UTC. F, the ETH share and the follow rule are still judged once a day on the last completed day. False = v6.
+EXIT_CHECK_HOURLY = False
+# EXP-057 (v6.44): a range-exit rebuild places the new ladder from the inventory the old one left, without the swap back to
+# the target ETH share (Charm Alpha Vault "base + limit"): each side's bands take all of that side's token, so after an
+# upward exit (all quote) the ladder is bids below the price, after a downward exit (all base) asks above it; the pool
+# converts them while paying fees. Follow rebuilds (F changes) and builds from an empty book keep v6's swap. False = v6.
+SWAPLESS_EXIT = False
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -676,6 +690,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.half_builds = 0
         self.force_rebuild = False       # set by follow_work to push rescale_work past its range check
         self.follow_rebuild_count = 0
+        self.resize_count = 0            # EXP-055: follow events handled by resize_work
+        self.swapless_exits = 0          # EXP-057: range-exit rebuilds placed without a swap
         self.fee_log: List[dict] = []    # daily: collected fees (quote) + pending fees still in the positions
         # spec sheet s: base (ETH) share of total value before the bands are placed. None keeps the
         # original behaviour, where calculate_swap_amount lets the full-range geometry pick the ratio.
@@ -821,7 +837,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         if self.usdc_prices is not None:
             self.add_column(self.utils.market_key, "usdc_price", self.usdc_prices)
 
-        self.triggers.append(PeriodTrigger(time_delta=self.params.rescale_frequency.value, do=self.rescale_work))
+        self.triggers.append(PeriodTrigger(time_delta=timedelta(hours=1) if EXIT_CHECK_HOURLY else self.params.rescale_frequency.value,
+                                           do=self.rescale_work))   # EXP-056: hourly range-exit check
         if CASH_APR is not None:
             self.triggers.append(PeriodTrigger(time_delta=timedelta(days=1), do=self.accrue_cash))
         if STABLE_LP is not None:   # EXP-052
@@ -951,6 +968,9 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         if REFILL_ORDER and target > current and self.place_refill_order(row_data, (target - current) * equity):
             self.deployed_at_build = target
             return
+        if RESIZE_IN_PLACE and self.positions and current > FULL_TOLERANCE and target > ZERO:   # EXP-055
+            self.resize_work(row_data, target, current)
+            return
         print(f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} follow F: target {float(target):.4f} "
               f"current {float(current):.4f} -> rebuild")
         self.follow_rebuild_count += 1
@@ -959,6 +979,48 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             self.rescale_work(row_data)
         finally:
             self.force_rebuild = False
+
+    def resize_work(self, row_data: Snapshot, target: Decimal, current: Decimal) -> None:
+        """EXP-055: scale every band's liquidity by target / current at its own ticks (see RESIZE_IN_PLACE)."""
+        lp_market: UniLpMarketV2 = self.broker.markets[self.utils.market_key]
+        k = target / current
+        price = row_data.prices[self.gp.base_token.name]
+        base_is_0 = self.gp.base_token.name == self.gp.token0.name
+        bands = []
+        for pos in list(self.positions):
+            self.collect_fee_as_quote(lp_market, pos)
+            if pos not in lp_market.positions:
+                continue
+            a0, a1 = lp_market.get_position_amount(pos)
+            bands.append((pos, a0 if base_is_0 else a1, a1 if base_is_0 else a0))
+        self.positions = [b[0] for b in bands]
+        free_base = lambda: self.broker.get_token_balance(self.gp.base_token) - self.fee_reserve_base()
+        free_quote = lambda: self.broker.get_token_balance(self.gp.quote_token) - self.fee_reserve_quote()
+        if k < ONE:
+            for pos, _, _ in bands:
+                part = int(Decimal(lp_market.positions[pos].liquidity) * (ONE - k))
+                if part > 0:
+                    lp_market.remove_liquidity(pos, liquidity=part, collect=True, remove_dry_pool=False)
+            if free_base() > ZERO:
+                _, _, fee_b, _ = self.execute_swap(lp_market, free_base(), ZERO)
+                self.total_base_swap_fee += fee_b if fee_b is not None else ZERO
+        else:
+            need = sum((b for _, b, _ in bands), ZERO) * (k - ONE)
+            buy = need - free_base()
+            if buy > ZERO:
+                pay = min(free_quote(), buy * price / (ONE - Decimal(lp_market.pool_info.fee_rate)))
+                _, _, _, fee_q = self.execute_swap(lp_market, ZERO, pay)
+                self.total_quote_swap_fee += fee_q if fee_q is not None else ZERO
+            tick = lp_market.price_to_raw_tick(price)
+            for pos, b, q in bands:
+                base_amt = max(ZERO, min(b * (k - ONE), free_base()))
+                quote_amt = max(ZERO, min(q * (k - ONE), free_quote()))
+                if base_amt > ZERO or quote_amt > ZERO:
+                    lp_market.add_liquidity_by_tick(pos[0], pos[1], base_amt, quote_amt, tick=tick)
+        self.deployed_at_build = target
+        self.resize_count += 1
+        print(f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} resize in place x{float(k):.3f} "
+              f"(F {float(current):.3f} -> {float(target):.3f})")
 
     def ladder_configs(self) -> List[List]:
         """The bands a (re)build places: all of them, or with HALF_LADDER only the quote side (a range above the
@@ -1345,6 +1407,9 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
                 to_swap_quote = lp_market.broker.get_token_balance(self.gp.quote_token) - self.fee_reserve_quote()
 
                 base_to_swap, quote_to_swap = self.pre_placement_swap(lp_market, current_tick, lower_boundary, upper_boundary, to_swap_base, to_swap_quote, row_data.timestamp)
+                if SWAPLESS_EXIT and old_position_infos and not self.force_rebuild:   # EXP-057: range exit, no swap
+                    base_to_swap, quote_to_swap = ZERO, ZERO
+                    self.swapless_exits += 1
                 swapped_base, swapped_quote, rebalance_base_fee, rebalance_quote_fee = self.execute_swap(lp_market, base_to_swap, quote_to_swap)
 
                 self.total_base_swap_fee += rebalance_base_fee if rebalance_base_fee is not None else ZERO

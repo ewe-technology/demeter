@@ -54,3 +54,6 @@ EXP-051,2026-10-02,ETH share 50% + exit confirmation + volatility-scaled width (
 EXP-052,2026-10-05,idle reserve LP'd in the Uniswap USDC/USDT pool ±0.1% (v6.39),QUAN-933,holdout-pass,0.71,5/5,2/2 windows (time-split),0.68,0.891,0.145,-0.222,990a6ad,d51d2e4,EXP-052-stable-lp-reserve.md,improvement
 EXP-053,2026-10-05,"downside volatility targeting: F x min(1, sigma*/sigma_14) while close <= EMA100 (v6.40)",QUAN-934,dropped-at-dev,-0.77,1/5,,,0.729,0.123,-0.230,990a6ad,d51d2e4,EXP-053-down-vol-target.md,improvement
 EXP-054,2026-10-05,EMA exit only while the 30-day efficiency ratio >= 1/sqrt(30) (chop gate) (v6.41),QUAN-935,dropped-at-dev,-9.60,0/5,,,0.351,0.066,-0.279,990a6ad,d51d2e4,EXP-054-er-chop-gate.md,improvement
+EXP-055,2026-10-05,follow F by resizing every band in place instead of a full rebuild (v6.42),,pre-registered,,,,,,,,,,EXP-055-resize-in-place.md,improvement
+EXP-056,2026-10-05,range-exit check every hour instead of once a day (v6.43),,pre-registered,,,,,,,,,,EXP-056-exit-check-hourly.md,improvement
+EXP-057,2026-10-05,range-exit rebuild from inventory without the swap (base + limit) (v6.44),,pre-registered,,,,,,,,,,EXP-057-swapless-exit.md,improvement

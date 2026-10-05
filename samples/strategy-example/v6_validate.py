@@ -162,7 +162,10 @@ OPT = {"A": Variant("A_v6"),
        "AN": Variant("AN_s50_confirm_volwidth", {"SHARE_ABOVE_EMA": Decimal("0.5"), "EXIT_CONFIRM": 2, "WIDTH_VOL": True}),   # EXP-051: EXP-046 + 044 + 030
        "AO": Variant("AO_stable_lp", {"STABLE_LP": "pool"}),   # EXP-052: reserve LP'd in USDC/USDT ±0.1%
        "AP": Variant("AP_down_vol_target", {"VOL_TARGET": "pool"}),   # EXP-053: F x min(1, sigma*/sigma_14) below EMA100
-       "AQ": Variant("AQ_er_gate", {"ER_GATE": True})}   # EXP-054: EMA exit only while ER(30) >= 1/sqrt(30)
+       "AQ": Variant("AQ_er_gate", {"ER_GATE": True}),   # EXP-054: EMA exit only while ER(30) >= 1/sqrt(30)
+       "AR": Variant("AR_resize_in_place", {"RESIZE_IN_PLACE": True}),   # EXP-055: follow F by scaling bands in place
+       "AS": Variant("AS_exit_check_hourly", {"EXIT_CHECK_HOURLY": True}),   # EXP-056: range-exit check every hour
+       "AT": Variant("AT_swapless_exit", {"SWAPLESS_EXIT": True})}   # EXP-057: range-exit rebuild from inventory, no swap
 # EXP-052: daily net return per $ of the USDC/USDT LP (samples/make_stable_lp_series.py), for USDC-quoted pools
 STABLE_LP_CSV = "../stable_lp_daily.csv"
 # EXP-053: median 14-day std of daily log returns, Binance closes 2019-01-01..2021-04-30 (fixed in the pre-registration)
@@ -170,7 +173,7 @@ VOL_TARGET_BY_ASSET = {"ETHUSDT": 0.04179, "BTCUSDT": 0.03219}
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL", "EXIT_CONFIRM", "F_WEEKLY", "F_FLOOR", "STABLE_LP", "VOL_TARGET", "ER_GATE"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL", "EXIT_CONFIRM", "F_WEEKLY", "F_FLOOR", "STABLE_LP", "VOL_TARGET", "ER_GATE", "RESIZE_IN_PLACE", "EXIT_CHECK_HOURLY", "SWAPLESS_EXIT"]}
 
 
 def sens_grid():
@@ -245,6 +248,12 @@ class Checked(V.RemixDaoDcaWeekStratStrategy):
         super().rescale_work(row_data)
         if len(self.export_actions) > n:
             self.charge(row_data, len(before), len(self.positions), *self.swapped_since(b0, q0))
+
+    def resize_work(self, row_data, target, current):   # EXP-055: partial burns / mints and one swap
+        n = len(self.positions)
+        b0, q0 = self.total_base_swap_fee, self.total_quote_swap_fee
+        super().resize_work(row_data, target, current)
+        self.charge(row_data, n if target < current else 0, n if target > current else 0, *self.swapped_since(b0, q0))
 
     def pause_ladder(self, row_data):   # EXP-016: burns, no swap
         super().pause_ladder(row_data)
@@ -379,7 +388,7 @@ def run_variant(args):
             "hedge_pnl": float(s.hedge_pnl), "hedge_funding": float(s.hedge_funding), "hedge_fees": float(s.hedge_fees),
             "hedge_trades": s.hedge_trades, "hedge_max_ratio": s.hedge_max_ratio,
             "hedge_min_cash": float(s.hedge_min_cash) if s.hedge_min_cash is not None else float("nan"),
-            "stable_income": float(s.total_interest) if V.STABLE_LP is not None else 0.0, "pauses": s.pauses, "pause_minutes": s.pause_minutes, "bear_short_days": s.bear_short_days, "recentres": s.recentre_count,
+            "stable_income": float(s.total_interest) if V.STABLE_LP is not None else 0.0, "pauses": s.pauses, "pause_minutes": s.pause_minutes, "bear_short_days": s.bear_short_days, "recentres": s.recentre_count, "resizes": s.resize_count, "swapless_exits": s.swapless_exits,
             "benchmark_return": float(m["benchmark_rate"]), "secs": round(time.time() - t0)}
 
 
