@@ -1,8 +1,8 @@
 # EXP-105: F capped at 50% while pool liquidity is crowded (v6.92)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-989
+- Status: dropped-at-dev
+- Pre-registration commit: 89f53b2 · Result commit: ______
 - Scope: /goal round 2 (Dino, 2026-10-05: "再繼續找30個"): beat v6 at the improvement level on ETH and WBTC, pure LP, time-split
   out-of-time holdout; idle-capital yield and swap routing excluded (rulings / assumption of 2026-10-05).
 
@@ -32,7 +32,26 @@ Pre-registered together with EXP-102..106 (same commit), run with `A` (v6) in `A
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ACOCPCQCRCS`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +8.1% | +0.4 |
+| 2023 | +32.2% | +20.0% | -12.2 |
+| 2024 | +36.4% | +46.9% | +10.5 |
+| 2025 | +16.3% | +16.0% | -0.3 |
+| 2026-01..09-17 | +18.7% | +18.7% | -0.0 |
+
+Wins 2/5, median -0.01 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +97.0% | 15.5% | -17.0% | 0.80 | 0.91 | $89.3k | $0.30k | 155 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +81.5% | 16.6% | -15.9% | 0.98 | 1.05 | $47.8k | $0.71k | 125 |
+
+Verdict: **dropped-at-dev** — ETH much safer and better (CAGR 15.5% vs 14.0%, Calmar 0.91 vs 0.61, max DD −17.0% vs −22.8%) and WBTC Calmar up (1.05 vs 0.97, max DD −15.9%), but WBTC CAGR 16.6% < 17.3% and ETH wins 2/5. Holdout not run. Reading (interpretation): capping F while liquidity is crowded cuts risk on both pools; on WBTC it also adds rebuilds (125 vs 106, measured) and cuts fees ($47.8k vs $61.7k), which costs return. Strongest risk reduction of the series; a candidate for the standalone level, not registered as such.
 
 ## Deviations
 

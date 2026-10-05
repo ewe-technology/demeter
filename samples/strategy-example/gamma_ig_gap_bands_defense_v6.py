@@ -333,6 +333,12 @@ INTRADAY_STOP = False
 # currentLiquidity) is above 1.5x its 90-day median (liquidity crowding dilutes the ladder's fee share). False = v6.
 # EXP-102..104 (fee-tier rules) need no switch here: v6_validate applies one of two switch sets by the pool's fee tier.
 CROWD_CAP = False
+# EXP-107..109 (v6.94..v6.96): FAIL_COOLDOWN: after an account exits (EMA exit or lower stop) within 10 days of its last refill
+# stage, its next stage 1 needs 6 confirmation closes instead of 3 (a refill that failed fast makes the next one wait longer).
+# CROWD_REFILL: no refill stage fires while the pool's liquidity is crowded (EXTRA "liq": 7-day mean > 1.5x the 90-day median,
+# EXP-105's definition); F is not capped. False = v6.
+FAIL_COOLDOWN = False
+CROWD_REFILL = False
 NO_WEEKEND_REFILL = False
 EXIT_VOL_CONFIRM = False
 FLOW_REFILL = False
@@ -353,13 +359,19 @@ class VirtualAccount:
     started: bool = False
     dvol_peak: float | None = None   # EXP-082: highest DVOL since the exit
     olow: float | None = None        # EXP-086: lowest close of the other asset since the exit
+    t: int = 0                       # EXP-107: days stepped
+    last_stage_t: int | None = None  # EXP-107: day of the last refill stage
+    slow: bool = False               # EXP-107: next stage 1 needs the longer confirmation
 
     def exit(self, close: float, wick: float | None = None) -> None:
+        if FAIL_COOLDOWN and self.last_stage_t is not None and self.t - self.last_stage_t <= 10:   # EXP-107
+            self.slow = True
         low = min(close, wick) if (LOW_FROM_WICK and wick is not None and wick == wick) else close   # EXP-098
         self.deployed, self.centre, self.low, self.stage, self.confirm = 0.0, None, low, 0, 0
         self.dvol_peak, self.olow = None, None
 
     def step(self, close: float, ema: float, trend_ok: bool = True, ctx: dict | None = None) -> None:
+        self.t += 1
         if not self.started:  # ponytail: engine starts at warm-up start, not 2017; 360 days settle it
             self.started, self.armed = True, close > ema
             if self.armed:
@@ -404,7 +416,7 @@ class VirtualAccount:
             # only an exit resets it
             nxt = self.stage + 1
             if nxt == 1:
-                advance = self.confirm >= REFILL_CONFIRM_DAYS
+                advance = self.confirm >= (2 * REFILL_CONFIRM_DAYS if (FAIL_COOLDOWN and self.slow) else REFILL_CONFIRM_DAYS)
             else:
                 advance = close >= self.low * REFILL_STAGES[nxt - 1][1]
             if FUND_REFILL and nxt == 1 and not advance and close >= self.low * REFILL_STAGES[0][1] \
@@ -417,6 +429,8 @@ class VirtualAccount:
             if advance and REFILL_NO_NEW_LOW and ctx.get("dlow", float("inf")) <= self.low:   # EXP-088
                 advance = False
             if advance and (UP_DAY_REFILL or STRONG_CLOSE_REFILL) and not ok_day:   # EXP-099 / 100
+                advance = False
+            if advance and CROWD_REFILL and ctx.get("crowd", 0.0) == 1.0:   # EXP-108 / 109
                 advance = False
             if advance and GAS_PANIC_HOLD and ctx.get("gas_panic", 0.0) == 1.0:   # EXP-092
                 advance = False
@@ -433,6 +447,9 @@ class VirtualAccount:
                 advance = not (ot == ot and self.olow is not None and ot < self.olow * REFILL_STAGES[0][1])
             if advance:
                 self.stage, self.deployed, self.centre = nxt, nxt / 4, close
+                self.last_stage_t = self.t   # EXP-107
+                if nxt == 1:
+                    self.slow = False
                 if REFILL_ONE_STAGE:   # EXP-081
                     self.stage, self.deployed = 4, 1.0
 
@@ -558,6 +575,9 @@ def daily_ema_frame(minute_price: pd.Series) -> pd.DataFrame:
         if "gas" in ex:   # EXP-092: panic day = median gas > 3x trailing 30-day median; hold 3 days (that day + 2)
             spike = (ex["gas"] > 3 * ex["gas"].rolling(30, min_periods=30).median().shift(1)).astype(float)
             ex["gas_panic"] = spike.rolling(3, min_periods=1).max()
+        if "liq" in ex:   # EXP-108 / 109: EXP-105's crowding flag
+            lq = ex["liq"]
+            ex["crowd"] = (lq.rolling(7, min_periods=7).mean() > 1.5 * lq.rolling(90, min_periods=90).median()).astype(float)
         if "stable" in ex:   # EXP-093
             ex["stable7"] = ex["stable"].pct_change(7)
         if "flow" in ex:   # EXP-096

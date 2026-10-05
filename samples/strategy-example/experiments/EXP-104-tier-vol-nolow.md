@@ -1,8 +1,8 @@
 # EXP-104: fee tier: volume-confirmed refill on 0.3%, no-new-low refill on 0.05% (v6.91)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-988
+- Status: holdout-pass
+- Pre-registration commit: 89f53b2 · Result commit: ______
 - Scope: /goal round 2 (Dino, 2026-10-05: "再繼續找30個"): beat v6 at the improvement level on ETH and WBTC, pure LP, time-split
   out-of-time holdout; idle-capital yield and swap routing excluded (rulings / assumption of 2026-10-05).
 
@@ -32,7 +32,35 @@ Pre-registered together with EXP-102..106 (same commit), run with `A` (v6) in `A
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ACOCPCQCRCS`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +8.1% | +0.5 |
+| 2023 | +32.2% | +38.9% | +6.7 |
+| 2024 | +36.4% | +35.8% | -0.5 |
+| 2025 | +16.3% | +16.7% | +0.5 |
+| 2026-01..09-17 | +18.7% | +19.1% | +0.4 |
+
+Wins 4/5, median +0.47 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +96.6% | 15.4% | -24.3% | 0.78 | 0.64 | $89.5k | $0.33k | 146 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +92.6% | 18.4% | -14.9% | 1.08 | 1.23 | $62.1k | $0.70k | 97 |
+
+Holdout, time-split out-of-time (`BINANCE_WARM=1`, run once):
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| H5 ETH 2021-05-06..12-31 v6 | +4.5% | 7.0% | -30.7% | 0.37 | 0.23 | $21.0k | $3.70k | 37 |
+| H5 ETH 2021-05-06..12-31 this | +13.5% | 21.4% | -27.0% | 0.71 | 0.79 | $25.0k | $3.34k | 33 |
+| H4 WBTC 2022-01-01..10-31 v6 | +2.4% | 2.9% | -12.5% | 0.24 | 0.23 | $14.3k | $0.04k | 17 |
+| H4 WBTC 2022-01-01..10-31 this | +6.9% | 8.4% | -11.1% | 0.47 | 0.75 | $14.4k | $0.01k | 16 |
+
+Verdict: **holdout-pass (improvement level), fee-tier rule** — dev (expected, components known): ETH = v6.75 (15.4%, Calmar 0.64), WBTC = EXP-087 (18.4% vs 17.3%, Calmar 1.23, max DD −14.9%), wins 4/5. Time-split holdout (run once): H5 ETH 2021 identical to EXP-088; **H4 WBTC 2022 total +6.9% vs +2.4%, CAGR 8.4% vs 2.9%, Calmar 0.75 vs 0.23, max DD −11.1% vs −12.5%**. The new evidence is the WBTC half: volume-confirmed refills (EXP-087), so far seen only at dev, win the 2022 bear window with 16 vs 17 rebuilds and mean F 0.595 vs 0.630 (fewer, later refills). Dev WBTC also has fewer rebuilds (97 vs 106). **Counts as an improvement-level pass only if Dino accepts fee-tier rules** (v6.75 on 0.05% pools, volume-confirmed refill on 0.3% pools).
 
 ## Deviations
 

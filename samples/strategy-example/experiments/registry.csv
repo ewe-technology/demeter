@@ -96,13 +96,18 @@ EXP-093,2026-10-05,refill stages only while stablecoin supply is growing (v6.80)
 EXP-094,2026-10-05,no refill stage on weekend closes (v6.81),QUAN-978,dropped-at-dev,-2.32,2/5,,,0.783,0.131,-0.249,893063f,7fe7966,EXP-094-no-weekend-refill.md,improvement
 EXP-095,2026-10-05,EMA exit only on pool volume above normal (v6.82),QUAN-979,dropped-at-dev,-2.63,0/5,,,0.647,0.112,-0.231,893063f,7fe7966,EXP-095-exit-vol-confirm.md,improvement
 EXP-096,2026-10-05,refill stages only while the pool's traders are net buyers (v6.83),QUAN-980,dropped-at-dev,-1.04,0/5,,,0.813,0.135,-0.244,893063f,7fe7966,EXP-096-flow-refill.md,improvement
-EXP-097,2026-10-05,EMA exit only on a full day below the EMA (v6.84),QUAN-981,dropped-at-dev,-0.45,1/5,,,0.422,0.078,-0.318,7fe7966,,EXP-097-exit-full-day.md,improvement
-EXP-098,2026-10-05,refill measured from the intraday low since the exit (v6.85),QUAN-982,dropped-at-dev,-12.74,2/5,,,0.215,0.042,-0.249,7fe7966,,EXP-098-low-from-wick.md,improvement
-EXP-099,2026-10-05,refill days must close above their open (v6.86),QUAN-983,dropped-at-dev,-1.42,2/5,,,0.992,0.158,-0.233,7fe7966,,EXP-099-up-day-refill.md,improvement
-EXP-100,2026-10-05,refill days must close in the upper half of their range (v6.87),QUAN-984,dropped-at-dev,-3.76,2/5,,,0.952,0.153,-0.229,7fe7966,,EXP-100-strong-close-refill.md,improvement
-EXP-101,2026-10-05,lower stop on the intraday low (v6.88),QUAN-985,dropped-at-dev,0.00,0/5,,,0.617,0.107,-0.243,7fe7966,,EXP-101-intraday-stop.md,improvement
-EXP-102,2026-10-05,refill pace by fee tier: wick-anchored on 0.3% and up-day on 0.05% (v6.89),,pre-registered,,,,,,,,,,EXP-102-tier-pace.md,improvement
-EXP-103,2026-10-05,fee tier: intraday stop on 0.3% and no-new-low refill on 0.05% (v6.90),,pre-registered,,,,,,,,,,EXP-103-tier-stop-nolow.md,improvement
-EXP-104,2026-10-05,fee tier: volume-confirmed refill on 0.3% and no-new-low refill on 0.05% (v6.91),,pre-registered,,,,,,,,,,EXP-104-tier-vol-nolow.md,improvement
-EXP-105,2026-10-05,F capped at 50% while pool liquidity is crowded (v6.92),,pre-registered,,,,,,,,,,EXP-105-crowd-cap.md,improvement
-EXP-106,2026-10-05,v6.75 plus two-day range-exit confirmation (v6.93),,pre-registered,,,,,,,,,,EXP-106-nolow-exit-confirm.md,improvement
+EXP-097,2026-10-05,EMA exit only on a full day below the EMA (v6.84),QUAN-981,dropped-at-dev,-0.45,1/5,,,0.422,0.078,-0.318,7fe7966,89f53b2,EXP-097-exit-full-day.md,improvement
+EXP-098,2026-10-05,refill measured from the intraday low since the exit (v6.85),QUAN-982,dropped-at-dev,-12.74,2/5,,,0.215,0.042,-0.249,7fe7966,89f53b2,EXP-098-low-from-wick.md,improvement
+EXP-099,2026-10-05,refill days must close above their open (v6.86),QUAN-983,dropped-at-dev,-1.42,2/5,,,0.992,0.158,-0.233,7fe7966,89f53b2,EXP-099-up-day-refill.md,improvement
+EXP-100,2026-10-05,refill days must close in the upper half of their range (v6.87),QUAN-984,dropped-at-dev,-3.76,2/5,,,0.952,0.153,-0.229,7fe7966,89f53b2,EXP-100-strong-close-refill.md,improvement
+EXP-101,2026-10-05,lower stop on the intraday low (v6.88),QUAN-985,dropped-at-dev,0.00,0/5,,,0.617,0.107,-0.243,7fe7966,89f53b2,EXP-101-intraday-stop.md,improvement
+EXP-102,2026-10-05,refill pace by fee tier: wick-anchored on 0.3% and up-day on 0.05% (v6.89),QUAN-986,dropped-at-dev,-1.42,2/5,,,0.992,0.158,-0.233,89f53b2,,EXP-102-tier-pace.md,improvement
+EXP-103,2026-10-05,fee tier: intraday stop on 0.3% and no-new-low refill on 0.05% (v6.90),QUAN-987,holdout-pass,0.47,4/5,2/2 windows (time-split),6.88,0.966,0.154,-0.243,89f53b2,,EXP-103-tier-stop-nolow.md,improvement
+EXP-104,2026-10-05,fee tier: volume-confirmed refill on 0.3% and no-new-low refill on 0.05% (v6.91),QUAN-988,holdout-pass,0.47,4/5,2/2 windows (time-split),6.78,0.966,0.154,-0.243,89f53b2,,EXP-104-tier-vol-nolow.md,improvement
+EXP-105,2026-10-05,F capped at 50% while pool liquidity is crowded (v6.92),QUAN-989,dropped-at-dev,-0.01,2/5,,,0.970,0.155,-0.170,89f53b2,,EXP-105-crowd-cap.md,improvement
+EXP-106,2026-10-05,v6.75 plus two-day range-exit confirmation (v6.93),QUAN-990,dropped-at-dev,-2.42,2/5,,,1.107,0.172,-0.212,89f53b2,,EXP-106-nolow-exit-confirm.md,improvement
+EXP-107,2026-10-05,longer stage-1 wait after a refill that failed fast (v6.94),,pre-registered,,,,,,,,,,EXP-107-fail-cooldown.md,improvement
+EXP-108,2026-10-05,no refill stage while pool liquidity is crowded (v6.95),,pre-registered,,,,,,,,,,EXP-108-crowd-refill.md,improvement
+EXP-109,2026-10-05,crowd-gated refill plus v6.75 (v6.96),,pre-registered,,,,,,,,,,EXP-109-crowd-refill-nolow.md,improvement
+EXP-110,2026-10-05,fee tier: wick-anchored refill on 0.3% and no-new-low refill on 0.05% (v6.97),,pre-registered,,,,,,,,,,EXP-110-tier-wick-nolow.md,improvement
+EXP-111,2026-10-05,fee tier: volume refill on 0.3% and v6.75 + exit confirmation on 0.05% (v6.98),,pre-registered,,,,,,,,,,EXP-111-tier-vol-nolowconfirm.md,improvement

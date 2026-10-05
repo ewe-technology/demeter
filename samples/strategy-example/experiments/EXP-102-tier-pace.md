@@ -1,8 +1,8 @@
 # EXP-102: refill pace by fee tier: wick-anchored on 0.3%, up-day on 0.05% (v6.89)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-986
+- Status: dropped-at-dev
+- Pre-registration commit: 89f53b2 · Result commit: ______
 - Scope: /goal round 2 (Dino, 2026-10-05: "再繼續找30個"): beat v6 at the improvement level on ETH and WBTC, pure LP, time-split
   out-of-time holdout; idle-capital yield and swap routing excluded (rulings / assumption of 2026-10-05).
 
@@ -32,7 +32,26 @@ Pre-registered together with EXP-102..106 (same commit), run with `A` (v6) in `A
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ACOCPCQCRCS`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +11.6% | +4.0 |
+| 2023 | +32.2% | +27.8% | -4.4 |
+| 2024 | +36.4% | +31.3% | -5.0 |
+| 2025 | +16.3% | +16.8% | +0.5 |
+| 2026-01..09-17 | +18.7% | +17.3% | -1.4 |
+
+Wins 2/5, median -1.42 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +99.2% | 15.8% | -23.3% | 0.82 | 0.68 | $85.2k | $0.33k | 124 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +94.6% | 18.7% | -14.2% | 1.04 | 1.32 | $64.9k | $0.68k | 114 |
+
+Verdict: **dropped-at-dev** — both CAGR and Calmar above v6 (ETH 15.8% vs 14.0%, Calmar 0.68; WBTC 18.7% vs 17.3%, Calmar 1.32, max DD −14.2%) but ETH yearly wins 2/5 < 3/5, so the pre-registered rule fails. Holdout not run. As registered, its components' dev results were known: the dev numbers reproduce EXP-099 (ETH) and EXP-098 (WBTC).
 
 ## Deviations
 
