@@ -3,6 +3,7 @@
 - Jira: QUAN-933
 - Status: holdout-pass
 - Pre-registration commit: 990a6ad · Result commit: d51d2e4
+- **Does not count for the /goal** (Dino, 2026-10-05): idle-capital yield is not a pure-LP strategy change. The verdict below stands under its own rule.
 - Scope: /goal 2026-10-05 "beat v6 at the improvement level, pure LP, time-split out-of-time holdout" (Dino).
 
 ## Hypothesis

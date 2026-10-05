@@ -16,9 +16,9 @@ EMA 90–120 four-account engine. Every change is an experiment, recorded in thr
   (weekly net value per series key). Only editors write; the page never needs republishing for new rows.
 
 State as of 2026-10-05: EXP-001..054 recorded (`registry.csv`). v6 baseline (EXP-000): ETH continuous 2022-01..2026-09 +85.4%, CAGR 14.0%,
-max DD −22.8%; WBTC continuous +85.6%. First improvement-level pass: v6.39 (EXP-052) LPs the idle reserve in the USDC/USDT pool ±0.1% and beats
-v6's CAGR and Calmar on both assets and on the time-split holdout (H5 ETH 2021, H4 WBTC 2022) — a better cash leg, not a better ladder: see
-`experiments/FINDINGS-2026-10-05.md`. The best standalone strategies are lower-risk versions of v6 (ETH share 50%, two-day exit confirmation):
+max DD −22.8%; WBTC continuous +85.6%. v6.39 (EXP-052) LPs the idle reserve in the USDC/USDT pool ±0.1% and beats v6 at the
+improvement level, but Dino ruled (2026-10-05) that idle-capital yield does not count as a pure-LP strategy: no improvement over v6's ladder yet
+(`experiments/FINDINGS-2026-10-05.md`). The best standalone strategies are lower-risk versions of v6 (ETH share 50%, two-day exit confirmation):
 `experiments/FINDINGS-2026-10-02.md`. Pure-LP scope (no perps, no lending) since 2026-10-01.
 Earlier trials (momentum width, fee compounding, EMA exit band) were discarded on purpose. Background: `V6_VALIDATION.md` (PBO 0.56, DSR < 0.95,
 regimes, capacity).
@@ -64,6 +64,8 @@ Dino names versions `v6.1`, `v6.2`, ...; each is one experiment `EXP-NNN` (next 
 
 - Pre-register (hypothesis, fixed constants, dev data, holdout, success rule) and commit **before** running.
 - Structural changes only; no parameter tuning inside v6's family (PBO 0.56).
+- Idle-capital yield (lending, a stablecoin LP or any other income on the (1 − F) reserve) is not a strategy change and never counts
+  as an improvement (Dino, 2026-10-05): an experiment must change how the ETH/BTC liquidity itself is placed, sized, rebuilt or timed.
 - Baseline v6 runs in the same invocation. Costs: pool fee + price impact; gas reported, not charged.
 - ETH/USDC 0.05% (2021-05..2026-09-17) and WBTC/USDC 0.3% (2021-11..2026-09-17) are in-sample now: every new
   pre-registration names a fresh holdout (another pool or chain, or data after 2026-09-17).
