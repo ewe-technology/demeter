@@ -1,8 +1,8 @@
 # EXP-087: refill stages only while pool volume confirms the rebound (v6.74)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-971
+- Status: dropped-at-dev
+- Pre-registration commit: 0f8cc14 · Result commit: ______
 - Scope: /goal round 2 (Dino, 2026-10-05: "再繼續找30個"): beat v6 at the improvement level on ETH and WBTC, pure LP, time-split
   out-of-time holdout; idle-capital yield and swap routing excluded (rulings / assumption of 2026-10-05).
 
@@ -32,8 +32,28 @@ Pre-registered together with EXP-087..091 (same commit), run with `A` (v6) in `A
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ABZCACBCCCD`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +5.4% | -2.2 |
+| 2023 | +32.2% | +33.3% | +1.1 |
+| 2024 | +36.4% | +34.0% | -2.4 |
+| 2025 | +16.3% | +9.1% | -7.2 |
+| 2026-01..09-17 | +18.7% | +12.1% | -6.6 |
+
+Wins 1/5, median -2.41 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +66.3% | 11.4% | -21.5% | 0.64 | 0.53 | $73.7k | $0.27k | 131 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +92.6% | 18.4% | -14.9% | 1.08 | 1.23 | $62.1k | $0.70k | 97 |
+
+Verdict: **dropped-at-dev** — WBTC improves (CAGR 18.4% vs 17.3%, Calmar 1.23 vs 0.97, max DD −14.9% vs −17.8%) but ETH falls (CAGR 11.4% vs 14.0%, Calmar 0.53), wins 1/5. Holdout not run. Reading: on the 0.3% WBTC pool a thin-volume rebound earns too little to pay its rebuild, so waiting for volume helps; on the 0.05% ETH pool the gate delays refills into the rebounds that carry v6's edge. Same ETH/WBTC split as round 1's recentring results.
 
 ## Deviations
 
 - Ideas 5, 7, 8, 9 and 15 of the 2026-10-05 literature pass (fourth agent run). Designed after EXP-082..086's dev results (all dropped: non-price refill gates help one asset and hurt the other). Smoke test WBTC 2023-09-01..10-31 (`BZ,CA,CB,CC,CD`, no v6 run): all execute, totals differ between variants.
+- While the dev run was in progress the EXP-092..096 code (patch19) was written into the strategy files and reverted before the 2025 / 2026 segments started (they ran on commit 0f8cc14's code).

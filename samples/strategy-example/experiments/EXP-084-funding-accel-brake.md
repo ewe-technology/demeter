@@ -2,7 +2,7 @@
 
 - Jira: QUAN-968
 - Status: dropped-at-dev
-- Pre-registration commit: 6a6721b · Result commit: ______
+- Pre-registration commit: 6a6721b · Result commit: 0f8cc14
 - Scope: /goal round 2 (Dino, 2026-10-05: "再繼續找30個"): beat v6 at the improvement level on ETH and WBTC, pure LP, time-split
   out-of-time holdout; idle-capital yield and swap routing excluded (rulings / assumption of 2026-10-05).
 
