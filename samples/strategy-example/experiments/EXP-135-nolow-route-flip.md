@@ -1,8 +1,8 @@
 # EXP-135: v6.75 + routing + rebuild when the ETH share flips (one rule for both pools) (v6.121)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-1020
+- Status: dropped-at-dev
+- Pre-registration commit: 2263c72 · Result commit: ______
 - Scope: /goal round 2 (Dino, 2026-10-05: "再繼續找30個"): beat v6 at the improvement level on ETH and WBTC, pure LP, time-split
   out-of-time holdout; idle-capital yield and swap routing excluded (rulings / assumption of 2026-10-05).
 
@@ -32,7 +32,26 @@ Pre-registered together with EXP-134..138 (same commit), run with `A` (v6) in `A
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ADVDWDXDYDZ`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +8.7% | +1.1 |
+| 2023 | +32.2% | +28.3% | -3.9 |
+| 2024 | +36.4% | +35.8% | -0.5 |
+| 2025 | +16.3% | +16.9% | +0.6 |
+| 2026-01..09-17 | +18.7% | +17.5% | -1.2 |
+
+Wins 2/5, median -0.55 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +95.5% | 15.3% | -24.5% | 0.78 | 0.63 | $89.2k | $0.35k | 171 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +93.1% | 18.5% | -16.7% | 1.06 | 1.11 | $60.1k | $-5.19k | 118 |
+
+Verdict: **dropped-at-dev** — ETH CAGR 15.3%, Calmar 0.63, but yearly wins 2/5 (the share-flip rebuild shifts ETH's gain between years); WBTC 18.5%, Calmar 1.11 (≈ EXP-123). Holdout not run.
 
 ## Deviations
 

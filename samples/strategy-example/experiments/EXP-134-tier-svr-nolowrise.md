@@ -1,8 +1,8 @@
 # EXP-134: fee tier: EXP-124's WBTC half, v6.75 + rebuild on every F rise on 0.05% (v6.120)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-1019
+- Status: holdout-pass
+- Pre-registration commit: 2263c72 · Result commit: ______
 - Scope: /goal round 2 (Dino, 2026-10-05: "再繼續找30個"): beat v6 at the improvement level on ETH and WBTC, pure LP, time-split
   out-of-time holdout; idle-capital yield and swap routing excluded (rulings / assumption of 2026-10-05).
 
@@ -32,7 +32,35 @@ Pre-registered together with EXP-134..138 (same commit), run with `A` (v6) in `A
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ADVDWDXDYDZ`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +10.2% | +2.5 |
+| 2023 | +32.2% | +38.9% | +6.7 |
+| 2024 | +36.4% | +38.0% | +1.6 |
+| 2025 | +16.3% | +17.7% | +1.4 |
+| 2026-01..09-17 | +18.7% | +18.6% | -0.1 |
+
+Wins 4/5, median +1.60 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +104.5% | 16.4% | -24.5% | 0.82 | 0.67 | $91.2k | $0.36k | 156 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +109.6% | 21.0% | -13.8% | 1.22 | 1.52 | $64.4k | $-5.05k | 97 |
+
+Holdout, time-split out-of-time (`BINANCE_WARM=1`, run once):
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| H5 ETH 2021-05-06..12-31 v6 | +4.5% | 7.0% | -30.7% | 0.37 | 0.23 | $21.0k | $3.70k | 37 |
+| H5 ETH 2021-05-06..12-31 this | +13.6% | 21.4% | -27.0% | 0.71 | 0.79 | $25.0k | $3.34k | 35 |
+| H4 WBTC 2022-01-01..10-31 v6 | +2.4% | 2.9% | -12.5% | 0.24 | 0.23 | $14.3k | $0.04k | 17 |
+| H4 WBTC 2022-01-01..10-31 this | +9.6% | 11.7% | -11.1% | 0.61 | 1.06 | $14.4k | $-0.45k | 16 |
+
+Verdict: **holdout-pass (improvement level), fee-tier rule** — dev: ETH CAGR 16.4% vs 14.0% (v6.75 alone 15.4%), Calmar 0.67, max DD −24.5%, wins 4/5; WBTC = EXP-124 (21.0%, Calmar 1.52). Holdout: H5 ETH 2021 total +13.6% vs +4.5% (v6.75 alone +13.5%); H4 WBTC = EXP-124 (+9.6%). The rise rebuild adds 1.0 pt CAGR to v6.75 at dev but only +0.1 pt total on H5: the pass rests on known halves; the new rule's own out-of-time evidence is negligible.
 
 ## Deviations
 

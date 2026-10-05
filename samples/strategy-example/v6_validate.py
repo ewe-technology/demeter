@@ -296,7 +296,14 @@ OPT = {"A": Variant("A_v6"),
        "DX": Variant("DX_tier_svr_nolowflip", {"TIER": {"hi": HI_SVR, "lo": {"REFILL_NO_NEW_LOW": True, "SHARE_FLIP_REBUILD": True}}}),   # EXP-136
        "DY": Variant("DY_nolow_route_rise", {"REFILL_NO_NEW_LOW": True, "SWAP_ROUTE": "pool", "REBUILD_ON_RISE": True}),   # EXP-137
        "DZ": Variant("DZ_tier_svr_nolowriseflip", {"TIER": {"hi": HI_SVR, "lo": {"REFILL_NO_NEW_LOW": True, "REBUILD_ON_RISE": True,
-                                                                                 "SHARE_FLIP_REBUILD": True}}})}   # EXP-138
+                                                                                 "SHARE_FLIP_REBUILD": True}}}),   # EXP-138
+       # EXP-139..143: building on EXP-130's ETH half (v6.75 + cross-asset refill)
+       "EA": Variant("EA_tier_svr_nlxrise", {"TIER": {"hi": HI_SVR, "lo": {"REFILL_NO_NEW_LOW": True, "REFILL_GATE": "xasset", "EXTRA": "pool", "REBUILD_ON_RISE": True}}}),   # EXP-139
+       "EB": Variant("EB_tier_svr_nlxmacro", {"TIER": {"hi": HI_SVR, "lo": {"REFILL_NO_NEW_LOW": True, "REFILL_GATE": "xasset", "EXTRA": "pool", "MACRO_EVENTS": "csv", "MACRO_RESTORE": True}}}),   # EXP-140
+       "EC": Variant("EC_tier_svrrise_nlx", {"TIER": {"hi": {**HI_SVR, "REBUILD_ON_RISE": True}, "lo": {"REFILL_NO_NEW_LOW": True, "REFILL_GATE": "xasset", "EXTRA": "pool"}}}),   # EXP-141
+       "ED": Variant("ED_nolow_route_macro_rise", {"REFILL_NO_NEW_LOW": True, "SWAP_ROUTE": "pool", "MACRO_EVENTS": "csv", "MACRO_RESTORE": True,
+                                                   "REBUILD_ON_RISE": True}),   # EXP-142: one rule for both pools
+       "EE": Variant("EE_tier_svr_nlxconfirm", {"TIER": {"hi": HI_SVR, "lo": {"REFILL_NO_NEW_LOW": True, "REFILL_GATE": "xasset", "EXTRA": "pool", "EXIT_CONFIRM": 2}}})}   # EXP-143
 # EXP-082..: daily non-price inputs (samples/fetch_deribit_dvol.py, fetch_binance_funding.py, fetch_binance_daily.py)
 DVOL_CSV = "../deribit_dvol_daily.csv"
 FUND_LONG_CSV = {"ETHUSDT": "../binance_funding_ETHUSDT_long.csv", "BTCUSDT": "../binance_funding_BTCUSDT_long.csv"}
