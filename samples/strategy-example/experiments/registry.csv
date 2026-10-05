@@ -132,7 +132,7 @@ EXP-129,2026-10-06,fee tier: stop + volume + routing on 0.3% and v6.75 + breadth
 EXP-130,2026-10-06,fee tier: stop + volume + routing on 0.3% and v6.75 + cross-asset refill on 0.05% (v6.116),QUAN-1015,holdout-pass,1.04,4/5,2/2 windows (time-split),9.37,1.086,0.169,-0.247,88d31f3,,EXP-130-tier-svr-nolowxasset.md,improvement
 EXP-131,2026-10-06,fee tier: stop + volume + routing on 0.3% and v6.75 + funding cap on 0.05% (v6.117),QUAN-1016,holdout-fail,0.47,4/5,1/2 windows (time-split),1.89,1.044,0.164,-0.209,88d31f3,,EXP-131-tier-svr-nolowfundcap.md,improvement
 EXP-132,2026-10-06,fee tier: stop + volume + routing on 0.3% and v6.75 + strong-close refill on 0.05% (v6.118),QUAN-1017,dropped-at-dev,-3.76,2/5,,,0.888,0.144,-0.220,88d31f3,,EXP-132-tier-svr-nolowstrong.md,improvement
-EXP-133,2026-10-06,idle reserve held as a basis trade (spot + short USDT-M perp) earning funding (v6.119),QUAN-1018,dropped-at-dev,-0.03,2/5,,,0.834,0.138,-0.230,636e7d0,,EXP-133-basis-reserve.md,standalone
+EXP-133,2026-10-06,idle reserve held as a basis trade (spot + short USDT-M perp) earning funding (v6.119),QUAN-1018,dropped-at-dev,-0.03,2/5,,,0.834,0.138,-0.230,636e7d0,27a1660,EXP-133-basis-reserve.md,standalone
 EXP-134,2026-10-06,fee tier: stop + volume + routing on 0.3% and v6.75 + rebuild on every F rise on 0.05% (v6.120),,pre-registered,,,,,,,,,,EXP-134-tier-svr-nolowrise.md,improvement
 EXP-135,2026-10-06,v6.75 + routing + rebuild when the ETH share flips on every pool (v6.121),,pre-registered,,,,,,,,,,EXP-135-nolow-route-flip.md,improvement
 EXP-136,2026-10-06,fee tier: stop + volume + routing on 0.3% and v6.75 + share-flip rebuild on 0.05% (v6.122),,pre-registered,,,,,,,,,,EXP-136-tier-svr-nolowflip.md,improvement

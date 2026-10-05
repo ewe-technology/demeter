@@ -5,7 +5,7 @@ comparison with v6, v6.4 (Aave) and v6.39 (stable LP) is reported, not judged.
 
 - Jira: QUAN-1018
 - Status: dropped-at-dev
-- Pre-registration commit: 636e7d0 · Result commit: see registry
+- Pre-registration commit: 636e7d0 · Result commit: 27a1660
 - Scope: Dino, 2026-10-06: "不管，有沒有其他方向" then "做 basis trade" — the pure-LP scope (no perps) is waived for this
   experiment. Number EXP-133 / v6.119 and OPT key `DE` reserved with the goal4 session.
 
