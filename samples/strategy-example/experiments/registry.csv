@@ -81,3 +81,8 @@ EXP-078,2026-10-05,F = the highest account's deployed fraction (aggregation abla
 EXP-079,2026-10-05,full ladder while any account is deployed (binarisation ablation) (v6.66),QUAN-962,dropped-at-dev,-7.92,2/5,,,0.298,0.057,-0.243,d33e312,5baddb3,EXP-079-f-any.md,improvement
 EXP-080,2026-10-05,full ladder only while every account is fully deployed (binarisation ablation) (v6.67),QUAN-963,dropped-at-dev,-4.74,1/5,,,0.867,0.142,-0.247,d33e312,5baddb3,EXP-080-f-all.md,improvement
 EXP-081,2026-10-05,the first refill stage deploys the account fully (staging ablation) (v6.68),QUAN-964,dropped-at-dev,1.58,3/5,,,0.424,0.078,-0.300,d33e312,5baddb3,EXP-081-refill-one-stage.md,improvement
+EXP-082,2026-10-05,refill stages only while implied volatility (DVOL) is falling (v6.69),,pre-registered,,,,,,,,,,EXP-082-dvol-falling-refill.md,improvement
+EXP-083,2026-10-05,negative funding waives the 3-day hold of the first refill stage (v6.70),,pre-registered,,,,,,,,,,EXP-083-funding-accel-refill.md,improvement
+EXP-084,2026-10-05,negative-funding accelerator plus hot-funding brake on later stages (v6.71),,pre-registered,,,,,,,,,,EXP-084-funding-accel-brake.md,improvement
+EXP-085,2026-10-05,F capped at 50% while funding is overheated (v6.72),,pre-registered,,,,,,,,,,EXP-085-funding-cap.md,improvement
+EXP-086,2026-10-05,refill stages need the other asset's rebound too (v6.73),,pre-registered,,,,,,,,,,EXP-086-xasset-refill.md,improvement

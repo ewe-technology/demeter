@@ -286,6 +286,20 @@ NO_EXIT_REBUILD: str | bool = False
 F_AGG = "mean"
 F_BINARY: str | None = None
 REFILL_ONE_STAGE = False
+# EXP-082..086 (v6.69..v6.73): non-price information for the refill / F, from EXTRA (a daily frame the caller builds, index =
+# UTC day): "dvol" (Deribit DVOL of the pool's asset), "fund" (Binance perp funding of the asset, daily mean of the 8h rates),
+# "other" (Binance daily close of the other asset: BTC for ETH pools, ETH for BTC pools). Days without data never block.
+# REFILL_GATE "dvol_turn": a refill stage fires only while DVOL is falling: its 3-day mean is below the 3-day mean of 3 days earlier
+# (the refill's own 3-day confirmation length);
+# "xasset": only if the other asset closes >= 1.05 x its lowest close since the exit.
+# FUND_REFILL "accel": stage 1 fires without the 3-day hold when the 7-day mean funding is < 0 (and close >= 1.05 x low);
+# "accel_brake": also, stages 2-4 wait while the 3-day mean funding is > FUND_HOT (3 x Binance's 0.01% base rate).
+# FUND_CAP: F <= 0.5 while the 3-day mean funding is > FUND_HOT. None / False = v6.
+EXTRA: pd.DataFrame | None = None
+REFILL_GATE: str | None = None
+FUND_REFILL: str | None = None
+FUND_CAP = False
+FUND_HOT = 0.0003
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -301,11 +315,14 @@ class VirtualAccount:
     stage: int = 0
     confirm: int = 0
     started: bool = False
+    dvol_peak: float | None = None   # EXP-082: highest DVOL since the exit
+    olow: float | None = None        # EXP-086: lowest close of the other asset since the exit
 
     def exit(self, close: float) -> None:
         self.deployed, self.centre, self.low, self.stage, self.confirm = 0.0, None, close, 0, 0
+        self.dvol_peak, self.olow = None, None
 
-    def step(self, close: float, ema: float, trend_ok: bool = True) -> None:
+    def step(self, close: float, ema: float, trend_ok: bool = True, ctx: dict | None = None) -> None:
         if not self.started:  # ponytail: engine starts at warm-up start, not 2017; 360 days settle it
             self.started, self.armed = True, close > ema
             if self.armed:
@@ -325,6 +342,12 @@ class VirtualAccount:
         elif not NO_UPPER_REBUILD and self.deployed > 0 and close > self.centre * UPPER_REBUILD: # 4 upper rebuild (EXP-069 drops it)
             self.centre = close
         if self.deployed < 1 and not REARM_FULL and (self.armed or not REFILL_ARMED_ONLY):   # 5 staged refill (EXP-067 / 068)
+            ctx = ctx or {}
+            dv, ot = ctx.get("dvol", float("nan")), ctx.get("other", float("nan"))
+            if dv == dv:   # EXP-082: track the DVOL peak since the exit
+                self.dvol_peak = dv if self.dvol_peak is None else max(self.dvol_peak, dv)
+            if ot == ot:   # EXP-086: track the other asset's low since the exit
+                self.olow = ot if self.olow is None else min(self.olow, ot)
             self.low = min(self.low, close)
             self.confirm = self.confirm + 1 if close >= self.low * REFILL_STAGES[0][1] else 0
             # at most one stage per day (spec author's clarification); a pullback keeps the stage,
@@ -334,6 +357,16 @@ class VirtualAccount:
                 advance = self.confirm >= REFILL_CONFIRM_DAYS
             else:
                 advance = close >= self.low * REFILL_STAGES[nxt - 1][1]
+            if FUND_REFILL and nxt == 1 and not advance and close >= self.low * REFILL_STAGES[0][1] \
+                    and ctx.get("fund7", 0.0) < 0:   # EXP-083 / 084: shorts crowded -> no 3-day hold
+                advance = True
+            if FUND_REFILL == "accel_brake" and nxt >= 2 and ctx.get("fund3", 0.0) > FUND_HOT:   # EXP-084
+                advance = False
+            if advance and REFILL_GATE == "dvol_turn":   # EXP-082: implied vol must be falling
+                d3, d3p = ctx.get("dvol3", float("nan")), ctx.get("dvol3_prev", float("nan"))
+                advance = not (d3 == d3 and d3p == d3p and d3 >= d3p)
+            if advance and REFILL_GATE == "xasset":   # EXP-086
+                advance = not (ot == ot and self.olow is not None and ot < self.olow * REFILL_STAGES[0][1])
             if advance:
                 self.stage, self.deployed, self.centre = nxt, nxt / 4, close
                 if REFILL_ONE_STAGE:   # EXP-081
@@ -444,9 +477,19 @@ def daily_ema_frame(minute_price: pd.Series) -> pd.DataFrame:
     trend_ok = (er >= 1 / np.sqrt(ER_DAYS)) if ER_GATE else pd.Series(True, index=close.index)
     fractions = []
     states = {f"{x}{j}": [] for j in range(len(EMA_SPANS)) for x in ("dep", "ctr")}   # EXP-063
+    ex = None
+    if EXTRA is not None:   # EXP-082..086: daily context, aligned to the closes
+        ex = EXTRA.reindex(close.index)
+        if "dvol" in ex:
+            ex["dvol3"] = ex["dvol"].rolling(3, min_periods=1).mean()
+            ex["dvol3_prev"] = ex["dvol3"].shift(3)
+        if "fund" in ex:
+            ex["fund3"] = ex["fund"].rolling(3, min_periods=1).mean()
+            ex["fund7"] = ex["fund"].rolling(7, min_periods=1).mean()
     for day, c in close.items():
+        ctx = {k: float(v) for k, v in ex.loc[day].items()} if ex is not None else None
         for k, a in accounts:
-            a.step(float(c), float(lines[k][a.span][day]), bool(trend_ok[day]) if k == "ema" else True)
+            a.step(float(c), float(lines[k][a.span][day]), bool(trend_ok[day]) if k == "ema" else True, ctx)
         deps = [a.deployed for _, a in accounts]
         f = min(deps) if F_AGG == "min" else max(deps) if F_AGG == "max" else sum(deps) / len(deps)   # EXP-077 / 078
         if F_BINARY == "any":   # EXP-079
@@ -461,6 +504,9 @@ def daily_ema_frame(minute_price: pd.Series) -> pd.DataFrame:
     if F_WEEKLY:   # EXP-045: the Sunday value, held until the next Sunday
         fs = pd.Series(fractions, index=close.index)
         fractions = fs.where(fs.index.dayofweek == 6).ffill().bfill().tolist()
+    if FUND_CAP and ex is not None and "fund3" in ex:   # EXP-085
+        hot = (ex["fund3"] > FUND_HOT).fillna(False).tolist()
+        fractions = [min(f, 0.5) if h else f for f, h in zip(fractions, hot)]
     if F_FLOOR > 0:   # EXP-047
         fractions = [max(f, F_FLOOR) for f in fractions]
     if VOL_TARGET is not None:   # EXP-053: downside-only volatility targeting of F

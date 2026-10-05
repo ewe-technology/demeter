@@ -36,6 +36,8 @@ All of these are **in-sample** for v6 research now: a new pre-registration needs
 | `gas_ethereum_hourly.csv`, `data/gas_price.csv` | Ethereum gas price (gas is reported, not charged) | see file |
 | `eth_usd_hourly.csv` | ETH/USD hourly, used for gas in USD and EMA warm-up | 2021-05-06 to 2026-09-17 |
 | `stable_lp_daily.csv` | EXP-052: daily net return of $1 LP'd in USDC/USDT ±0.1% (`make_stable_lp_series.py`) | 2021-05-05 to 2026-09-17 |
+| `deribit_dvol_daily.csv` | Deribit DVOL (30-day implied vol index), ETH and BTC, daily close (`fetch_deribit_dvol.py`); EXP-082 | 2021-03-24 to 2026-10-01 |
+| `binance_funding_{ETHUSDT,BTCUSDT}_long.csv` | USDT-M perp funding, 8h, longer history for the time-split holdouts; EXP-083..085 | 2020-06-01 to 2026-09-30 |
 | `binance_daily_closes.csv` | Binance daily closes | 2019-01-01 to 2026-10-01 |
 | `binance_funding_{ETHUSDT,BTCUSDT,LINKUSDT,UNIUSDT}.csv` | USDT-M perp funding, 8h | from 2021-12-01 to 2026-09-17 |
 | `binance_funding_{LINKETH,UNIETH}_synth.csv` | synthetic ALT/ETH funding (short ALT + long ETH) | see file |

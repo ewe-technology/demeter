@@ -189,7 +189,26 @@ OPT = {"A": Variant("A_v6"),
        "BQ": Variant("BQ_f_max", {"F_AGG": "max"}),   # EXP-078: F = highest account
        "BR": Variant("BR_f_any", {"F_BINARY": "any"}),   # EXP-079: full ladder while any account is deployed
        "BS": Variant("BS_f_all", {"F_BINARY": "all"}),   # EXP-080: full ladder only while all accounts are fully deployed
-       "BT": Variant("BT_refill_one_stage", {"REFILL_ONE_STAGE": True})}   # EXP-081: first refill stage deploys fully
+       "BT": Variant("BT_refill_one_stage", {"REFILL_ONE_STAGE": True}),   # EXP-081: first refill stage deploys fully
+       "BU": Variant("BU_dvol_turn", {"REFILL_GATE": "dvol_turn", "EXTRA": "pool"}),   # EXP-082: refill after the DVOL peak
+       "BV": Variant("BV_fund_accel", {"FUND_REFILL": "accel", "EXTRA": "pool"}),   # EXP-083: negative funding waives the hold
+       "BW": Variant("BW_fund_accel_brake", {"FUND_REFILL": "accel_brake", "EXTRA": "pool"}),   # EXP-084: + hot funding brake
+       "BX": Variant("BX_fund_cap", {"FUND_CAP": True, "EXTRA": "pool"}),   # EXP-085: F <= 0.5 while funding is hot
+       "BY": Variant("BY_xasset_refill", {"REFILL_GATE": "xasset", "EXTRA": "pool"})}   # EXP-086: other asset must rebound too
+# EXP-082..: daily non-price inputs (samples/fetch_deribit_dvol.py, fetch_binance_funding.py, fetch_binance_daily.py)
+DVOL_CSV = "../deribit_dvol_daily.csv"
+FUND_LONG_CSV = {"ETHUSDT": "../binance_funding_ETHUSDT_long.csv", "BTCUSDT": "../binance_funding_BTCUSDT_long.csv"}
+
+
+def extra_frame() -> pd.DataFrame:
+    """EXP-082..: daily dvol / fund / other for the pool's asset (ETH or BTC by LONG_CLOSE_COL)."""
+    sym = LONG_CLOSE_COL[POOL]
+    asset, other = ("ETH", "BTCUSDT") if sym == "ETHUSDT" else ("BTC", "ETHUSDT")
+    dvol = pd.read_csv(DVOL_CSV, parse_dates=["date"]).set_index("date")[asset]
+    f = pd.read_csv(FUND_LONG_CSV[sym], parse_dates=["timestamp"]).set_index("timestamp")["rate"]
+    fund = f.resample("1D").mean()
+    oth = pd.read_csv(LONG_CLOSE_CSV, parse_dates=["date"]).set_index("date")[other]
+    return pd.DataFrame({"dvol": dvol, "fund": fund, "other": oth})
 MACRO_CSV = "../macro_events_utc.csv"   # EXP-059
 # EXP-052: daily net return per $ of the USDC/USDT LP (samples/make_stable_lp_series.py), for USDC-quoted pools
 STABLE_LP_CSV = "../stable_lp_daily.csv"
@@ -198,7 +217,7 @@ VOL_TARGET_BY_ASSET = {"ETHUSDT": 0.04179, "BTCUSDT": 0.03219}
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL", "EXIT_CONFIRM", "F_WEEKLY", "F_FLOOR", "STABLE_LP", "VOL_TARGET", "ER_GATE", "RESIZE_IN_PLACE", "EXIT_CHECK_HOURLY", "SWAPLESS_EXIT", "RESIZE_NEAR_CENTRE", "MACRO_EVENTS", "MACRO_RESTORE", "TRANCHE_ADD", "FOLLOW_ASYM", "ACCOUNT_TRANCHES", "CPPI_FLOOR", "WEEKLY_RECENTRE", "NO_LOWER_STOP", "REFILL_ARMED_ONLY", "REARM_FULL", "NO_UPPER_REBUILD", "WEEKLY_RECENTRE_UP", "RESIZE_BELOW_EMA", "SHARE_BELOW_EMA", "NO_EXIT_REBUILD", "F_AGG", "F_BINARY", "REFILL_ONE_STAGE"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL", "EXIT_CONFIRM", "F_WEEKLY", "F_FLOOR", "STABLE_LP", "VOL_TARGET", "ER_GATE", "RESIZE_IN_PLACE", "EXIT_CHECK_HOURLY", "SWAPLESS_EXIT", "RESIZE_NEAR_CENTRE", "MACRO_EVENTS", "MACRO_RESTORE", "TRANCHE_ADD", "FOLLOW_ASYM", "ACCOUNT_TRANCHES", "CPPI_FLOOR", "WEEKLY_RECENTRE", "NO_LOWER_STOP", "REFILL_ARMED_ONLY", "REARM_FULL", "NO_UPPER_REBUILD", "WEEKLY_RECENTRE_UP", "RESIZE_BELOW_EMA", "SHARE_BELOW_EMA", "NO_EXIT_REBUILD", "F_AGG", "F_BINARY", "REFILL_ONE_STAGE", "EXTRA", "REFILL_GATE", "FUND_REFILL", "FUND_CAP"]}
 
 
 def sens_grid():
@@ -392,6 +411,8 @@ def run_variant(args):
     for k, v in {**ENGINE_DEFAULTS, **variant.engine}.items():
         if k == "CASH_APR" and v == "pool":
             v = pd.read_csv(RATE_CSV[POOL], parse_dates=["date"]).set_index("date")["apr"].sort_index()
+        if k == "EXTRA" and v == "pool":
+            v = extra_frame()
         if k == "MACRO_EVENTS" and v == "csv":
             v = sorted(pd.read_csv(MACRO_CSV, parse_dates=["release_utc"])["release_utc"].dt.to_pydatetime().tolist())
         if k == "STABLE_LP" and v == "pool":
