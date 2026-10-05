@@ -220,6 +220,25 @@ LP 的收入是手續費，成本是無常損失，而無常損失跟波動率�
 
 依照事先定好的條件，**這個方向不往下設計策略**。ETH/USDC 和 WBTC/WETH 只用來換算 BTC 價格和換幣，不做 LP。
 
+## 9. 同一段期間：同價資產 LP 對上舊的 LP 版（`lp_versions_window.py`）
+
+舊 LP 版（ETH/USDC + WBTC/WETH）用 `tri_btc_eth_gate.py` 在 D 版的期間 2024-01-01 ~ 2025-11-09 重跑。濾網都是 BTC EMA100，都扣主網 gas、資金 $100k。
+
+| 策略 | 濾網開啟時放哪裡 | 總報酬 | 年化 | 最大回撤 |
+|---|---|---|---|---|
+| D 版 | WBTC/cbBTC LP ±0.5% + wstETH/WETH LP ±0.5%，出場停泊 | **+115.3%** | 約 +51% | −34.5% |
+| C 版 | BTC 現貨 + wstETH，出場停泊 | +108.0% | 約 +48% | −35.7% |
+| 舊 LP 版：follow + 停泊 + 遲滯 1% | ETH/USDC + WBTC/WETH，依 ETH/BTC 強弱 75/25 或 25/75 | +75.8% | 約 +35% | −31.1% |
+| 舊 LP 版：follow | 同上，不停泊 | +70.6% | 約 +33% | −34.8% |
+| 舊 LP 版：固定 50/50 + 停泊 | ETH/USDC 50% + WBTC/WETH 50% | +33.8% | 約 +17% | −30.4% |
+| 舊 LP 版：固定 50/50 | 同上，不停泊 | +33.6% | 約 +17% | −30.4% |
+| 持有 50% BTC + 50% ETH | — | +102.5% | 約 +46% | −44.6% |
+
+- D 版比舊 LP 版最好的設定多約 40 pt，C 版多約 32 pt。C 版沒有手續費高估的問題，所以「不再用 ETH/USDC、WBTC/WETH 做 LP」這個結論不依賴 D 版的數字。
+- 舊 LP 版的回撤比較小，是因為曝險比較低：ETH/USDC ±20% 的部位大約一半是 USDC，濾網開啟時加密資產只佔 60–86%；C、D 版接近 100%。
+- 成本算法不完全相同：舊 LP 版換幣走池子付 0.05% 加 gas；C、D 版現貨交易每筆 10 bps，鏈上部位另計 gas。
+- 舊 LP 版這段的結果和前次起始月份測試一致：前次 `follow_park_band1` 從 2024-01 起跑到 2025-12-31 是 +75.9%。
+
 ## 附錄：如何重現
 
 在 backtest 機器的 `~/demeter-joy/samples/strategy-example` 下執行（需要先有 `spot_btc_eth_gate.py` 的價格快取）：
@@ -232,6 +251,7 @@ PYTHONPATH=../.. python yield_layer.py --sleeves --minute   # 第 3.1 節，約 
 PYTHONPATH=../.. python yield_layer.py --combine      # 第 4 節
 PYTHONPATH=../.. python each_gate_check.py            # 第 5 節
 PYTHONPATH=../.. python vol_lp_check.py               # 第 8 節，約 3 分鐘
+PYTHONPATH=../.. python lp_versions_window.py         # 第 9 節，約 5 分鐘
 ```
 
 結果檔：`result/yield-layer/`（`data_quality.csv`、`sleeves*.csv`、`sleeve_*.csv`、`events_*.csv`、`combine.csv`）和 `result/basket/2a_*.csv`。
