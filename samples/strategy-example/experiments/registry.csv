@@ -111,3 +111,8 @@ EXP-108,2026-10-05,no refill stage while pool liquidity is crowded (v6.95),QUAN-
 EXP-109,2026-10-05,crowd-gated refill plus v6.75 (v6.96),QUAN-993,holdout-fail,3.07,4/5,1/2 windows (time-split),-1.45,1.142,0.176,-0.241,26a4143,2458528,EXP-109-crowd-refill-nolow.md,improvement
 EXP-110,2026-10-05,fee tier: wick-anchored refill on 0.3% and no-new-low refill on 0.05% (v6.97),QUAN-994,holdout-fail,0.47,4/5,1/2 windows (time-split),-2.19,0.966,0.154,-0.243,26a4143,2458528,EXP-110-tier-wick-nolow.md,improvement
 EXP-111,2026-10-05,fee tier: volume refill on 0.3% and v6.75 + exit confirmation on 0.05% (v6.98),QUAN-995,dropped-at-dev,-2.42,2/5,,,1.107,0.172,-0.212,26a4143,2458528,EXP-111-tier-vol-nolowconfirm.md,improvement
+EXP-112,2026-10-05,fee tier: intraday stop + volume refill on 0.3% and v6.75 on 0.05% (v6.99),,pre-registered,,,,,,,,,,EXP-112-tier-stopvol-nolow.md,improvement
+EXP-113,2026-10-05,fee tier: volume refill on 0.3% and v6.75 + ETH share 70% on 0.05% (v6.100),,pre-registered,,,,,,,,,,EXP-113-tier-vol-nolow70.md,improvement
+EXP-114,2026-10-05,fee tier: no lower stop + volume refill on 0.3% and v6.75 on 0.05% (v6.101),,pre-registered,,,,,,,,,,EXP-114-tier-nostopvol-nolow.md,improvement
+EXP-115,2026-10-05,fee tier: account tranches + intraday stop on 0.3% and v6.75 on 0.05% (v6.102),,pre-registered,,,,,,,,,,EXP-115-tier-tranchestop-nolow.md,improvement
+EXP-116,2026-10-05,fee tier: intraday stop on 0.3% and v6.75 + ETH share 70% on 0.05% (v6.103),,pre-registered,,,,,,,,,,EXP-116-tier-stop-nolow70.md,improvement

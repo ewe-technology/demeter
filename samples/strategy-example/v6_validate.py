@@ -221,7 +221,18 @@ OPT = {"A": Variant("A_v6"),
        "CV": Variant("CV_crowd_refill_nolow", {"CROWD_REFILL": True, "REFILL_NO_NEW_LOW": True, "EXTRA": "pool"}),   # EXP-109
        "CW": Variant("CW_tier_wick_nolow", {"TIER": {"hi": {"LOW_FROM_WICK": True}, "lo": {"REFILL_NO_NEW_LOW": True}}}),   # EXP-110
        "CX": Variant("CX_tier_vol_nolowconfirm", {"TIER": {"hi": {"REFILL_VOL_CONFIRM": True, "EXTRA": "pool"},
-                                                            "lo": {"REFILL_NO_NEW_LOW": True, "EXIT_CONFIRM": 2}}})}   # EXP-111
+                                                            "lo": {"REFILL_NO_NEW_LOW": True, "EXIT_CONFIRM": 2}}}),   # EXP-111
+       # EXP-112..116: fee-tier pairs, each with at least one half not yet run on its holdout window
+       "CY": Variant("CY_tier_stopvol_nolow", {"TIER": {"hi": {"INTRADAY_STOP": True, "REFILL_VOL_CONFIRM": True, "EXTRA": "pool"},
+                                                         "lo": {"REFILL_NO_NEW_LOW": True}}}),   # EXP-112
+       "CZ": Variant("CZ_tier_vol_nolow70", {"TIER": {"hi": {"REFILL_VOL_CONFIRM": True, "EXTRA": "pool"},
+                                                       "lo": {"REFILL_NO_NEW_LOW": True, "SHARE_BELOW_EMA": Decimal("0.7")}}}),   # EXP-113
+       "DA": Variant("DA_tier_nostopvol_nolow", {"TIER": {"hi": {"NO_LOWER_STOP": True, "REFILL_VOL_CONFIRM": True, "EXTRA": "pool"},
+                                                           "lo": {"REFILL_NO_NEW_LOW": True}}}),   # EXP-114
+       "DB": Variant("DB_tier_tranchestop_nolow", {"TIER": {"hi": {"ACCOUNT_TRANCHES": True, "INTRADAY_STOP": True},
+                                                             "lo": {"REFILL_NO_NEW_LOW": True}}}),   # EXP-115
+       "DC": Variant("DC_tier_stop_nolow70", {"TIER": {"hi": {"INTRADAY_STOP": True},
+                                                        "lo": {"REFILL_NO_NEW_LOW": True, "SHARE_BELOW_EMA": Decimal("0.7")}}})}   # EXP-116
 # EXP-082..: daily non-price inputs (samples/fetch_deribit_dvol.py, fetch_binance_funding.py, fetch_binance_daily.py)
 DVOL_CSV = "../deribit_dvol_daily.csv"
 FUND_LONG_CSV = {"ETHUSDT": "../binance_funding_ETHUSDT_long.csv", "BTCUSDT": "../binance_funding_BTCUSDT_long.csv"}
