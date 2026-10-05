@@ -1,8 +1,8 @@
 # EXP-097: EMA exit only on a full day below the EMA (v6.84)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-981
+- Status: dropped-at-dev
+- Pre-registration commit: 7fe7966 · Result commit: ______
 - Scope: /goal round 2 (Dino, 2026-10-05: "再繼續找30個"): beat v6 at the improvement level on ETH and WBTC, pure LP, time-split
   out-of-time holdout; idle-capital yield and swap routing excluded (rulings / assumption of 2026-10-05).
 
@@ -32,7 +32,26 @@ Pre-registered together with EXP-097..101 (same commit), run with `A` (v6) in `A
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ACJCKCLCMCN`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | -9.7% | -17.3 |
+| 2023 | +32.2% | +31.8% | -0.4 |
+| 2024 | +36.4% | +26.3% | -10.0 |
+| 2025 | +16.3% | +16.6% | +0.3 |
+| 2026-01..09-17 | +18.7% | +18.3% | -0.4 |
+
+Wins 1/5, median -0.45 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +42.2% | 7.8% | -31.8% | 0.45 | 0.24 | $73.3k | $0.22k | 137 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +78.7% | 16.2% | -18.4% | 0.92 | 0.88 | $60.7k | $0.43k | 95 |
+
+Verdict: **dropped-at-dev** — ETH CAGR 7.8% vs 14.0%, Calmar 0.24, max DD −31.8%, wins 1/5; WBTC 16.2% vs 17.3%. Holdout not run. Reading (interpretation, not measured): most real breakdowns start on a day that still touched the EMA; waiting for a full day below it delays the exit into the decline, and on ETH the lower stop then fires deeper. The close-based EMA exit is v6's protection (as EXP-054, EXP-095).
 
 ## Deviations
 

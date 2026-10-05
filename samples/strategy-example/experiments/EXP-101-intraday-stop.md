@@ -1,8 +1,8 @@
 # EXP-101: lower stop on the intraday low (v6.88)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-985
+- Status: dropped-at-dev
+- Pre-registration commit: 7fe7966 · Result commit: ______
 - Scope: /goal round 2 (Dino, 2026-10-05: "再繼續找30個"): beat v6 at the improvement level on ETH and WBTC, pure LP, time-split
   out-of-time holdout; idle-capital yield and swap routing excluded (rulings / assumption of 2026-10-05).
 
@@ -32,7 +32,26 @@ Pre-registered together with EXP-097..101 (same commit), run with `A` (v6) in `A
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ACJCKCLCMCN`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | -0.8% | -8.4 |
+| 2023 | +32.2% | +32.2% | +0.0 |
+| 2024 | +36.4% | +25.8% | -10.6 |
+| 2025 | +16.3% | +16.3% | +0.0 |
+| 2026-01..09-17 | +18.7% | +18.7% | +0.0 |
+
+Wins 0/5, median +0.00 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +61.7% | 10.7% | -24.3% | 0.60 | 0.44 | $75.7k | $0.25k | 157 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +96.5% | 19.0% | -18.0% | 1.10 | 1.06 | $64.0k | $0.78k | 106 |
+
+Verdict: **dropped-at-dev** — WBTC improves (CAGR 19.0% vs 17.3%, Calmar 1.06) but ETH falls (10.7% vs 14.0%, Calmar 0.44), wins 0/5. Holdout not run. Reading (interpretation, not measured): ETH's intraday wicks through 0.8 x centre usually recover by the close, so stopping on the wick sells ETH low and refills higher; WBTC's touches more often continue.
 
 ## Deviations
 

@@ -329,6 +329,10 @@ LOW_FROM_WICK = False
 UP_DAY_REFILL = False
 STRONG_CLOSE_REFILL = False
 INTRADAY_STOP = False
+# EXP-105 (v6.92): CROWD_CAP: F <= 0.5 while the pool's 7-day mean active liquidity (EXTRA "liq", daily mean of
+# currentLiquidity) is above 1.5x its 90-day median (liquidity crowding dilutes the ladder's fee share). False = v6.
+# EXP-102..104 (fee-tier rules) need no switch here: v6_validate applies one of two switch sets by the pool's fee tier.
+CROWD_CAP = False
 NO_WEEKEND_REFILL = False
 EXIT_VOL_CONFIRM = False
 FLOW_REFILL = False
@@ -590,6 +594,10 @@ def daily_ema_frame(minute_price: pd.Series) -> pd.DataFrame:
     if BREADTH_CAP and ex is not None and "other_F" in ex:   # EXP-091
         of = ex["other_F"].tolist()
         fractions = [min(f, (f + o) / 2) if o == o else f for f, o in zip(fractions, of)]
+    if CROWD_CAP and ex is not None and "liq" in ex:   # EXP-105
+        lq = ex["liq"]
+        crowd = (lq.rolling(7, min_periods=7).mean() > 1.5 * lq.rolling(90, min_periods=90).median()).tolist()
+        fractions = [min(f, 0.5) if c else f for f, c in zip(fractions, crowd)]
     if FUND_CAP and ex is not None and "fund3" in ex:   # EXP-085
         hot = (ex["fund3"] > FUND_HOT).fillna(False).tolist()
         fractions = [min(f, 0.5) if h else f for f, h in zip(fractions, hot)]
