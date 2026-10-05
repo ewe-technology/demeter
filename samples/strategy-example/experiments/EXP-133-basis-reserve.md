@@ -3,9 +3,9 @@
 Standalone level (README *Success levels*). Idle-capital yield does not count as an improvement (Dino, 2026-10-05); the
 comparison with v6, v6.4 (Aave) and v6.39 (stable LP) is reported, not judged.
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-1018
+- Status: dropped-at-dev
+- Pre-registration commit: 636e7d0 · Result commit: see registry
 - Scope: Dino, 2026-10-06: "不管，有沒有其他方向" then "做 basis trade" — the pure-LP scope (no perps) is waived for this
   experiment. Number EXP-133 / v6.119 and OPT key `DE` reserved with the goal4 session.
 
@@ -54,9 +54,50 @@ fees and income, the same base as EXP-052's `accrue_stable`) earns the basis tra
 
 ## Result
 
-Pending.
+Development, code `eaceb12`, `opt:A,E,AO,DE` per window (tag `AEAODE`). v6 reproduces EXP-000 (+85.4% ETH, +85.6% WBTC).
+
+| year (ETH, yearly reset) | v6 | v6.4 Aave | v6.39 stable LP | this | this: funding income net of switching | mean F |
+|---|---|---|---|---|---|---|
+| 2022 | +7.6% | +8.3% | +7.9% | +5.2% | −$2.37k | 0.55 |
+| 2023 | +32.2% | +33.7% | +32.9% | +32.2% | −$0.03k | 0.73 |
+| 2024 | +36.4% | +38.9% | +37.6% | +36.9% | +$0.51k | 0.77 |
+| 2025 | +16.3% | +18.4% | +17.7% | +16.7% | +$0.40k | 0.58 |
+| 2026-01..09-17 | +18.7% | +19.9% | +19.1% | +18.3% | −$0.38k | 0.61 |
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | reserve income |
+|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | −22.8% | 0.73 | 0.614 | — |
+| ETH v6.4 Aave | +101.0% | 16.0% | −20.7% | 0.82 | 0.771 | +$15.6k |
+| ETH v6.39 stable LP | +89.1% | 14.5% | −22.2% | 0.75 | 0.653 | +$3.7k |
+| ETH this | +83.4% | 13.8% | −23.0% | 0.71 | **0.599** | −$1.9k |
+| WBTC v6 | +85.6% | 17.3% | −17.8% | 1.01 | 0.970 | — |
+| WBTC v6.4 Aave | +96.6% | 19.1% | −16.3% | 1.10 | 1.166 | +$11.1k |
+| WBTC v6.39 stable LP | +89.0% | 17.9% | −17.1% | 1.04 | 1.044 | +$3.5k |
+| WBTC this | +85.5% | 17.3% | −18.1% | 1.00 | 0.952 | −$0.1k |
+
+Daily-return correlation with v6: ETH 0.9998, WBTC 0.9999.
+
+Standalone dev rule: ETH Calmar 0.599 < 0.60 (fails), max DD −23.0% ≥ −30%; WBTC Calmar 0.952, max DD −18.1%; ETH positive
+years 5/5. Verdict: **dropped-at-dev** — ETH Calmar 0.0011 below the bar; the funding leg lost money over 4.7 years
+(ETH −$1.9k, WBTC −$0.1k). Holdout not run. Reported: it is the worst of the three reserve treatments; v6.4's Aave rate is the
+best (+2.0 pts ETH CAGR, +1.8 pts WBTC).
+
+Why (measured, diagnostic rerun of ETH 2024 with the income split, same code): mean reserve $24.4k (F 0.77), gross funding
++$1,680, switching cost −$1,165; the reserve moved $862k in the year, all of it on 26 days with F changes (quiet days $452 in
+total — the cost is real, not ledger noise). Two mechanisms:
+- Funding and the reserve are out of phase: v6's reserve is largest in bears (F 0.55 in 2022, funding 0.8%) and smallest in
+  bulls (F 0.77 in 2024, funding 13%), so the high-funding years carry the least notional.
+- Every F step moves a quarter or all of the reserve; at 0.135% per move the basis leg pays ~0.5–1% of the reserve per
+  rebuild-heavy year, as much as the funding it earns outside the bull peaks. Aave has no switching cost and pays 3–5% in
+  bears too.
+The hypothesis "funding adds bull-year return to v6" is refuted for v6's idle reserve; a basis leg on capital that does not
+follow F (a fixed allocation beside v6) is a different question, not tested here.
 
 ## Deviations
 
-None so far. (The funding statistics above and the call-overlay sketch were seen before this registration; v6's numbers on
-every window are known.)
+- The funding statistics above and the call-overlay sketch were seen before this registration; v6's numbers on every window
+  are known.
+- Diagnostic rerun after the verdict: ETH 2024 yearly segment with `accrue_basis` wrapped to log gross funding, switching cost
+  and the daily reserve (job-local script, not committed). It does not change any number above (net return 0.3689 = the dev
+  run's 2024 segment).
+- The final exit from the basis leg at the end of a window is not charged (one move of 0.135% of the reserve, ≤ $0.15k).
