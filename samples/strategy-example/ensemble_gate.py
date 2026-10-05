@@ -31,6 +31,9 @@ DESIGNS = {
     "spans": ((0,), (90, 110, 130, 150), 24),
     "both": ((0, 6, 12, 18), (90, 110, 130, 150), 6),
 }
+# more close hours, evenly spaced, EMA100 (added after the first run, to see where more tranches stop helping)
+for n in (2, 3, 6, 8, 12, 24):
+    DESIGNS[f"hours{n}"] = (tuple(range(0, 24, 24 // n)), (100,), 24 // n)
 COLS = ["2022", "2023", "2024", "2025", "total", "maxDD", "calmar", "drop window", "2026", "2026 maxDD", "trades"]
 
 
