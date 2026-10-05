@@ -23,7 +23,7 @@ cd /Users/makersu/work/githubEwe/demeter/samples/strategy-example && PYTHONPATH=
 - 啟動時先跑 `_self_check()`，任何 assert 失敗代表引擎邏輯被改壞。
 - 2025 全年（只跑 signal）預計數分鐘，其中載入暖機資料佔一部分；加上 plain 對照組時兩組並行，約 5 分鐘。`date_ranges` 內的區間依序執行，不並行，避免記憶體不足。
 
-輸出資料夾：Binance 訊號 `result/ethbtc-wb25-wbtceth-binance-<起日>-<迄日>/`，池價訊號 `result/ethbtc-wb25-wbtceth-<起日>-<迄日>/`（`SIGNAL_SOURCES` 列出的來源各一個）；開啟滑價時資料夾名多 `-slipdepth`，例如 `ethbtc-wb25-wbtceth-binance-slipdepth-20240102-20241231`，與沒有滑價的結果分開。
+輸出資料夾：Binance 訊號 `result/ethbtc-wb25-wbtceth-binance-<起日>-<迄日>/`，池價訊號 `result/ethbtc-wb25-wbtceth-<起日>-<迄日>/`（`SIGNAL_SOURCES` 列出的來源各一個）；換倉成本不是規格書的 0.1% 時資料夾名多 `-poolfee`（`SWAP_COST_RATE = None`）或 `-swap<bp>bp`，開啟滑價時再多 `-slipdepth`，例如 `ethbtc-wb25-wbtceth-binance-poolfee-slipdepth-20240102-20241231`，與預設成本的結果分開。
 
 ---
 
@@ -36,13 +36,15 @@ cd /Users/makersu/work/githubEwe/demeter/samples/strategy-example && PYTHONPATH=
 | base / quote | base = BTC，quote = ETH，USDC 是第三個帳戶資產 | 第 438 行 |
 | 起始資金 | 1 ETH | 第 438 行 |
 | 訊號來源 | 只跑 Binance（`SIGNAL_SOURCES = [BINANCE_SIGNAL]`，第 47 行）；加入 `POOL_SIGNAL` 就同時跑池價版 | 第 47 行 |
-| 兌換成本 | 規格書設定：`SWAP_COST = 0.001`（0.1%）、`SLIPPAGE_MODEL = None`（不滑價）。池子費率加深度滑價要設 `0.0005` 與 `"depth"`，見 3.7 | 常數區 |
-| 期間 | 2022、2023、2024、2025 四個單年，各自 1/2 到 12/31（規格書 1/1 加入以 1/1 日收盤計價，與 ethusdc v1 相同） | `date_ranges` 第 587 行起 |
+| 兌換成本 | 與 ethusdc v1 相同的設定：`SWAP_COST_RATE = 0.001`（總成本 0.1%，含池子費率 0.05%）、`SLIPPAGE_MODEL = None`（不滑價）。池子費率加深度滑價要設 `None` 與 `"depth"`，見 3.7 | 常數區 |
+| 期間 | 2022、2023、2024、2025 四個單年，各自 1/2 到 12/31（規格書 1/1 加入以 1/1 日收盤計價，與 ethusdc v1 相同）；2026 年 1/2 到 9/30（目前資料的最後一天，不滿一年）；2022-01-02 到 2025-12-31 四年通算 | `date_ranges` 第 678 行起 |
 | 判定頻率 | 每日 00:00 UTC，`RescaleFrequency.daily` | 第 483 行 |
 | 模式 | 只跑 `signal`，`plain` 對照組預設關閉 | 第 442 行 |
 | 平行數 | 每個模式一個工作程序，最多 5 個 | 第 485 行 |
 
-`date_ranges` 內已寫好但註解掉的區間：1/1 起跑的四個單年（2024 結束日為 12-30，湊滿規格書的 365 天），以及 2022 到 2025 四年通算。
+`date_ranges` 內已寫好但註解掉的區間：1/1 起跑的四個單年（2024 結束日為 12-30，湊滿規格書的 365 天），以及 1/1 起跑的 2022 到 2025 四年通算。
+
+資料涵蓋：池子分鐘資料（WBTC/WETH、WETH/USDC）與三個 Binance 日收盤 CSV 都到 2026-09-30。要跑更晚的區間，兩者都要先補。
 
 ---
 
@@ -145,13 +147,21 @@ plain 模式：LP 100%、半寬 ±10%、無訊號。
 
 ### 3.7 換倉成本模型（`swap_deltas`）
 
-- 成本 = `SWAP_COST` × 最小兌換量。最小兌換量是三種資產從現況走到目標，賣出方的總價值。預設 `SWAP_COST = 0.001`（0.1%，規格書）。
-- 買進方實際拿到想要數量的 (1 − 成本率)，等同在成交量上收手續費。
-- 換倉是合成兌換，不經過 Uniswap 池：Demeter 的 `execute_swap` 只能在單一池的兩個 token 之間成交，而這裡有 BTC、ETH、USDC 三個資產，USDC 不在 WBTC/WETH 池裡。所以池子的 0.05% 不會自動扣，`SWAP_COST` 是手動設定的費率，與池子費率沒有連動。
+設定與 ethusdc v1 相同，三種成本各收一次、互不重疊：
+
+| 成本 | 設定 | 怎麼收 | 記在 |
+|---|---|---|---|
+| 池子費率 | 一律收，取池子的 `fee_rate`（0.05%，WBTC/WETH 與 WETH/USDC 相同） | 最小兌換量 × 0.05% | `pool_fee_eth` |
+| 額外成本 | `SWAP_COST_RATE` 是總成本，池子費率算在裡面，只多收差額：`max(0, SWAP_COST_RATE − 0.05%)`；`None` = 只收池子費率 | 最小兌換量 × 差額 | `extra_cost_eth` |
+| 深度滑價 | `SLIPPAGE_MODEL = "depth"`，疊加在上面兩項之外 | 見下 | `slippage_eth` |
+
+- 最小兌換量是三種資產從現況走到目標，賣出方的總價值。買進方實際拿到想要數量的 (1 − 池子費率 − 額外費率)，等同在成交量上收手續費（`swap_rates`、`swap_deltas`）。
+- 換倉是合成兌換，不經過 Uniswap 池：Demeter 的 `execute_swap` 只能在單一池的兩個 token 之間成交，而這裡有 BTC、ETH、USDC 三個資產，USDC 不在 WBTC/WETH 池裡。所以池子費率不是由 Demeter 的 `buy`/`sell` 扣，而是在 `swap_deltas` 裡按池子的 `fee_rate` 扣，效果與 ethusdc v1 的 `buy`/`sell` 相同。
 - 預設不滑價（`SLIPPAGE_MODEL = None`），規格書的滑價容許上限 0.5% 不計成本。
 - 可選的深度滑價（`SLIPPAGE_MODEL = "depth"`）：BTC↔ETH 段用 WBTC/WETH 池、USDC↔ETH 段用 WETH/USDC 池。每段滑價 = 成交量（ETH 計）² ÷ 該池當下的虛擬 ETH 深度（`eth_depth`，由分鐘資料的 `currentLiquidity` 算，約 18.5 萬到 30.8 萬 ETH）。從錢包的 ETH 直接扣；該分鐘沒有流動性資料就不收那一段。
-- 開滑價時改用池子費率：設 `SWAP_COST = Decimal("0.0005")`。規格書的 0.1% 可能已含池子費用與滑價，0.1% 再加滑價會重複計算。
-- 成本記在 `swap_cost_eth`（含滑價），滑價另記在 `slippage_eth`。
+- 開滑價時改成只收池子費率：設 `SWAP_COST_RATE = None`。規格書的 0.1% 可能已含池子費用與滑價，0.1% 再加滑價會重複計算。
+- 三項合計記在 `swap_cost_eth`，也就是 `total_quote_swap_fee` / `total_swap_fee`。這些只是紀錄：成本在換倉當下已從餘額扣掉，最終淨值直接由餘額算，不會再扣一次。
+- 結果資料夾：0.1% 維持原名；`None` 多 `-poolfee`，其他費率多 `-swap<bp>bp`，開滑價再多 `-slipdepth`。
 
 ### 3.8 每日判定（`daily_work`）
 
@@ -223,7 +233,9 @@ USDC 是 broker 裡的第三個資產，價格欄位 `USDC = 1 / ETH 美元價`�
 | `btc_ratio` | BTC 枚數倍率 |
 | `usd_ratio` | 美元倍率，起點 1 ETH 換算成美元 |
 | `max_dd_usd` | 美元計最大回撤，0.48 代表 48% |
-| `swap_cost_eth` | 換倉成本合計（含滑價），ETH 計 |
+| `swap_cost_eth` | 換倉成本合計（池子費率 + 額外成本 + 滑價），ETH 計 |
+| `pool_fee_eth` | 其中池子費率 0.05%，ETH 計 |
+| `extra_cost_eth` | 其中 `SWAP_COST_RATE` 超過池子費率的部分，ETH 計 |
 | `slippage_eth` | 其中深度滑價，ETH 計 |
 | `lp_avg_share` | LP 平均運用比例，各日判定時的 LP 占比平均 |
 | `rescale_count` | 重建次數，含起始那次 |
@@ -320,7 +332,7 @@ signal 組各年細節：
 
 **兌換成本與滑價**（2026-10-05）
 
-上面所有結果和預設設定都用規格書的成本（0.1%、無滑價）。改成池子費率 0.05% 加深度滑價（`SWAP_COST = 0.0005`、`SLIPPAGE_MODEL = "depth"`）重跑四年（Binance 訊號、1/2 起跑）：
+上面所有結果和預設設定都用規格書的成本（0.1%、無滑價）。改成池子費率 0.05% 加深度滑價（當時的 `SWAP_COST = 0.0005`，現在是 `SWAP_COST_RATE = None`；`SLIPPAGE_MODEL = "depth"`）重跑四年（Binance 訊號、1/2 起跑）：
 
 | 年份 | ETH 倍率 | 對規格書 | 比 0.1%、無滑價 | 換倉成本 ETH | 其中滑價 ETH | 重建 / 出界 |
 |---|---|---|---|---|---|---|
@@ -343,10 +355,12 @@ signal 組各年細節：
 | 池子 | 主網 WBTC/WETH 0.05% | 規格書目標是 Base cbBTC/WETH，repo 沒有該池資料。回測校正用的也是主網 WBTC/WETH |
 | 資料起點 | 池子分鐘資料從 2021-05-13 起（兩個池子都有分鐘檔的第一天）；Binance 訊號版從 2017-08-17 起連續運行 | 預設 Binance 訊號與規格書同一起點，暖機沒有差異。只有 `POOL_SIGNAL` 版的 2022 年暖機只有約 230 天，其他年份 380 天 |
 | 無法重現的範圍 | 2018 到 2021 單年、8 年通算 | Uniswap v3 於 2021-05 才上線，規格書 2021 前手續費本來就是推估 |
-| 價格來源 | 預設 `SIGNAL_SOURCES = [BINANCE_SIGNAL]`；清單裡的來源在同一次執行、同一份分鐘資料上各跑一遍，各存一個資料夾，加入 `POOL_SIGNAL` 就同時跑池價版。`BINANCE_SIGNAL`：G 用 `binance_btcusdt_1d.csv`、`binance_ethusdt_1d.csv`，R 用 `binance_ethbtc_1d.csv`（2017-08-17 起的日收盤，已含完整暖機）；`POOL_SIGNAL`：池子分鐘價的每日最後一筆，會多載入暖機期分鐘資料。只想跑一種就只留一個 | 規格書用 Binance ETHUSDT、BTCUSDT、ETHBTC 每日 00:00 UTC 收盤。Binance 版資料夾名多 `-binance`，池價版維持舊名，可直接比較 |
+| 價格來源 | 預設 `SIGNAL_SOURCES = [BINANCE_SIGNAL]`；清單裡的來源在同一次執行、同一份分鐘資料上各跑一遍，各存一個資料夾，加入 `POOL_SIGNAL` 就同時跑池價版。`BINANCE_SIGNAL`：G 用 `binance_btcusdt_1d.csv`、`binance_ethusdt_1d.csv`，R 用 `binance_ethbtc_1d.csv`（2017-08-17 到 2026-09-30 的日收盤，已含完整暖機；2026 年的部分取自 Binance 公開 klines API，與 `real-data/binance` 的 BTCUSDT、ETHUSDT 逐日相同）；`POOL_SIGNAL`：池子分鐘價的每日最後一筆，會多載入暖機期分鐘資料。只想跑一種就只留一個 | 規格書用 Binance ETHUSDT、BTCUSDT、ETHBTC 每日 00:00 UTC 收盤。Binance 版資料夾名多 `-binance`，池價版維持舊名，可直接比較 |
 | 重建價格 | 訊號（G、R、EMA、F、強弱旗標）用 Binance 日收盤；實際 LP 的出界判斷、重建中心價、換倉價格、權益估值都用 00:00 那一分鐘的池價 | 規格書全部以當日收盤價。LP 的 tick 必須對應池子實際價格，手續費才會落在正確的區間，所以不改用 Binance 價格。兩者差距很小（約 0.06%） |
 | 手續費 | 實際成交量按流動性占比分配 | 規格書是年度係數 × 有效流動性 × sqrt(P) 的模型，以主網 1 倍校正 |
-| 換倉 | 合成兌換（不經池子）：預設 0.1% × 最小兌換量、不滑價，與規格書一致；可改成池子費率 0.05% 加深度滑價（兩個常數） | 規格書以 0.1% 計，滑價上限 0.5% 不計成本。0.05% 加滑價比規格書便宜，ETH 倍率會略高（2022 高 0.028），不能拿來對規格書 |
+| 換倉 | 合成兌換（不經池子）：預設總成本 0.1% × 最小兌換量（池子費率 0.05% + 額外 0.05%）、不滑價，與規格書一致；可改成池子費率 0.05% 加深度滑價（`SWAP_COST_RATE = None`、`SLIPPAGE_MODEL = "depth"`） | 規格書以 0.1% 計，滑價上限 0.5% 不計成本。0.05% 加滑價比規格書便宜，ETH 倍率會略高（2022 高 0.028），不能拿來對規格書 |
+| 已知問題：F = 0 時不收滑價（暫不處理） | 深度滑價從換倉後的可用 ETH 扣，上限是可用 ETH。目標 F = 0 時（強勢全 USDC、弱勢全 BTC）可用 ETH 約為 0，滑價就被截成 0 | 只影響 `SLIPPAGE_MODEL = "depth"`。偏偏是最大筆的換倉沒收到滑價：整本退出 LP，以及 F = 0 時強弱翻轉造成的 USDC↔BTC 全倉互換。ethusdc v1 也有同樣的上限（USDC 餘額），但 USDC 保留部位一直在，實際不會觸發 |
+| 已知問題：USDC↔BTC 只收一次池子費率（暫不處理） | 池子費率與額外成本都按最小兌換量（賣出方價值）收一次 | 實際 USDC↔BTC 要經 ETH 換兩次，兩個池各收 0.05%；深度滑價已按兩段收。實際池子費用應是 費率 ×（\|BTC 變動價值\| + \|USDC 變動價值\|），只有一邊是 ETH 時才與目前相同。規格書的 0.1% 本來就以最小兌換量計，所以只在池子費率模式（`None`）下低估，主要發生在 F = 0 的強弱翻轉 |
 | 獎勵 | ETH 與 BTC 原幣留在錢包，不投入，按領取日價格換算成 ETH | 規格書主結果同樣是「發放、不再投入」，獎勵取得當日換算 ETH。另有兩個參考情境沒有實作：(1) BTC 發放並持有到年末（第 5.3 節，v3 上線後 ETH ×4.79 對 ×4.18）；(2) 年末把獎勵加回本金再投入（第 5.2 節，4 年 5.27 對 4.88） |
 | 加入日平均 | 只有一個起跑日（1/2 或 1/1） | 規格書第 5.1 節左表（2.76 / 1.31 / 1.19 / 1.18）是 1 月 1 日前後 15 日共 31 個加入日，各跑 365 日後取平均，降低單一起跑日的影響。沒有實作；做法與資料限制見下方「加入日平均要改什麼」 |
 | 敏感度測試 | 常數寫死在程式開頭 | 規格書第 6.1 節的 EMA 週期、弱勢區間、手續費倍率等變化沒有做成參數 |
@@ -363,7 +377,7 @@ signal 組各年細節：
 3. **只載入一次資料**：`run_test` 目前直接使用傳進去的整份分鐘資料，不依 `data_start_date`、`data_end_date` 切片。要在 `run_test` 前依每次的起訖日切片，否則 124 次各自載入會非常慢。
 4. **彙總**：每年算 31 次 `eth_ratio_receipt`（以及 BTC、美元倍率）的平均，另存 `join_average.csv`；每次回測的資料夾太多，改成同一個上層資料夾、檔名帶起跑日。
 
-資料限制：WBTC/WETH 分鐘檔到 2026-01-17，WETH/USDC 到 2026-01-04，Binance CSV 到 2025-12-31。2025 年較晚的加入日（1 月中旬以後）會跑到 2026-01-15，超過 USDC 池與 Binance 的資料，要先補資料，或把 2025 的結束日截在 2025-12-31 並註明天數不足 365 日。
+資料限制：WBTC/WETH、WETH/USDC 分鐘檔與 Binance CSV 都到 2026-09-30，2022 到 2025 每個加入日（最晚跑到 2026-01-15）都涵蓋得到。2026 年的加入日要跑滿 365 日，要補到 2027-01-15 的資料。
 
 ---
 
@@ -379,7 +393,7 @@ signal 組各年細節：
 | 改強勢時保留 ETH 比例 | 改 `ETH_KEEP`，規格書第 6.1 節測過 0%、25%、50% |
 | 改 LP 區間寬度 | 改 `RANGE_STRONG`、`RANGE_WEAK`，數值是半寬 |
 | 改重建門檻 | 改 `FOLLOW_THRESHOLD` |
-| 改換倉成本 | 改 `SWAP_COST`，規格書敏感度測過 0.3% |
+| 改換倉成本 | 改 `SWAP_COST_RATE`（總成本，含池子費率 0.05%；`None` = 只收池子費率），規格書敏感度測過 0.3% |
 | 改結果資料夾名稱 | 改第 452 行的前綴 |
 | 換池子 | 只支援 token0 為 base 的池子，也就是 WBTC/WETH 的方向。`EthBtcDefenseStrategy` 在建構時對其他方向直接報錯 |
 
@@ -393,6 +407,7 @@ signal 組各年細節：
 - `range_ticks`：±10% 與 ±20% 的 tick 數。
 - `lp_quote_share`：±10% 約 52.4%、±20% 約 54.8%。
 - `swap_deltas`：價值守恆，只少了成本，成本等於最小兌換量的 0.1%。
+- `swap_rates`：0.1% 拆成池子費率 0.05% 加額外 0.05%；`None` 只收池子費率；低於池子費率時額外成本為 0，不會變負。
 - `VirtualAccount`：收盤低於 EMA 但 EMA 不下降不退避；EMA 下降才退避；再武裝後連續 3 日確認進第 1 階段；一天只進一段。
 - `signal_frame`：G 的公式正確；ETH 對 BTC 走強時 `strong` 為真，走弱時為假；G 持續下跌一整年後 F 為 0。
 

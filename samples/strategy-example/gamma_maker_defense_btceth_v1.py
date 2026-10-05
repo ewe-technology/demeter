@@ -66,14 +66,17 @@ RANGE_STRONG, RANGE_WEAK = Decimal("0.10"), Decimal("0.20")   # half width: åˆè
 FOLLOW_THRESHOLD = Decimal("0.125")   # any of LP / ETH / BTC / USDC this far from target -> rebuild
 LP_SHORT_TOL = Decimal("0.01")        # target LP 100% but LP short by more than this
 USDC_DUST = Decimal("0.001")          # target USDC 0 but holding more than this
-# Cost of each rebalance swap, charged on the minimum converted volume. Default = spec sheet 2.6: 0.1%, with the 0.5%
-# slippage cap not counted as a cost. For the pool fee 0.05% plus depth slippage instead (about what a live swap pays;
-# the spec's 0.1% may already contain slippage, so 0.1% together with slippage would double count) set
-# SWAP_COST = Decimal("0.0005") and SLIPPAGE_MODEL = "depth".
-SWAP_COST = Decimal("0.001")
+# Same settings as gamma_maker_defense_ethusdc_v1. The swaps are synthetic (see swap_deltas), so the pool fee is charged
+# here rather than by demeter's buy / sell: every rebalance swap pays the pool's fee rate (0.05%, both WBTC/WETH and
+# WETH/USDC) on the minimum converted volume.
+# Total cost of each rebalance swap, spec sheet 2.6 = 0.1% (the pool fee counts toward it, so only the difference is
+# charged on top); the spec's 0.5% slippage cap is not a cost. None = pool fee only. Currently the spec's 0.1% with
+# SLIPPAGE_MODEL off; for the pool fee 0.05% plus depth slippage instead set None here and "depth" below.
+SWAP_COST_RATE: Decimal | None = Decimal("0.001")
 # Price impact of the rebalance swaps from the pools' own depth. None = off. "depth" = for each pool leg (BTC <-> ETH on
 # WBTC/WETH, USDC <-> ETH on WETH/USDC) charge volume^2 / virtual ETH reserve at the current price (see eth_depth), in
-# ETH. A swap of D ETH moves the average price by about D / depth.
+# ETH. A swap of D ETH moves the average price by about D / depth. It is on top of SWAP_COST_RATE, so with the spec's
+# 0.1% (which may already include slippage) it double counts: use SWAP_COST_RATE = None with it.
 SLIPPAGE_MODEL: str | None = None
 LOG_TICK = math.log(1.0001)
 
@@ -184,12 +187,21 @@ def lp_quote_share(current_tick: int, lower_tick: int, upper_tick: int) -> Decim
     return Decimal(str(round(y / (y + xp), 12)))
 
 
+def swap_rates(pool_fee: Decimal) -> Tuple[Decimal, Decimal]:
+    """(pool fee rate, extra rate on top) of a rebalance swap: SWAP_COST_RATE is the total and the pool fee counts
+    toward it, so only the difference is extra; None = pool fee only."""
+    return pool_fee, ZERO if SWAP_COST_RATE is None else max(ZERO, SWAP_COST_RATE - pool_fee)
+
+
 def swap_deltas(cur: List[Decimal], want: List[Decimal], prices: List[Decimal],
-                cost: Decimal = SWAP_COST) -> Tuple[List[Decimal], Decimal]:
-    """Net token changes moving `cur` to `want` (prices in ETH), and the cost in ETH. The cost is `cost` x the
-    minimum converted volume; buyers receive (1 - cost) of what they asked for, like a fee on the trade."""
+                rate: Decimal) -> Tuple[List[Decimal], Decimal]:
+    """Net token changes moving `cur` to `want` (prices in ETH), and the minimum converted volume in ETH (the value
+    sold). Buyers receive (1 - rate) of what they asked for, so the swap costs `rate` x that volume, like a fee on the
+    trade."""
+    # NOTE: charged once on the value sold; a real USDC <-> BTC swap routes through ETH and pays the pool fee on both
+    # pools (depth_slippage already charges both legs). Known, left as is; see the doc's section 7.
     sold = -sum(((w - c) * p for c, w, p in zip(cur, want, prices) if w < c), ZERO)
-    return [(w - c) * (ONE - cost) if w > c else w - c for c, w in zip(cur, want)], sold * cost
+    return [(w - c) * (ONE - rate) if w > c else w - c for c, w in zip(cur, want)], sold
 
 
 def eth_depth(liquidity, price: Decimal, token0_decimal: int) -> Decimal:
@@ -217,7 +229,9 @@ class EthBtcDefenseStrategy(BaseRemixDaoStrategy):
         self.starting_tick: int | None = None
         self.out_of_fund_date: datetime | None = None
         self.reward_eth = ZERO                    # fees valued in ETH on the day they were collected
-        self.swap_cost_eth = ZERO
+        self.swap_cost_eth = ZERO                 # all swap costs: pool fee + extra + slippage
+        self.pool_fee_eth = ZERO                  # part of swap_cost_eth that is the pool fee
+        self.extra_cost_eth = ZERO                # part of swap_cost_eth that is SWAP_COST_RATE above the pool fee
         self.slippage_eth = ZERO                  # part of swap_cost_eth that is depth slippage
         self.usdc_liquidity: pd.Series | None = None   # WETH/USDC minute liquidity, set by run_test
         self.rebuild_count = self.out_of_range_rebuilds = 0
@@ -299,14 +313,21 @@ class EthBtcDefenseStrategy(BaseRemixDaoStrategy):
             w = lp_quote_share(current_tick, tick_lo, tick_hi)   # ETH / BTC halves that fill the range exactly
             lp_eth, lp_btc = lp_value * w, lp_value * (ONE - w) / p
         want = [shares["btc"] * value / p + lp_btc, shares["eth"] * value + lp_eth, shares["usdc"] * value / u]
-        deltas, cost = swap_deltas([btc, eth, usdc], want, [p, ONE, u])
+        fee_rate, extra_rate = swap_rates(Decimal(lp_market.pool_info.fee_rate))
+        deltas, sold = swap_deltas([btc, eth, usdc], want, [p, ONE, u], fee_rate + extra_rate)
         for token, delta in zip((self.gp.base_token, self.gp.quote_token, USDC), deltas):
             if delta > ZERO:
                 self.broker.add_to_balance(token, delta)
             elif delta < ZERO:
                 self.broker.subtract_from_balance(token, -delta)
+        # both are already paid: the buyers above received (1 - fee_rate - extra_rate); these only record the split
+        self.pool_fee_eth += sold * fee_rate
+        self.extra_cost_eth += sold * extra_rate
+        cost = sold * (fee_rate + extra_rate)
         slippage = self.depth_slippage(lp_market, row_data, p, u, deltas)
         if slippage > ZERO:   # paid in ETH out of the wallet
+            # NOTE: capped at the free ETH, which is ~0 when the target is F = 0 (all USDC or all BTC), so those swaps
+            # pay no slippage. Known, left as is; see the doc's section 7.
             slippage = min(slippage, max(ZERO, self._wallet()[1]))
             self.broker.subtract_from_balance(self.gp.quote_token, slippage)
             self.slippage_eth += slippage
@@ -484,6 +505,8 @@ def run_test(bull_params: RemixDAOParams, params: TestParams, gp: GlobalParams, 
     metrics["usd_ratio"] = strat.total_net_value_usd / strat.total_invested_usdc
     metrics["max_dd_usd"] = max_draw_down(usd_series)
     metrics["swap_cost_eth"] = strat.swap_cost_eth
+    metrics["pool_fee_eth"] = strat.pool_fee_eth
+    metrics["extra_cost_eth"] = strat.extra_cost_eth
     metrics["slippage_eth"] = strat.slippage_eth
     metrics["lp_avg_share"] = strat.lp_share_sum / strat.lp_share_days if strat.lp_share_days else ZERO
     return metrics
@@ -495,7 +518,8 @@ def _run_one(bull, tp: TestParams, gp: GlobalParams, data, usdc_price_data, dail
 
 
 EXTRA_COLUMNS = ["eth_ratio_receipt", "eth_ratio_end", "reward_eth", "btc_ratio", "usd_ratio", "max_dd_usd",
-                 "swap_cost_eth", "slippage_eth", "lp_avg_share", "rescale_count", "out_of_range_count"]
+                 "swap_cost_eth", "pool_fee_eth", "extra_cost_eth", "slippage_eth", "lp_avg_share", "rescale_count",
+                 "out_of_range_count"]
 
 
 def process_for_date(csd: datetime, dsd: date, ded: date, modes: List[str] | None = None):
@@ -528,8 +552,11 @@ def process_for_date(csd: datetime, dsd: date, ded: date, modes: List[str] | Non
     usdc_market = load(UniV3Pool(USDC, eth, fee, USDC), contract_usdc, dsd, ded)
     jobs, folders = [], []
     for source in SIGNAL_SOURCES:
-        # pool signal without slippage keeps the old folder name
-        tag = ("" if source == POOL_SIGNAL else f"-{source}") + (f"-slip{SLIPPAGE_MODEL}" if SLIPPAGE_MODEL else "")
+        # pool signal at the spec's 0.1% without slippage keeps the old folder name
+        swap_tag = ("" if SWAP_COST_RATE == Decimal("0.001") else
+                    "-poolfee" if SWAP_COST_RATE is None else f"-swap{float(SWAP_COST_RATE) * 10000:g}bp")
+        tag = (("" if source == POOL_SIGNAL else f"-{source}") + swap_tag
+               + (f"-slip{SLIPPAGE_MODEL}" if SLIPPAGE_MODEL else ""))
         folder = f"result/ethbtc-wb25-wbtceth{tag}-{csd:%Y%m%d}-{ded:%Y%m%d}"
         Path(folder).mkdir(parents=True, exist_ok=True)
         folders.append(folder)
@@ -588,10 +615,23 @@ def _self_check():
     # swaps: value is conserved except for the 0.1% on the minimum converted volume
     cur, want, px = [Decimal(1), Decimal(0), Decimal(0)], [Decimal(0), Decimal(10), Decimal(40000)], [Decimal(30), ONE, Decimal("0.0005")]
     assert sum(w * p for w, p in zip(want, px)) == Decimal(30), "targets must sum to the equity"
-    deltas, cost = swap_deltas(cur, want, px, cost=Decimal("0.001"))
+    deltas, sold = swap_deltas(cur, want, px, Decimal("0.001"))
+    cost = sold * Decimal("0.001")
     after = sum((c + d) * p for c, d, p in zip(cur, deltas, px))
-    assert cost == Decimal("0.03") and abs(after - (Decimal(30) - cost)) < Decimal("1e-9"), (after, cost)
+    assert sold == Decimal(30) and abs(after - (Decimal(30) - cost)) < Decimal("1e-9"), (after, cost)
     assert deltas[0] == Decimal(-1) and deltas[1] == Decimal("9.99"), deltas
+    # swap rates, same as ethusdc v1: the 0.1% total includes the 0.05% pool fee; None = pool fee only
+    global SWAP_COST_RATE
+    saved = SWAP_COST_RATE
+    try:
+        SWAP_COST_RATE = Decimal("0.001")
+        assert swap_rates(Decimal("0.0005")) == (Decimal("0.0005"), Decimal("0.0005"))
+        SWAP_COST_RATE = None
+        assert swap_rates(Decimal("0.0005")) == (Decimal("0.0005"), ZERO)
+        SWAP_COST_RATE = Decimal("0.0003")   # below the pool fee: never a negative extra
+        assert swap_rates(Decimal("0.0005")) == (Decimal("0.0005"), ZERO)
+    finally:
+        SWAP_COST_RATE = saved
     # depth: WBTC/WETH 2024-01-02 00:00 (L 4.27e17, 18.79 ETH per BTC) ~185k ETH; WETH/USDC (L 1.49e19, $2351) ~308k ETH
     assert Decimal("1.8e5") < eth_depth(426736045046051387, Decimal("18.7886"), 8) < Decimal("1.9e5")
     assert Decimal("3.0e5") < eth_depth(14926724960586878708, ONE / Decimal("2351.28"), 6) < Decimal("3.2e5")
@@ -643,6 +683,8 @@ if __name__ == "__main__":
         (datetime(2023, 1, 2), date(2023, 1, 2), date(2023, 12, 31)),
         (datetime(2024, 1, 2), date(2024, 1, 2), date(2024, 12, 31)),
         (datetime(2025, 1, 2), date(2025, 1, 2), date(2025, 12, 31)),
+        (datetime(2026, 1, 2), date(2026, 1, 2), date(2026, 9, 30)),
+        (datetime(2022, 1, 2), date(2022, 1, 2), date(2025, 12, 31)),
         # start on 1/1 instead (spec sheet 5.1 literally: run 365 days, 2024 ends Dec 30)
         # (datetime(2022, 1, 1), date(2022, 1, 1), date(2022, 12, 31)),
         # (datetime(2023, 1, 1), date(2023, 1, 1), date(2023, 12, 31)),
