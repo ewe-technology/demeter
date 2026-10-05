@@ -20,7 +20,9 @@ traded before mid-2023, so C there is more a valuation than a trade that could h
 
 Run from samples/strategy-example after yield_layer.py --sleeves (the parking LP) and the spot price cache:
   PYTHONPATH=../.. python cost_matrix.py
+  PYTHONPATH=../.. python cost_matrix.py --gwei 10   # one gas price for every year, writes *_gwei10.csv
 """
+import argparse
 import multiprocessing
 import os
 
@@ -48,9 +50,12 @@ def gas_fn(scale: float, units):
     """USD gas of one event: units is a number (every kind costs the same) or {kind: units}."""
     eth_usd = G["eth"]
 
+    flat = G.get("gwei")
+
     def gas(kind: str, t: pd.Timestamp) -> float:
         u = units if isinstance(units, (int, float)) else units[kind]
-        return scale * u * GAS_GWEI.get(t.year, min(GAS_GWEI.values())) * 1e-9 * float(eth_usd.asof(t))
+        gwei = flat if flat is not None else GAS_GWEI.get(t.year, min(GAS_GWEI.values()))
+        return scale * u * gwei * 1e-9 * float(eth_usd.asof(t))
 
     return gas
 
@@ -87,12 +92,13 @@ def run(job):
             "gas $": paid["gas"]}
 
 
-def main():
+def main(gwei: float | None = None):
     os.makedirs(RESULT_DIR, exist_ok=True)
+    tag = "" if gwei is None else f"_gwei{gwei:g}"
     prices, _, _ = load_prices()
     hours = prices.index
     park, park_events = load_sleeve("park_usdc")
-    G.update(prices=prices, eth=prices["eth"], park_events=park_events,
+    G.update(gwei=gwei, prices=prices, eth=prices["eth"], park_events=park_events,
              A=pd.DataFrame({"eth": prices["eth"], "btc": prices["btc"], "cash": 1.0}, index=hours),
              C=pd.DataFrame({"eth": prices["eth"] * wsteth_ratio(hours, "causal"), "btc": prices["btc"],
                              "cash": index_on(park["nav"], hours, FULL[0])}, index=hours))
@@ -109,7 +115,7 @@ def main():
     with multiprocessing.Pool(WORKERS) as pool:
         rows = pool.map(run, jobs, chunksize=4)
     table = pd.DataFrame(rows)
-    table.to_csv(f"{RESULT_DIR}/runs.csv", index=False)
+    table.to_csv(f"{RESULT_DIR}/runs{tag}.csv", index=False)
 
     # check: one tranche at offset 0 must give the yield_layer --combine numbers for A and for C without gas
     one = table[(table["tranches"] == 1) & (table["offset"] == 0) & (table["capital"] == "no gas")]
@@ -139,7 +145,7 @@ def main():
             row["vs A pt min"], row["vs A pt med"], row["vs A pt max"] = d.min(), d.median(), d.max()
         out.append(row)
     summary = pd.DataFrame(out)
-    summary.to_csv(f"{RESULT_DIR}/summary.csv", index=False)
+    summary.to_csv(f"{RESULT_DIR}/summary{tag}.csv", index=False)
 
     shown = summary.copy()
     for c in [c for c in shown.columns if c.split(" ")[0] in ("total", "maxDD")]:
@@ -158,4 +164,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--gwei", type=float, default=None,
+                        help="one gas price for every year instead of GAS_GWEI, for the sensitivity runs")
+    main(parser.parse_args().gwei)
