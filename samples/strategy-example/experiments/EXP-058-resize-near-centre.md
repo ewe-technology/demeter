@@ -1,8 +1,8 @@
 # EXP-058: resize in place while the price is in the ladder's inner half, recentre otherwise (v6.45)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-940
+- Status: dropped-at-dev
+- Pre-registration commit: 02403c7 · Result commit: ______
 - Scope: /goal 2026-10-05 "beat v6 at the improvement level, pure LP, time-split out-of-time holdout" (Dino); idle-capital
   yield excluded (ruling 2026-10-05).
 
@@ -42,7 +42,26 @@ Pre-registered together with EXP-059 (same commit) and run in the same invocatio
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `AAUAV`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +8.6% | +1.0 |
+| 2023 | +32.2% | +33.1% | +0.9 |
+| 2024 | +36.4% | +34.1% | -2.3 |
+| 2025 | +16.3% | +12.8% | -3.5 |
+| 2026-01..09-17 | +18.7% | +22.8% | +4.1 |
+
+Wins 3/5, median +0.92 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +81.7% | 13.5% | -22.4% | 0.73 | 0.60 | $85.8k | $0.26k | 149 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +72.0% | 15.0% | -17.2% | 0.91 | 0.87 | $60.1k | $0.61k | 108 |
+
+Verdict: **dropped-at-dev** — ETH CAGR 13.5% vs 14.0%, Calmar 0.60 vs 0.61 (max DD −22.4% vs −22.8%), wins 3/5; WBTC CAGR 15.0% vs 17.3%, Calmar 0.87 vs 0.97. Holdout not run. Reading: the inner-half test kept ETH close to v6 (72 of its follow events resized, fees .8k vs .5k) but kept none of EXP-055's WBTC drawdown gain (−17.2% vs −13.3% there). On this valley ladder, where fees come from the price sitting in the thick outer bands, keeping or resetting the centre trades fees against realised IL in different proportions per pool; no single position rule wins on both.
 
 ## Deviations
 

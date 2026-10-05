@@ -232,6 +232,10 @@ RESIZE_NEAR_CENTRE = False
 # not added). The daily checks skip while paused, as in EXP-016. None = v6.
 MACRO_EVENTS: list | None = None
 MACRO_BEFORE, MACRO_AFTER = timedelta(minutes=30), timedelta(hours=2)
+# EXP-060 (v6.47): EXP-059 with an exact restore. At the re-add every band gets back the liquidity it had before the pause:
+# its token amounts at the current price are computed, one net swap covers the difference with the tokens that came out
+# (the reserve is not used), then the bands are minted at the same ticks. No idle leftover, so no extra follow rebuild.
+MACRO_RESTORE = False
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -1148,7 +1152,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         if self.paused_until is not None:
             self.pause_minutes += 1
             if ts >= self.paused_until:
-                self.resume_ladder(row_data)
+                self.restore_ladder(row_data) if MACRO_RESTORE else self.resume_ladder(row_data)
             return
         while self.macro_next < len(MACRO_EVENTS) and MACRO_EVENTS[self.macro_next] + MACRO_AFTER <= ts:
             self.macro_next += 1
@@ -1169,10 +1173,12 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         """Remove every band (fees collected as in a rebuild), remember the ranges and the tokens that came out."""
         lp_market: UniLpMarketV2 = self.broker.markets[self.utils.market_key]
         bands = []
+        self.paused_liq = []   # EXP-060: (band, liquidity) before the pull
         for position_info in self.positions:
             self.collect_fee_as_quote(lp_market, position_info)
             if position_info not in lp_market.positions:
                 continue
+            self.paused_liq.append((position_info, lp_market.positions[position_info].liquidity))
             base, quote = lp_market.remove_liquidity(position_info, collect=True)
             bands.append((position_info, base, quote))
         self.paused_bands = bands
@@ -1181,6 +1187,48 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.pauses += 1
         print(f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} pause: {len(bands)} bands pulled, "
               f"{PAUSE_WINDOW}-min move {math.log(float(row_data.prices[self.gp.base_token.name]) / self.price_hist[0]):+.2%}")
+
+    def restore_ladder(self, row_data: Snapshot) -> None:
+        """EXP-060: mint every pulled band again with its pre-pause liquidity; one net swap first (see MACRO_RESTORE)."""
+        lp_market: UniLpMarketV2 = self.broker.markets[self.utils.market_key]
+        pool = lp_market.pool_info
+        price = row_data.prices[self.gp.base_token.name]
+        sqrt = base_unit_price_to_sqrt_price_x96(price, pool.token0.decimal, pool.token1.decimal, pool.is_token0_quote)
+        base_is_0 = self.gp.base_token.name == self.gp.token0.name
+        need = []
+        for pos, liq in self.paused_liq:
+            a0, a1 = V3CoreLib.get_token_amounts(pool, pos, sqrt, liq)
+            need.append((pos, a0 if base_is_0 else a1, a1 if base_is_0 else a0))
+        need_b = sum((b for _, b, _ in need), ZERO)
+        need_q = sum((q for _, _, q in need), ZERO)
+        free_b = lambda: self.broker.get_token_balance(self.gp.base_token) - self.fee_reserve_base()
+        free_q = lambda: max(ZERO, self.broker.get_token_balance(self.gp.quote_token) - self.fee_reserve_quote() - self.reserve_quote)
+        fee = Decimal(pool.fee_rate)
+        if need_b > free_b():   # buy the missing base with the surplus quote
+            pay = min(max(ZERO, free_q() - need_q), (need_b - free_b()) * price / (ONE - fee))
+            if pay > ZERO:
+                _, _, _, fq = self.execute_swap(lp_market, ZERO, pay)
+                self.total_quote_swap_fee += fq if fq is not None else ZERO
+        elif need_q > free_q():   # sell the surplus base for the missing quote
+            sell = min(max(ZERO, free_b() - need_b), (need_q - free_q()) / price / (ONE - fee))
+            if sell > ZERO:
+                _, _, fb, _ = self.execute_swap(lp_market, sell, ZERO)
+                self.total_base_swap_fee += fb if fb is not None else ZERO
+        # what the swap fee took is shared out pro rata
+        k = min([ONE] + [free_b() / need_b if need_b > ZERO else ONE] + [free_q() / need_q if need_q > ZERO else ONE])
+        tick = lp_market.price_to_raw_tick(price)
+        placed = []
+        for pos, b, q in need:
+            if b * k <= ZERO and q * k <= ZERO:
+                continue
+            p, bu, qu, _ = lp_market.add_liquidity_by_tick(pos[0], pos[1], b * k, q * k, tick=tick)
+            if bu == ZERO and qu == ZERO:
+                lp_market.positions.pop(p, None)
+                continue
+            placed.append(p)
+        self.positions = placed
+        self.paused_bands, self.paused_liq = [], []
+        self.paused_until = None
 
     def resume_ladder(self, row_data: Snapshot) -> None:
         """Re-add the pulled ladder: the build loop again at the build's tick (same ranges, same side-rescaled band
