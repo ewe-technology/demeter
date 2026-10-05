@@ -1,8 +1,8 @@
 # EXP-077: F = the lowest account's deployed fraction (v6.64)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-960
+- Status: dropped-at-dev
+- Pre-registration commit: d33e312 · Result commit: ______
 - Scope: /goal 2026-10-05 "beat v6 at the improvement level, pure LP, time-split out-of-time holdout" (Dino); idle-capital
   yield excluded (ruling 2026-10-05).
 
@@ -32,7 +32,26 @@ Pre-registered together with the other five engine ablations of the same commit 
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ABOBPBQ`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +13.1% | +5.5 |
+| 2023 | +32.2% | +32.3% | +0.1 |
+| 2024 | +36.4% | +32.6% | -3.8 |
+| 2025 | +16.3% | +11.9% | -4.4 |
+| 2026-01..09-17 | +18.7% | +15.8% | -2.9 |
+
+Wins 2/5, median -2.92 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +86.1% | 14.1% | -22.9% | 0.74 | 0.61 | $86.0k | $0.45k | 137 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +97.3% | 19.2% | -19.6% | 1.12 | 0.98 | $62.7k | $1.31k | 91 |
+
+Verdict: **dropped-at-dev** — ETH CAGR 14.1% vs 14.0% with Calmar 0.61 (equal) and wins 2/5; WBTC CAGR 19.2% vs 17.3%, Calmar 0.98, max DD −19.6% vs −17.8%. Holdout not run. Reading: deploying only what all accounts agree on barely changes ETH and adds WBTC return with a deeper drawdown; within noise of v6.
 
 ## Deviations
 

@@ -1,8 +1,8 @@
 # EXP-076: one EMA100 account instead of four (ensemble ablation) (v6.63)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-959
+- Status: dropped-at-dev
+- Pre-registration commit: d33e312 · Result commit: ______
 - Scope: /goal 2026-10-05 "beat v6 at the improvement level, pure LP, time-split out-of-time holdout" (Dino); idle-capital
   yield excluded (ruling 2026-10-05).
 
@@ -32,7 +32,26 @@ Pre-registered together with the other five engine ablations of the same commit 
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ABOBPBQ`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +1.8% | -5.8 |
+| 2023 | +32.2% | +32.3% | +0.1 |
+| 2024 | +36.4% | +39.1% | +2.7 |
+| 2025 | +16.3% | +20.9% | +4.7 |
+| 2026-01..09-17 | +18.7% | +19.5% | +0.8 |
+
+Wins 4/5, median +0.80 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +80.8% | 13.4% | -21.3% | 0.70 | 0.63 | $83.9k | $0.32k | 125 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +96.9% | 19.1% | -18.4% | 1.09 | 1.04 | $63.9k | $1.16k | 86 |
+
+Verdict: **dropped-at-dev** — ETH CAGR 13.4% vs 14.0% (Calmar 0.63 vs 0.61, max DD −21.3%, wins 4/5); WBTC CAGR 19.1% vs 17.3%, Calmar 1.04. Holdout not run (ETH CAGR below v6's). Reading: a single EMA100 account does about as well as the four-span ensemble — slightly less ETH return with a shallower drawdown, more WBTC return. The ensemble's diversification is worth little either way; its cost (more F changes) and benefit (smoother timing) roughly cancel.
 
 ## Deviations
 

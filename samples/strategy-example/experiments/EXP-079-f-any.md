@@ -1,8 +1,8 @@
 # EXP-079: full ladder while any account is deployed (v6.66)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-962
+- Status: dropped-at-dev
+- Pre-registration commit: d33e312 · Result commit: ______
 - Scope: /goal 2026-10-05 "beat v6 at the improvement level, pure LP, time-split out-of-time holdout" (Dino); idle-capital
   yield excluded (ruling 2026-10-05).
 
@@ -32,7 +32,26 @@ Pre-registered together with the other five engine ablations of the same commit 
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ABRBSBT`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | -14.6% | -22.2 |
+| 2023 | +32.2% | +34.1% | +1.9 |
+| 2024 | +36.4% | +41.1% | +4.7 |
+| 2025 | +16.3% | +4.5% | -11.8 |
+| 2026-01..09-17 | +18.7% | +10.8% | -7.9 |
+
+Wins 2/5, median -7.92 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +29.8% | 5.7% | -24.3% | 0.36 | 0.23 | $75.7k | $0.38k | 69 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +83.6% | 17.0% | -18.9% | 0.93 | 0.90 | $74.4k | $1.52k | 44 |
+
+Verdict: **dropped-at-dev** — ETH CAGR 5.7% vs 14.0%, Calmar 0.23, wins 2/5; WBTC CAGR 17.0%, Calmar 0.90. Holdout not run. Reading: a full ladder on the first refill stage of any account removes the gradual re-entry; on ETH the first stage is often wrong (bear rallies) and full exposure there is costly. The fractional F is part of v6's edge.
 
 ## Deviations
 

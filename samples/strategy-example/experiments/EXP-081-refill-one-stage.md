@@ -1,8 +1,8 @@
 # EXP-081: the first refill stage deploys the account fully (v6.68)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-964
+- Status: dropped-at-dev
+- Pre-registration commit: d33e312 · Result commit: ______
 - Scope: /goal 2026-10-05 "beat v6 at the improvement level, pure LP, time-split out-of-time holdout" (Dino); idle-capital
   yield excluded (ruling 2026-10-05).
 
@@ -32,7 +32,26 @@ Pre-registered together with the other five engine ablations of the same commit 
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ABRBSBT`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | -11.4% | -19.0 |
+| 2023 | +32.2% | +34.5% | +2.3 |
+| 2024 | +36.4% | +40.4% | +4.0 |
+| 2025 | +16.3% | +4.0% | -12.3 |
+| 2026-01..09-17 | +18.7% | +20.3% | +1.6 |
+
+Wins 3/5, median +1.58 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +42.4% | 7.8% | -30.0% | 0.46 | 0.26 | $73.1k | $0.33k | 100 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +92.4% | 18.4% | -15.2% | 1.02 | 1.21 | $70.3k | $1.36k | 70 |
+
+Verdict: **dropped-at-dev** — ETH CAGR 7.8% vs 14.0%, Calmar 0.26, max DD −30.0%, wins 3/5; WBTC improves (CAGR 18.4% vs 17.3%, Calmar 1.21, max DD −15.2%). Holdout not run. Reading: on ETH the later stages (+8.3 / +11.7 / +15% from the low) are what make the counter-trend refill safe: deploying fully at the first +5% confirmation buys too many failed rebounds. On WBTC's steadier 2023-26 recovery, earlier full deployment pays. The asset split again: v6's staging is tuned to ETH's noisier rebounds.
 
 ## Deviations
 
