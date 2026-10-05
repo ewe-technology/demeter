@@ -288,7 +288,8 @@ OPT = {"A": Variant("A_v6"),
        "DQ": Variant("DQ_tier_svr_nolowbreadth", {"TIER": {"hi": HI_SVR, "lo": {"REFILL_NO_NEW_LOW": True, "BREADTH_CAP": True, "EXTRA": "pool"}}}),   # EXP-129
        "DR": Variant("DR_tier_svr_nolowxasset", {"TIER": {"hi": HI_SVR, "lo": {"REFILL_NO_NEW_LOW": True, "REFILL_GATE": "xasset", "EXTRA": "pool"}}}),   # EXP-130
        "DS": Variant("DS_tier_svr_nolowfundcap", {"TIER": {"hi": HI_SVR, "lo": {"REFILL_NO_NEW_LOW": True, "FUND_CAP": True, "EXTRA": "pool"}}}),   # EXP-131
-       "DT": Variant("DT_tier_svr_nolowstrong", {"TIER": {"hi": HI_SVR, "lo": {"REFILL_NO_NEW_LOW": True, "STRONG_CLOSE_REFILL": True}}})}   # EXP-132
+       "DT": Variant("DT_tier_svr_nolowstrong", {"TIER": {"hi": HI_SVR, "lo": {"REFILL_NO_NEW_LOW": True, "STRONG_CLOSE_REFILL": True}}}),   # EXP-132
+       "DE": Variant("DE_basis_reserve", {"BASIS": "pool"})}   # EXP-133: reserve held as spot + short perp, earning funding
 # EXP-082..: daily non-price inputs (samples/fetch_deribit_dvol.py, fetch_binance_funding.py, fetch_binance_daily.py)
 DVOL_CSV = "../deribit_dvol_daily.csv"
 FUND_LONG_CSV = {"ETHUSDT": "../binance_funding_ETHUSDT_long.csv", "BTCUSDT": "../binance_funding_BTCUSDT_long.csv"}
@@ -345,7 +346,7 @@ VOL_TARGET_BY_ASSET = {"ETHUSDT": 0.04179, "BTCUSDT": 0.03219}
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL", "EXIT_CONFIRM", "F_WEEKLY", "F_FLOOR", "STABLE_LP", "VOL_TARGET", "ER_GATE", "RESIZE_IN_PLACE", "EXIT_CHECK_HOURLY", "SWAPLESS_EXIT", "RESIZE_NEAR_CENTRE", "MACRO_EVENTS", "MACRO_RESTORE", "TRANCHE_ADD", "FOLLOW_ASYM", "ACCOUNT_TRANCHES", "CPPI_FLOOR", "WEEKLY_RECENTRE", "NO_LOWER_STOP", "REFILL_ARMED_ONLY", "REARM_FULL", "NO_UPPER_REBUILD", "WEEKLY_RECENTRE_UP", "RESIZE_BELOW_EMA", "SHARE_BELOW_EMA", "NO_EXIT_REBUILD", "F_AGG", "F_BINARY", "REFILL_ONE_STAGE", "EXTRA", "REFILL_GATE", "FUND_REFILL", "FUND_CAP", "REFILL_VOL_CONFIRM", "REFILL_NO_NEW_LOW", "TWAP_ENGINE", "VRP_PULL", "BREADTH_CAP", "GAS_PANIC_HOLD", "STABLE_FLOW_REFILL", "NO_WEEKEND_REFILL", "EXIT_VOL_CONFIRM", "FLOW_REFILL", "EXIT_FULL_DAY", "LOW_FROM_WICK", "UP_DAY_REFILL", "STRONG_CLOSE_REFILL", "INTRADAY_STOP", "CROWD_CAP", "FAIL_COOLDOWN", "CROWD_REFILL", "SWAP_ROUTE"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL", "EXIT_CONFIRM", "F_WEEKLY", "F_FLOOR", "STABLE_LP", "VOL_TARGET", "ER_GATE", "RESIZE_IN_PLACE", "EXIT_CHECK_HOURLY", "SWAPLESS_EXIT", "RESIZE_NEAR_CENTRE", "MACRO_EVENTS", "MACRO_RESTORE", "TRANCHE_ADD", "FOLLOW_ASYM", "ACCOUNT_TRANCHES", "CPPI_FLOOR", "WEEKLY_RECENTRE", "NO_LOWER_STOP", "REFILL_ARMED_ONLY", "REARM_FULL", "NO_UPPER_REBUILD", "WEEKLY_RECENTRE_UP", "RESIZE_BELOW_EMA", "SHARE_BELOW_EMA", "NO_EXIT_REBUILD", "F_AGG", "F_BINARY", "REFILL_ONE_STAGE", "EXTRA", "REFILL_GATE", "FUND_REFILL", "FUND_CAP", "REFILL_VOL_CONFIRM", "REFILL_NO_NEW_LOW", "TWAP_ENGINE", "VRP_PULL", "BREADTH_CAP", "GAS_PANIC_HOLD", "STABLE_FLOW_REFILL", "NO_WEEKEND_REFILL", "EXIT_VOL_CONFIRM", "FLOW_REFILL", "EXIT_FULL_DAY", "LOW_FROM_WICK", "UP_DAY_REFILL", "STRONG_CLOSE_REFILL", "INTRADAY_STOP", "CROWD_CAP", "FAIL_COOLDOWN", "CROWD_REFILL", "SWAP_ROUTE", "BASIS"]}
 
 
 def sens_grid():
@@ -561,6 +562,9 @@ def run_variant(args):
             v = extra_frame()
         if k == "MACRO_EVENTS" and v == "csv":
             v = sorted(pd.read_csv(MACRO_CSV, parse_dates=["release_utc"])["release_utc"].dt.to_pydatetime().tolist())
+        if k == "BASIS" and v == "pool":   # EXP-133: the pool asset's daily funding sum (Binance USDT-M, 8-hour rates)
+            f = pd.read_csv(FUND_LONG_CSV[LONG_CLOSE_COL[POOL]], parse_dates=["timestamp"]).set_index("timestamp")["rate"]
+            v = f.resample("1D").sum(min_count=1).dropna()
         if k == "STABLE_LP" and v == "pool":
             v = pd.read_csv(STABLE_LP_CSV, parse_dates=["date"]).set_index("date")["ret"].sort_index()
         if k == "VOL_TARGET" and v == "pool":
@@ -609,6 +613,7 @@ def run_variant(args):
             "hedge_min_cash": float(s.hedge_min_cash) if s.hedge_min_cash is not None else float("nan"),
             "stable_income": float(s.total_interest) if V.STABLE_LP is not None else 0.0, "pauses": s.pauses, "pause_minutes": s.pause_minutes, "bear_short_days": s.bear_short_days, "recentres": s.recentre_count, "resizes": s.resize_count, "swapless_exits": s.swapless_exits, "tranche_adds": s.tranche_adds, "tranche_rebuilds": s.tranche_rebuilds, "cppi_min_m": s.cppi_min_m, "weekly_recentres": s.weekly_recentres, "skipped_exits": s.skipped_exits,
             "benchmark_return": float(m["benchmark_rate"]), "route_rebate": s.route_rebate, "route_impact": s.route_impact,
+            "basis_income": float(s.basis_income),
             "secs": round(time.time() - t0)}
 
 

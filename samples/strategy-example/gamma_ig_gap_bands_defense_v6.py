@@ -198,6 +198,13 @@ F_FLOOR = 0.0
 # every change of the reserve pays STABLE_SWITCH_FEE on half the moved amount (the position is ~half USDT). None = v6.
 STABLE_LP: pd.Series | None = None
 STABLE_SWITCH_FEE = Decimal("0.0001")
+# EXP-133 (v6.119): the reserve (same base as STABLE_LP) is held as a basis trade: BASIS_HEDGE of it is spot plus an equal
+# short USDT-M perp on the pool's asset, the rest USDC margin buffer. BASIS = the asset's daily sum of 8-hour funding rates
+# (received by the short, signed), booked once a day at 00:00 on the reserve held then, paid out like the fees; every change of
+# the reserve pays BASIS_SWITCH_COST on the hedged part of the moved amount (spot + perp taker). None = v6.
+BASIS: pd.Series | None = None
+BASIS_HEDGE = Decimal("0.9")
+BASIS_SWITCH_COST = Decimal("0.0015")
 # EXP-053 (v6.40): downside volatility targeting. On days the close is <= EMA100, F x min(1, VOL_TARGET / sigma_14),
 # sigma_14 = std of the last VOL_TARGET_DAYS daily log returns, VOL_TARGET = the asset's median sigma_14 over
 # 2019-01-01..2021-04-30 (Binance daily closes, before any pool data). None = v6.
@@ -931,6 +938,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.sleeve_stops = 0
         self.total_interest = ZERO       # CASH_APR: lending interest earned on idle quote (EXP-052: stable LP income)
         self.stable_held = ZERO          # EXP-052: reserve in the stable LP at the last accrual
+        self.basis_held = ZERO           # EXP-133: reserve in the basis trade at the last accrual
+        self.basis_income = ZERO         # EXP-133: funding received minus switching costs
         self.refill_orders = 0           # REFILL_ORDER: F increases placed as quote-only range orders
         self.ladder_span: tuple[int, int] | None = None   # (lowest, highest) tick of the last built ladder
         self.half_now = False            # HALF_WHEN_ACCEL: the latest build placed only the quote side
@@ -1101,6 +1110,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             self.triggers.append(PeriodTrigger(time_delta=timedelta(days=1), do=self.tranche_work))
         if STABLE_LP is not None:   # EXP-052
             self.triggers.append(PeriodTrigger(time_delta=timedelta(days=1), do=self.accrue_stable))
+        if BASIS is not None:   # EXP-133
+            self.triggers.append(PeriodTrigger(time_delta=timedelta(days=1), do=self.accrue_basis))
         if self.signal_deploy:  # spec sheet 2.3: judged once a day on the previous close
             self.triggers.append(PeriodTrigger(time_delta=timedelta(days=1), do=self.follow_work))
         self.triggers.append(PeriodTrigger(time_delta=timedelta(days=1), do=self.log_fees))
@@ -1507,6 +1518,23 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.broker.add_to_balance(self.gp.quote_token, income)
         self.total_quote_fee += income
         self.total_interest += income
+
+    def accrue_basis(self, row_data: Snapshot):
+        """EXP-133: one day of the basis trade on the reserve (quote held outside the ladder minus the paid-out fees and
+        income): BASIS_HEDGE x reserve x the previous day's funding sum; a change of the reserve since the last day pays
+        BASIS_SWITCH_COST on the hedged part of the moved amount. Booked as income like the fees: not deployed."""
+        if self.starting_tick is None:
+            return
+        day = pd.Timestamp(row_data.timestamp - timedelta(days=1)).normalize()
+        held = max(ZERO, self.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee)
+        moved = abs(held - self.basis_held)
+        self.basis_held = held
+        rate = BASIS.get(day, np.nan)
+        income = ((held * BASIS_HEDGE * Decimal(str(rate))) if not pd.isna(rate) else ZERO) - moved * BASIS_HEDGE * BASIS_SWITCH_COST
+        self.broker.add_to_balance(self.gp.quote_token, income)
+        self.total_quote_fee += income
+        self.total_interest += income
+        self.basis_income += income
 
     # ---- EXP-016: toxicity pause ----
     def pause_work(self, row_data: Snapshot) -> None:
