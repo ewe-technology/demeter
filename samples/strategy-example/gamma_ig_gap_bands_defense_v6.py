@@ -339,6 +339,10 @@ CROWD_CAP = False
 # EXP-105's definition); F is not capped. False = v6.
 FAIL_COOLDOWN = False
 CROWD_REFILL = False
+# EXP-117 (v6.104): SWAP_ROUTE = "pool": the ladder lives in the pair's 0.3% pool and every swap is charged as if routed
+# through the 0.05% tier (v6_validate.SWAP_ROUTES: fee difference credited, impact on the route's hops). The strategy
+# itself is unchanged; v6_validate's cost ledger applies the route. None = v6.
+SWAP_ROUTE = None
 NO_WEEKEND_REFILL = False
 EXIT_VOL_CONFIRM = False
 FLOW_REFILL = False

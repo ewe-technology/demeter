@@ -52,6 +52,8 @@ POOLS = {
     # AAVE/WETH 0.3%. Gas is still priced as mainnet (reported only).
     "0xc6962004f452be9203591991d15f6b388e09e8d0": (("eth", 18), ("usdc", 6), 0, 0.05, "../holdout-data"),
     "0x5ab53ee1d50eef2c1dd3d5402789cd27bb52c1bb": (("aave", 18), ("eth", 18), 0, 0.3, "../holdout-data"),
+    # EXP-117: mainnet USDC/WETH 0.3% (same token order as 0x88e6, tick spacing 60), fetched with fetch_uni_minute.py
+    "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8": (("usdc", 6), ("eth", 18), 1, 0.3, "../holdout-data"),
 }
 # the EMA warm-up needs a year of history before the pool existed: read ETH/USD from the mainnet pool
 WARM_POOL = {"0xd0b53d9277642d899df5c87a3966a349a798f224": "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
@@ -68,15 +70,18 @@ FIRST_DATA = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": date(2021, 5, 6),
               "0xa6cc3c2531fdaa6ae1a3ca84c2855806728693e8": date(2021, 6, 1),
               "0x1d42064fc4beb5f8aaf85f4617ae8b3b5b8bd801": date(2021, 6, 1),
               "0xc6962004f452be9203591991d15f6b388e09e8d0": date(2023, 6, 9),
-              "0x5ab53ee1d50eef2c1dd3d5402789cd27bb52c1bb": date(2021, 6, 1)}
+              "0x5ab53ee1d50eef2c1dd3d5402789cd27bb52c1bb": date(2021, 6, 1),
+              "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8": date(2021, 5, 6)}
 # EXP-004: daily Aave USDC supply APR per pool's chain (samples/fetch_aave_rates.py)
 RATE_CSV = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": "../aave_usdc_ethereum_daily.csv",
             "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": "../aave_usdc_ethereum_daily.csv",
             "0xd0b53d9277642d899df5c87a3966a349a798f224": "../aave_usdc_base_daily.csv",
             "0xfbb6eed8e7aa03b138556eedaf5d271a5e1e43ef": "../aave_usdc_base_daily.csv",
-            "0x6c561b446416e1a00e8e93e221854d6ea4171372": "../aave_usdc_base_daily.csv"}
+            "0x6c561b446416e1a00e8e93e221854d6ea4171372": "../aave_usdc_base_daily.csv",
+            "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8": "../aave_usdc_ethereum_daily.csv"}
 # EXP-014: Binance USDT-M 8h funding of the pool's base asset (samples/fetch_binance_funding.py)
 FUNDING_CSV = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": "../binance_funding_ETHUSDT.csv",
+               "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8": "../binance_funding_ETHUSDT.csv",
                "0xd0b53d9277642d899df5c87a3966a349a798f224": "../binance_funding_ETHUSDT.csv",
                "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": "../binance_funding_BTCUSDT.csv",
                "0xfbb6eed8e7aa03b138556eedaf5d271a5e1e43ef": "../binance_funding_BTCUSDT.csv",
@@ -87,6 +92,7 @@ FUNDING_CSV = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": "../binance_funding
 # EXP-018: Binance daily closes of the pool's base asset, for the 12-month return (samples/fetch_binance_daily.py)
 LONG_CLOSE_CSV = "../binance_daily_closes.csv"
 LONG_CLOSE_COL = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": "ETHUSDT",
+                  "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8": "ETHUSDT",
                   "0xd0b53d9277642d899df5c87a3966a349a798f224": "ETHUSDT",
                   "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": "BTCUSDT",
                   "0xfbb6eed8e7aa03b138556eedaf5d271a5e1e43ef": "BTCUSDT",
@@ -103,6 +109,24 @@ INIT_BY_POOL = {"0x4585fe77225b41b697c938b018e2ac67ac5a20c0": Decimal(2),  # quo
 G_REMOVE, G_ADD, G_SWAP = 260_000, 450_000, 150_000
 GAS_CSV = "../gas_ethereum_hourly.csv"
 ETH_USD_CSV = "../eth_usd_hourly.csv"
+# EXP-117: swap route per LP pool, (hop pool, fee %) in order; every hop's token1 is WETH. Used when SWAP_ROUTE == "pool".
+SWAP_ROUTES = {"0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8": (("0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", 0.05),),
+               "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": (("0x4585fe77225b41b697c938b018e2ac67ac5a20c0", 0.05),
+                                                              ("0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", 0.05))}
+ROUTE_DATA: list | None = None   # EXP-117: per hop (fee %, minute frame of closeTick / currentLiquidity), set in run_variant
+
+
+def route_frame(pool: str, start: date, end: date) -> pd.DataFrame:
+    """EXP-117: a hop pool's minute closeTick and currentLiquidity over [start, end] (raw files, no demeter cache)."""
+    assert POOLS[pool][1] == ("eth", 18), pool
+    folder = f"{POOLS[pool][4]}/{pool}"
+    frames = []
+    for name in sorted(os.listdir(folder)):
+        if name.endswith(".minute.csv") and start <= date.fromisoformat(name[-21:-11]) <= end:
+            frames.append(pd.read_csv(f"{folder}/{name}", usecols=["timestamp", "closeTick", "currentLiquidity"],
+                                      parse_dates=["timestamp"]))
+    m = pd.concat(frames).set_index("timestamp").sort_index()
+    return m.apply(pd.to_numeric, errors="coerce").astype(float).ffill()
 
 
 @dataclass(frozen=True)
@@ -243,7 +267,8 @@ OPT = {"A": Variant("A_v6"),
        "DJ": Variant("DJ_tier_stopvoltranche_nolow", {"TIER": {"hi": {"INTRADAY_STOP": True, "REFILL_VOL_CONFIRM": True, "ACCOUNT_TRANCHES": True,
                                                                        "EXTRA": "pool"},
                                                                 "lo": {"REFILL_NO_NEW_LOW": True}}}),   # EXP-121
-       "DK": Variant("DK_nolow_macro", {"REFILL_NO_NEW_LOW": True, "MACRO_EVENTS": "csv", "MACRO_RESTORE": True})}   # EXP-122: v6.75 + v6.47
+       "DK": Variant("DK_nolow_macro", {"REFILL_NO_NEW_LOW": True, "MACRO_EVENTS": "csv", "MACRO_RESTORE": True}),   # EXP-122: v6.75 + v6.47
+       "DD": Variant("DD_lp03_swap005", {"SWAP_ROUTE": "pool"})}   # EXP-117: ladder in the 0.3% pool, swaps on the 0.05% route
 # EXP-082..: daily non-price inputs (samples/fetch_deribit_dvol.py, fetch_binance_funding.py, fetch_binance_daily.py)
 DVOL_CSV = "../deribit_dvol_daily.csv"
 FUND_LONG_CSV = {"ETHUSDT": "../binance_funding_ETHUSDT_long.csv", "BTCUSDT": "../binance_funding_BTCUSDT_long.csv"}
@@ -300,7 +325,7 @@ VOL_TARGET_BY_ASSET = {"ETHUSDT": 0.04179, "BTCUSDT": 0.03219}
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL", "EXIT_CONFIRM", "F_WEEKLY", "F_FLOOR", "STABLE_LP", "VOL_TARGET", "ER_GATE", "RESIZE_IN_PLACE", "EXIT_CHECK_HOURLY", "SWAPLESS_EXIT", "RESIZE_NEAR_CENTRE", "MACRO_EVENTS", "MACRO_RESTORE", "TRANCHE_ADD", "FOLLOW_ASYM", "ACCOUNT_TRANCHES", "CPPI_FLOOR", "WEEKLY_RECENTRE", "NO_LOWER_STOP", "REFILL_ARMED_ONLY", "REARM_FULL", "NO_UPPER_REBUILD", "WEEKLY_RECENTRE_UP", "RESIZE_BELOW_EMA", "SHARE_BELOW_EMA", "NO_EXIT_REBUILD", "F_AGG", "F_BINARY", "REFILL_ONE_STAGE", "EXTRA", "REFILL_GATE", "FUND_REFILL", "FUND_CAP", "REFILL_VOL_CONFIRM", "REFILL_NO_NEW_LOW", "TWAP_ENGINE", "VRP_PULL", "BREADTH_CAP", "GAS_PANIC_HOLD", "STABLE_FLOW_REFILL", "NO_WEEKEND_REFILL", "EXIT_VOL_CONFIRM", "FLOW_REFILL", "EXIT_FULL_DAY", "LOW_FROM_WICK", "UP_DAY_REFILL", "STRONG_CLOSE_REFILL", "INTRADAY_STOP", "CROWD_CAP", "FAIL_COOLDOWN", "CROWD_REFILL"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL", "EXIT_CONFIRM", "F_WEEKLY", "F_FLOOR", "STABLE_LP", "VOL_TARGET", "ER_GATE", "RESIZE_IN_PLACE", "EXIT_CHECK_HOURLY", "SWAPLESS_EXIT", "RESIZE_NEAR_CENTRE", "MACRO_EVENTS", "MACRO_RESTORE", "TRANCHE_ADD", "FOLLOW_ASYM", "ACCOUNT_TRANCHES", "CPPI_FLOOR", "WEEKLY_RECENTRE", "NO_LOWER_STOP", "REFILL_ARMED_ONLY", "REARM_FULL", "NO_UPPER_REBUILD", "WEEKLY_RECENTRE_UP", "RESIZE_BELOW_EMA", "SHARE_BELOW_EMA", "NO_EXIT_REBUILD", "F_AGG", "F_BINARY", "REFILL_ONE_STAGE", "EXTRA", "REFILL_GATE", "FUND_REFILL", "FUND_CAP", "REFILL_VOL_CONFIRM", "REFILL_NO_NEW_LOW", "TWAP_ENGINE", "VRP_PULL", "BREADTH_CAP", "GAS_PANIC_HOLD", "STABLE_FLOW_REFILL", "NO_WEEKEND_REFILL", "EXIT_VOL_CONFIRM", "FLOW_REFILL", "EXIT_FULL_DAY", "LOW_FROM_WICK", "UP_DAY_REFILL", "STRONG_CLOSE_REFILL", "INTRADAY_STOP", "CROWD_CAP", "FAIL_COOLDOWN", "CROWD_REFILL", "SWAP_ROUTE"]}
 
 
 def sens_grid():
@@ -342,6 +367,7 @@ class Checked(V.RemixDaoDcaWeekStratStrategy):
         global CURRENT
         CURRENT = self
         self.cost_log = []
+        self.route_rebate, self.route_impact = 0.0, 0.0   # EXP-117
 
     def swapped_since(self, b0, q0):
         rate = Decimal(str(self.gp.fee)) / Decimal(100)
@@ -362,6 +388,18 @@ class Checked(V.RemixDaoDcaWeekStratStrategy):
             impact = float(base_in) * 10 ** self.gp.base_token.decimal / (x0 if base_is_0 else x1) * float(base_in) * price
         elif quote_in > 0:
             impact = float(quote_in) * 10 ** self.gp.quote_token.decimal / (x1 if base_is_0 else x0) * float(quote_in)
+        notional = float(base_in) * price + float(quote_in)
+        if V.SWAP_ROUTE is not None and notional > 0:   # EXP-117: the swap is charged on the 0.05% route instead
+            eth_usd = float(ETH_USD.asof(ts))
+            side = float(base_in) * price if base_in > 0 else float(quote_in)   # same side as v6's impact above
+            route = 0.0
+            for _, hop in ROUTE_DATA:
+                h = hop.asof(ts)
+                route += side ** 2 / (h["currentLiquidity"] * 1.0001 ** (h["closeTick"] / 2) / 1e18 * eth_usd)
+            rebate = notional * (float(self.gp.fee) - sum(fee for fee, _ in ROUTE_DATA)) / 100
+            self.route_rebate += rebate
+            self.route_impact += route
+            impact = route - rebate
         self.cost_log.append((ts, gas_usd, impact, float(base_in) * price + float(quote_in)))
 
     def first_lp(self, row_data):
@@ -508,6 +546,10 @@ def run_variant(args):
         if k == "HEDGE_FUNDING" and v == "pool":
             v = pd.read_csv(FUNDING_CSV[POOL], parse_dates=["timestamp"]).set_index("timestamp")["rate"].sort_index()
         setattr(V, k, v)
+    global ROUTE_DATA
+    ROUTE_DATA = None
+    if V.SWAP_ROUTE == "pool":   # EXP-117: hop pools' minute liquidity for the route's impact
+        ROUTE_DATA = [(fee, route_frame(hop, start - timedelta(days=1), end)) for hop, fee in SWAP_ROUTES[POOL]]
     if V.BREADTH_CAP and V.EXTRA is not None:   # EXP-091: the other asset's F, computed with v6's engine
         V.EXTRA = V.EXTRA.copy()
         V.EXTRA["other_F"] = other_fraction().reindex(V.EXTRA.index)
@@ -543,7 +585,8 @@ def run_variant(args):
             "hedge_trades": s.hedge_trades, "hedge_max_ratio": s.hedge_max_ratio,
             "hedge_min_cash": float(s.hedge_min_cash) if s.hedge_min_cash is not None else float("nan"),
             "stable_income": float(s.total_interest) if V.STABLE_LP is not None else 0.0, "pauses": s.pauses, "pause_minutes": s.pause_minutes, "bear_short_days": s.bear_short_days, "recentres": s.recentre_count, "resizes": s.resize_count, "swapless_exits": s.swapless_exits, "tranche_adds": s.tranche_adds, "tranche_rebuilds": s.tranche_rebuilds, "cppi_min_m": s.cppi_min_m, "weekly_recentres": s.weekly_recentres, "skipped_exits": s.skipped_exits,
-            "benchmark_return": float(m["benchmark_rate"]), "secs": round(time.time() - t0)}
+            "benchmark_return": float(m["benchmark_rate"]), "route_rebate": s.route_rebate, "route_impact": s.route_impact,
+            "secs": round(time.time() - t0)}
 
 
 def load_minutes(start: date, end: date, pool: str | None = None) -> pd.DataFrame:
