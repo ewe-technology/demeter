@@ -38,17 +38,30 @@ def improves(a: dict, v: dict) -> bool:
     return v["cagr"] > a["cagr"] and v["calmar"] >= a["calmar"] and dd_ok
 
 
+# EXP-117: the ETH variant runs on another pool (JUDGE_ETH_POOL, e.g. 0x8ad5, same tag) and v6 on 0x88e6 under its own tag
+# (JUDGE_ETH_BASE_TAG); unset = variant and v6 both read from the 0x88e6 run of `tag`.
+ETH_POOL = os.environ.get("JUDGE_ETH_POOL", "0x88e6")
+ETH_BASE_TAG = os.environ.get("JUDGE_ETH_BASE_TAG")
+
+
+def eth_folders(tag: str, seg: str) -> tuple:
+    """(v6 folder, variant folder) for an ETH window."""
+    return f"{R}/0x88e6-opt-{ETH_BASE_TAG or tag}-{seg}", f"{R}/{ETH_POOL}-opt-{tag}-{seg}"
+
+
 def dev(tag: str, prefixes: list) -> dict:
     out = {}
-    eth, btc = f"{R}/0x88e6-opt-{tag}-2022-01-01-2026-09-17", f"{R}/0x99ac-opt-{tag}-2022-11-01-2026-09-17"
-    a_e, a_b = cont(eth, "A_"), cont(btc, "A_")
-    yearly = [pd.read_csv(f"{R}/0x88e6-opt-{tag}-{s}.csv").set_index("variant")["net_return"] for s in SEGS]
+    eth_a, eth = eth_folders(tag, "2022-01-01-2026-09-17")
+    btc = f"{R}/0x99ac-opt-{tag}-2022-11-01-2026-09-17"
+    a_e, a_b = cont(eth_a, "A_"), cont(btc, "A_")
+    yearly = [(pd.read_csv(f"{fa}.csv").set_index("variant")["net_return"], pd.read_csv(f"{fv}.csv").set_index("variant")["net_return"])
+              for fa, fv in (eth_folders(tag, s) for s in SEGS)]
     for pre in prefixes:
         v_e, v_b = cont(eth, pre), cont(btc, pre)
         name = lambda y: y[next(k for k in y.index if k.startswith(pre))]
         base = lambda y: y[next(k for k in y.index if k.startswith("A_"))]
-        wins = sum(float(name(y)) > float(base(y)) for y in yearly)
-        pos = sum(float(name(y)) > 0 for y in yearly)
+        wins = sum(float(name(yv)) > float(base(ya)) for ya, yv in yearly)
+        pos = sum(float(name(yv)) > 0 for _, yv in yearly)
         imp = improves(a_e, v_e) and improves(a_b, v_b) and wins >= 3
         std = all(m["calmar"] >= 0.6 and m["maxdd"] >= -0.30 for m in (v_e, v_b)) and pos >= 4
         out[pre] = {"improvement": imp, "standalone": std, "wins": wins, "pos": pos, "eth": v_e, "wbtc": v_b, "a_eth": a_e, "a_wbtc": a_b}
@@ -108,7 +121,8 @@ def oot(tag: str, prefixes: list) -> dict:
     more than 3 pts deeper (`improves`)."""
     out = {}
     for pre in prefixes:
-        per = [(label, cont(f"{R}/{pool}-opt-{tag}-{seg}", "A_"), cont(f"{R}/{pool}-opt-{tag}-{seg}", pre)) for label, pool, seg in OOT]
+        folders = [eth_folders(tag, seg) if pool == "0x88e6" else (f"{R}/{pool}-opt-{tag}-{seg}",) * 2 for _, pool, seg in OOT]
+        per = [(label, cont(fa, "A_"), cont(fv, pre)) for (label, _, _), (fa, fv) in zip(OOT, folders)]
         imp = all(improves(a, v) for _, a, v in per)
         out[pre] = {"improvement": imp, "per": per}
         print(f"{pre:6s} improvement={'PASS' if imp else 'fail'} | " + "; ".join(

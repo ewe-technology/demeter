@@ -1,8 +1,8 @@
 # EXP-117: LP in the 0.3% fee tier, rebuild swaps routed through the 0.05% tier (v6.104)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-1002
+- Status: dropped-at-dev
+- Pre-registration commit: 0180340 · Result commit: see registry
 - Scope: Dino, 2026-10-05: "算，開始下載資料並寫 pre-registration" — moving the liquidity to another pool and routing the
   rebuild swap through a cheaper pool counts as a strategy change (it changes where the ETH/BTC liquidity is placed).
   Number EXP-117 / v6.104 and OPT key `DD` reserved with the goal3 session.
@@ -82,13 +82,57 @@ Arms (all on the same code, same windows):
 
 ## Result
 
-| test | v6 | this | gain |
-|---|---|---|---|
+Development (code `6c57e80`; v6 = `A` on `0x88e6` tag `A`; this = `DD` on `0x8ad5` tag `ADD`, with `A` on `0x8ad5` as the
+ablation; WBTC `A,DD` on `0x99ac` tag `ADD`). v6's ETH continuous run reproduces EXP-000 (+85.36%).
 
-Continuous run (reported, not deciding): total / CAGR / max DD / Sharpe.
+| year | v6 (`88e6`) | v6 in `8ad5`, swaps at 0.3% (ablation) | this | gain vs v6 |
+|---|---|---|---|---|
+| 2022 | +7.6% | +8.1% | +10.1% | +2.5 |
+| 2023 | +32.2% | +18.2% | +20.1% | −12.1 |
+| 2024 | +36.4% | +31.6% | +33.8% | −2.6 |
+| 2025 | +16.3% | +14.1% | +17.0% | +0.7 |
+| 2026-01..09-17 | +18.7% | +17.3% | +18.3% | −0.4 |
 
-Verdict: pass / fail / dropped at dev — and the one-line reason.
+Wins 2/5, median −0.43 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | rebuilds | swap notional | route fee credit | impact (net ledger) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| ETH v6 (`88e6`) | +85.4% | 14.0% | −22.8% | 0.73 | 0.61 | $86.5k | 147 | $3.52M | — | $0.29k |
+| ETH v6 in `8ad5` (ablation) | +84.2% | 13.8% | −20.0% | 0.73 | 0.69 | $84.1k | 144 | $3.42M | — | $0.46k |
+| ETH this | +92.9% | 15.0% | −18.9% | 0.79 | 0.79 | $84.1k | 144 | $3.42M | $8.6k | −$8.26k |
+| WBTC v6 | +85.6% | 17.3% | −17.8% | 1.01 | 0.97 | $61.7k | 106 | $2.82M | — | $0.72k |
+| WBTC this | +91.1% | 18.2% | −16.5% | 1.06 | 1.10 | $61.7k | 106 | $2.82M | $5.6k | −$4.98k |
+
+Yearly fees, rebuilds and mean F (v6 `88e6` vs this): 2022 $20.1k / 41 / 0.55 vs $20.8k / 39 / 0.55; 2023 $23.3k / 24 / 0.73
+vs $15.1k / 23 / 0.74; 2024 $30.9k / 29 / 0.77 vs $27.5k / 29 / 0.76; 2025 $20.8k / 32 / 0.58 vs $19.8k / 33 / 0.59; 2026
+$6.2k / 24 / 0.61 vs $5.7k / 24 / 0.62. Capacity (median virtual reserve of `8ad5` on sampled days): $193M (2022-06),
+$260M (2023-01), $526M (2024-06), $278M (2025-06), $60M (2026-06): a $100k ladder stays well below 1% of active liquidity.
+
+`judge.py dev` (`JUDGE_ETH_POOL=0x8ad5 JUDGE_ETH_BASE_TAG=A`): ETH CAGR 15.0 vs 14.0, Calmar 0.79 vs 0.61, max DD −18.9 vs
+−22.8; WBTC CAGR 18.2 vs 17.3, Calmar 1.10 vs 0.97, max DD −16.5 vs −17.8; **wins 2/5**.
+
+Verdict: **dropped-at-dev** — four of five dev conditions pass (continuous CAGR and Calmar above v6 on both assets, shallower
+drawdowns), the fifth fails: ETH yearly wins 2/5 (rule ≥ 3/5), driven by 2023 (−12.1 pts). Holdout not run. Standalone level
+(reported, not registered for this EXP): passes at dev (Calmar 0.79 / 1.10, max DD −18.9 / −16.5, 5/5 positive years).
+
+Reading (interpretation, partly measured):
+- Comparing this with v6 isolates the pool: both pay the 0.05% swap fee (v6 natively, this after the credit), so the
+  +7.5 pts total / +1.0 pt CAGR / −3.9 pts max DD over 4.7 years come from placing the ladder in the 0.3% pool. Fees are about
+  equal on the continuous run ($84.1k vs $86.5k) while the result is higher, consistent with the lower LVR measured in the
+  pool scan; not decomposed here (`decomp.py` needs the daily ETH-held log).
+- The ablation shows why EXP-015 lost: without routing the same pool change costs ~$8.6k of extra swap fees and ends at
+  13.8% CAGR. WBTC's gain is routing alone ($5.6k credit, its LP pool is unchanged).
+- 2023 is the year the 0.3% tier lost volume share: the ladder's fees fell to $15.1k vs $23.3k in the 0.05% pool (about
+  295 vs 2,600 swaps a day on sampled days), and the yearly-reset run trails by 12 pts. Fee share per unit of liquidity
+  moves between tiers year by year; the fee/LVR scan (which favoured the 0.3% tier in 2023, 2.57 vs 1.39) does not see the
+  ladder's share of a pool's volume.
 
 ## Deviations
 
-None.
+- Smoke tests on dev data before the dev run, after the pre-registration: `0x8ad5` and `0x99ac` 2023-01-01..02-28 (`A,DD`), to
+  check the ledger (fee credit = notional × fee difference, $312.16 and $340.25, as expected). The first ETH smoke test showed
+  the route impact computed on both swap sides while v6's ledger charges only one (base side if any, else quote side); the
+  route impact was changed to the same side before the dev run (the pre-registration says "same quadratic formula as
+  `Checked.charge`"). The fee credit stays on the full notional (both sides paid the fee).
+- Baseline v6 ran in a separate invocation from the variant (different pool) with the same code and windows, as
+  pre-registered in the arms table.
