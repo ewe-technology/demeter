@@ -57,3 +57,5 @@ EXP-054,2026-10-05,EMA exit only while the 30-day efficiency ratio >= 1/sqrt(30)
 EXP-055,2026-10-05,follow F by resizing every band in place instead of a full rebuild (v6.42),QUAN-937,dropped-at-dev,-5.55,2/5,,,0.619,0.108,-0.210,29b47c1,c02ec73,EXP-055-resize-in-place.md,improvement
 EXP-056,2026-10-05,range-exit check every hour instead of once a day (v6.43),QUAN-938,dropped-at-dev,-0.05,2/5,,,0.675,0.116,-0.233,29b47c1,c02ec73,EXP-056-exit-check-hourly.md,improvement
 EXP-057,2026-10-05,range-exit rebuild from inventory without the swap (base + limit) (v6.44),QUAN-939,dropped-at-dev,-7.65,1/5,,,0.599,0.105,-0.214,29b47c1,c02ec73,EXP-057-swapless-exit.md,improvement
+EXP-058,2026-10-05,resize in place while the price is in the ladder's inner half; recentre otherwise (v6.45),,pre-registered,,,,,,,,,,EXP-058-resize-near-centre.md,improvement
+EXP-059,2026-10-05,pull the ladder 30 min before to 2 h after scheduled FOMC / CPI releases (v6.46),,pre-registered,,,,,,,,,,EXP-059-macro-event-pause.md,improvement

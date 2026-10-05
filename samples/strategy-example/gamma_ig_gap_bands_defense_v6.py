@@ -222,6 +222,16 @@ EXIT_CHECK_HOURLY = False
 # upward exit (all quote) the ladder is bids below the price, after a downward exit (all base) asks above it; the pool
 # converts them while paying fees. Follow rebuilds (F changes) and builds from an empty book keep v6's swap. False = v6.
 SWAPLESS_EXIT = False
+# EXP-058 (v6.45): hybrid of v6 and EXP-055 on follow events: while the price is in the inner half of the ladder (within half
+# of each side's reach, ~±10%, of the tick of the last full build) the ladder is resized in place (resize_work); farther out,
+# v6's full rebuild recentres it. False = v6.
+RESIZE_NEAR_CENTRE = False
+# EXP-059 (v6.46): scheduled-event pause. MACRO_EVENTS = sorted release times (UTC) of FOMC statements and US CPI
+# (samples/macro_events_utc.csv). The ladder is pulled MACRO_BEFORE before each release (EXP-016's pause_ladder: burns,
+# fees collected, no swap) and re-added MACRO_AFTER after it at the same ticks from the tokens that came out (the reserve is
+# not added). The daily checks skip while paused, as in EXP-016. None = v6.
+MACRO_EVENTS: list | None = None
+MACRO_BEFORE, MACRO_AFTER = timedelta(minutes=30), timedelta(hours=2)
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -692,6 +702,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.follow_rebuild_count = 0
         self.resize_count = 0            # EXP-055: follow events handled by resize_work
         self.swapless_exits = 0          # EXP-057: range-exit rebuilds placed without a swap
+        self.macro_next = 0              # EXP-059: index of the next scheduled release
         self.fee_log: List[dict] = []    # daily: collected fees (quote) + pending fees still in the positions
         # spec sheet s: base (ETH) share of total value before the bands are placed. None keeps the
         # original behaviour, where calculate_swap_amount lets the full-range geometry pick the ratio.
@@ -971,6 +982,13 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         if RESIZE_IN_PLACE and self.positions and current > FULL_TOLERANCE and target > ZERO:   # EXP-055
             self.resize_work(row_data, target, current)
             return
+        if RESIZE_NEAR_CENTRE and self.positions and current > FULL_TOLERANCE and target > ZERO \
+                and self.build_tick is not None:   # EXP-058: resize only while the price is near the build centre
+            lp_market: UniLpMarketV2 = self.broker.markets[self.utils.market_key]
+            inner = (self.shape_config[-1][1] - self.shape_config[0][0]) / 4   # half of each side's reach
+            if abs(lp_market.price_to_raw_tick(price) - self.build_tick) < inner:
+                self.resize_work(row_data, target, current)
+                return
         print(f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} follow F: target {float(target):.4f} "
               f"current {float(current):.4f} -> rebuild")
         self.follow_rebuild_count += 1
@@ -1124,6 +1142,29 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             return
         self.pause_ladder(row_data)
 
+    def macro_work(self, row_data: Snapshot) -> None:
+        """EXP-059: every minute, pull the ladder MACRO_BEFORE ahead of a scheduled release and re-add it MACRO_AFTER later."""
+        ts = row_data.timestamp
+        if self.paused_until is not None:
+            self.pause_minutes += 1
+            if ts >= self.paused_until:
+                self.resume_ladder(row_data)
+            return
+        while self.macro_next < len(MACRO_EVENTS) and MACRO_EVENTS[self.macro_next] + MACRO_AFTER <= ts:
+            self.macro_next += 1
+        if self.macro_next >= len(MACRO_EVENTS) or not self.positions or self.starting_tick is None:
+            return
+        event = MACRO_EVENTS[self.macro_next]
+        if event - MACRO_BEFORE <= ts < event + MACRO_AFTER:
+            end = datetime(self.params.data_end_date.year, self.params.data_end_date.month, self.params.data_end_date.day, 23, 59)
+            if event + MACRO_AFTER > end:
+                return
+            self.price_hist.clear()   # pause_ladder logs a move from price_hist[0]: log 0 here
+            self.price_hist.append(float(row_data.prices[self.gp.base_token.name]))
+            self.pause_ladder(row_data)
+            self.paused_until = event + MACRO_AFTER
+            self.macro_next += 1
+
     def pause_ladder(self, row_data: Snapshot) -> None:
         """Remove every band (fees collected as in a rebuild), remember the ranges and the tokens that came out."""
         lp_market: UniLpMarketV2 = self.broker.markets[self.utils.market_key]
@@ -1153,6 +1194,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         for _pass in range(2):
             free_base = self.broker.get_token_balance(self.gp.base_token) - self.fee_reserve_base()
             free_quote = self.broker.get_token_balance(self.gp.quote_token) - self.fee_reserve_quote()
+            if MACRO_EVENTS is not None:   # EXP-059: the reserve stays out of the re-added ladder
+                free_quote = max(ZERO, free_quote - self.reserve_quote)
             if free_base * price + free_quote < Decimal(1):
                 break
             for config in self.ladder_configs():
@@ -1687,6 +1730,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         """
         if PAUSE_RET > 0:   # EXP-016
             self.pause_work(row_data)
+        if MACRO_EVENTS is not None:   # EXP-059
+            self.macro_work(row_data)
 
         pos_info = self.utils.current_position_info
         if pos_info is None:

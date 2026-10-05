@@ -165,7 +165,10 @@ OPT = {"A": Variant("A_v6"),
        "AQ": Variant("AQ_er_gate", {"ER_GATE": True}),   # EXP-054: EMA exit only while ER(30) >= 1/sqrt(30)
        "AR": Variant("AR_resize_in_place", {"RESIZE_IN_PLACE": True}),   # EXP-055: follow F by scaling bands in place
        "AS": Variant("AS_exit_check_hourly", {"EXIT_CHECK_HOURLY": True}),   # EXP-056: range-exit check every hour
-       "AT": Variant("AT_swapless_exit", {"SWAPLESS_EXIT": True})}   # EXP-057: range-exit rebuild from inventory, no swap
+       "AT": Variant("AT_swapless_exit", {"SWAPLESS_EXIT": True}),   # EXP-057: range-exit rebuild from inventory, no swap
+       "AU": Variant("AU_resize_near_centre", {"RESIZE_NEAR_CENTRE": True}),   # EXP-058: resize while in the ladder's inner half
+       "AV": Variant("AV_macro_pause", {"MACRO_EVENTS": "csv"})}   # EXP-059: pull the ladder 30 min before to 2 h after FOMC / CPI
+MACRO_CSV = "../macro_events_utc.csv"   # EXP-059
 # EXP-052: daily net return per $ of the USDC/USDT LP (samples/make_stable_lp_series.py), for USDC-quoted pools
 STABLE_LP_CSV = "../stable_lp_daily.csv"
 # EXP-053: median 14-day std of daily log returns, Binance closes 2019-01-01..2021-04-30 (fixed in the pre-registration)
@@ -173,7 +176,7 @@ VOL_TARGET_BY_ASSET = {"ETHUSDT": 0.04179, "BTCUSDT": 0.03219}
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL", "EXIT_CONFIRM", "F_WEEKLY", "F_FLOOR", "STABLE_LP", "VOL_TARGET", "ER_GATE", "RESIZE_IN_PLACE", "EXIT_CHECK_HOURLY", "SWAPLESS_EXIT"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL", "EXIT_CONFIRM", "F_WEEKLY", "F_FLOOR", "STABLE_LP", "VOL_TARGET", "ER_GATE", "RESIZE_IN_PLACE", "EXIT_CHECK_HOURLY", "SWAPLESS_EXIT", "RESIZE_NEAR_CENTRE", "MACRO_EVENTS"]}
 
 
 def sens_grid():
@@ -350,6 +353,8 @@ def run_variant(args):
     for k, v in {**ENGINE_DEFAULTS, **variant.engine}.items():
         if k == "CASH_APR" and v == "pool":
             v = pd.read_csv(RATE_CSV[POOL], parse_dates=["date"]).set_index("date")["apr"].sort_index()
+        if k == "MACRO_EVENTS" and v == "csv":
+            v = sorted(pd.read_csv(MACRO_CSV, parse_dates=["release_utc"])["release_utc"].dt.to_pydatetime().tolist())
         if k == "STABLE_LP" and v == "pool":
             v = pd.read_csv(STABLE_LP_CSV, parse_dates=["date"]).set_index("date")["ret"].sort_index()
         if k == "VOL_TARGET" and v == "pool":
