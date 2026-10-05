@@ -1,7 +1,7 @@
 # EXP-061: F increases add a new tranche at today's price; existing liquidity is never recentred (v6.48)
 
 - Jira: QUAN-943
-- Status: pre-registered
+- Status: dropped-at-dev
 - Pre-registration commit: c4f9b71 · Result commit: ______
 - Scope: /goal 2026-10-05 "beat v6 at the improvement level, pure LP, time-split out-of-time holdout" (Dino); idle-capital
   yield excluded (ruling 2026-10-05).
@@ -45,7 +45,26 @@ Pre-registered together with EXP-062 (same commit) and run in the same invocatio
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `AAXAY`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +7.7% | +0.1 |
+| 2023 | +32.2% | +31.9% | -0.3 |
+| 2024 | +36.4% | +35.5% | -0.9 |
+| 2025 | +16.3% | +12.8% | -3.4 |
+| 2026-01..09-17 | +18.7% | +21.7% | +2.9 |
+
+Wins 2/5, median -0.28 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +80.7% | 13.4% | -22.1% | 0.75 | 0.61 | $88.8k | $0.28k | 146 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +46.0% | 10.3% | -14.6% | 0.69 | 0.70 | $50.8k | $0.58k | 106 |
+
+Verdict: **dropped-at-dev** — ETH CAGR 13.4% vs 14.0%, Calmar 0.61 vs 0.61, max DD −22.1% vs −22.8%, wins 2/5; WBTC CAGR 10.3% vs 17.3%, Calmar 0.70 vs 0.97, max DD −14.6% vs −17.8%. Holdout not run. Reading: rebuild swap notional fell only modestly (ETH .12M vs .52M, WBTC .21M vs .82M: most swaps come from range exits and builds from an empty book, not from F increments), while WBTC fee income fell 18% (.8k vs .7k): new tranches centred on today's price put the added capital into the thin centre of a fresh valley, and the WBTC pool pays at the edges. The hypothesis that F changes drive the swap bill was wrong.
 
 ## Deviations
 
@@ -53,3 +72,5 @@ Pre-registered together with EXP-062 (same commit) and run in the same invocatio
   shrink step) and of each other; they are not independent evidence.
 - Smoke test (variant only): ETH 2023-06-01..06-25, two tranche adds (15 → 31 → 46 bands); WBTC 2024-03-01..25 with `AX,AY`
   (no follow event there, both equal). No v6 number was printed on a new window.
+
+- The ETH continuous segment crashed on the shared `~/.demeter` cache (pickle truncated) before any backtest ran and was rerun alone (CLAUDE.md gotcha); the other six segments ran as scheduled.

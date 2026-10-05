@@ -1,7 +1,7 @@
 # EXP-062: asymmetric follow: shrink in place when F falls, v6 recentre when F rises (v6.49)
 
 - Jira: QUAN-944
-- Status: pre-registered
+- Status: dropped-at-dev
 - Pre-registration commit: c4f9b71 · Result commit: ______
 - Scope: /goal 2026-10-05 "beat v6 at the improvement level, pure LP, time-split out-of-time holdout" (Dino); idle-capital
   yield excluded (ruling 2026-10-05).
@@ -40,9 +40,30 @@ Pre-registered together with EXP-061 (same commit) and run in the same invocatio
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `AAXAY`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +3.1% | -4.5 |
+| 2023 | +32.2% | +32.2% | -0.0 |
+| 2024 | +36.4% | +35.6% | -0.8 |
+| 2025 | +16.3% | +19.0% | +2.7 |
+| 2026-01..09-17 | +18.7% | +19.7% | +0.9 |
+
+Wins 2/5, median -0.04 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +79.6% | 13.2% | -23.0% | 0.70 | 0.58 | $83.9k | $0.26k | 146 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +85.6% | 17.3% | -17.7% | 1.01 | 0.98 | $61.9k | $0.70k | 106 |
+
+Verdict: **dropped-at-dev** — ETH CAGR 13.2% vs 14.0%, Calmar 0.58 vs 0.61, max DD −23.0% vs −22.8%, wins 2/5; WBTC equal to v6 (CAGR 17.3%, Calmar 0.98 vs 0.97). Holdout not run. Reading: shrinking in place on F decreases (23 ETH / 17 WBTC events) neither saves WBTC anything nor protects ETH; it costs ETH fees (.9k vs .5k). With EXP-055 and EXP-061 this closes the follow-rule direction: v6's full recentre on F changes is as good as any of the four alternatives on ETH.
 
 ## Deviations
 
 - Designed after EXP-055's result; a near-copy of EXP-055 and of EXP-061 (shared shrink step), not independent evidence.
 - Smoke test (variant only): WBTC 2024-03-01..25 with `AX,AY` (no follow event, both equal).
+
+- The ETH continuous segment crashed on the shared `~/.demeter` cache (pickle truncated) before any backtest ran and was rerun alone (CLAUDE.md gotcha); the other six segments ran as scheduled.
