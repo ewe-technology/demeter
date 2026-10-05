@@ -204,7 +204,12 @@ OPT = {"A": Variant("A_v6"),
        "CF": Variant("CF_stable_flow_refill", {"STABLE_FLOW_REFILL": True, "EXTRA": "pool"}),   # EXP-093: stablecoin supply rising
        "CG": Variant("CG_no_weekend_refill", {"NO_WEEKEND_REFILL": True}),   # EXP-094: no refill stage on weekends
        "CH": Variant("CH_exit_vol_confirm", {"EXIT_VOL_CONFIRM": True, "EXTRA": "pool"}),   # EXP-095: EMA exit needs volume
-       "CI": Variant("CI_flow_refill", {"FLOW_REFILL": True, "EXTRA": "pool"})}   # EXP-096: pool net buying confirms refill
+       "CI": Variant("CI_flow_refill", {"FLOW_REFILL": True, "EXTRA": "pool"}),   # EXP-096: pool net buying confirms refill
+       "CJ": Variant("CJ_exit_full_day", {"EXIT_FULL_DAY": True}),   # EXP-097: EMA exit only without an intraday reclaim
+       "CK": Variant("CK_low_from_wick", {"LOW_FROM_WICK": True}),   # EXP-098: low since the exit from the minute low
+       "CL": Variant("CL_up_day_refill", {"UP_DAY_REFILL": True}),   # EXP-099: refill days must close above their open
+       "CM": Variant("CM_strong_close_refill", {"STRONG_CLOSE_REFILL": True}),   # EXP-100: close in the upper half of the range
+       "CN": Variant("CN_intraday_stop", {"INTRADAY_STOP": True})}   # EXP-101: lower stop on the minute low
 # EXP-082..: daily non-price inputs (samples/fetch_deribit_dvol.py, fetch_binance_funding.py, fetch_binance_daily.py)
 DVOL_CSV = "../deribit_dvol_daily.csv"
 FUND_LONG_CSV = {"ETHUSDT": "../binance_funding_ETHUSDT_long.csv", "BTCUSDT": "../binance_funding_BTCUSDT_long.csv"}
@@ -257,7 +262,7 @@ VOL_TARGET_BY_ASSET = {"ETHUSDT": 0.04179, "BTCUSDT": 0.03219}
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL", "EXIT_CONFIRM", "F_WEEKLY", "F_FLOOR", "STABLE_LP", "VOL_TARGET", "ER_GATE", "RESIZE_IN_PLACE", "EXIT_CHECK_HOURLY", "SWAPLESS_EXIT", "RESIZE_NEAR_CENTRE", "MACRO_EVENTS", "MACRO_RESTORE", "TRANCHE_ADD", "FOLLOW_ASYM", "ACCOUNT_TRANCHES", "CPPI_FLOOR", "WEEKLY_RECENTRE", "NO_LOWER_STOP", "REFILL_ARMED_ONLY", "REARM_FULL", "NO_UPPER_REBUILD", "WEEKLY_RECENTRE_UP", "RESIZE_BELOW_EMA", "SHARE_BELOW_EMA", "NO_EXIT_REBUILD", "F_AGG", "F_BINARY", "REFILL_ONE_STAGE", "EXTRA", "REFILL_GATE", "FUND_REFILL", "FUND_CAP", "REFILL_VOL_CONFIRM", "REFILL_NO_NEW_LOW", "TWAP_ENGINE", "VRP_PULL", "BREADTH_CAP", "GAS_PANIC_HOLD", "STABLE_FLOW_REFILL", "NO_WEEKEND_REFILL", "EXIT_VOL_CONFIRM", "FLOW_REFILL"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL", "EXIT_CONFIRM", "F_WEEKLY", "F_FLOOR", "STABLE_LP", "VOL_TARGET", "ER_GATE", "RESIZE_IN_PLACE", "EXIT_CHECK_HOURLY", "SWAPLESS_EXIT", "RESIZE_NEAR_CENTRE", "MACRO_EVENTS", "MACRO_RESTORE", "TRANCHE_ADD", "FOLLOW_ASYM", "ACCOUNT_TRANCHES", "CPPI_FLOOR", "WEEKLY_RECENTRE", "NO_LOWER_STOP", "REFILL_ARMED_ONLY", "REARM_FULL", "NO_UPPER_REBUILD", "WEEKLY_RECENTRE_UP", "RESIZE_BELOW_EMA", "SHARE_BELOW_EMA", "NO_EXIT_REBUILD", "F_AGG", "F_BINARY", "REFILL_ONE_STAGE", "EXTRA", "REFILL_GATE", "FUND_REFILL", "FUND_CAP", "REFILL_VOL_CONFIRM", "REFILL_NO_NEW_LOW", "TWAP_ENGINE", "VRP_PULL", "BREADTH_CAP", "GAS_PANIC_HOLD", "STABLE_FLOW_REFILL", "NO_WEEKEND_REFILL", "EXIT_VOL_CONFIRM", "FLOW_REFILL", "EXIT_FULL_DAY", "LOW_FROM_WICK", "UP_DAY_REFILL", "STRONG_CLOSE_REFILL", "INTRADAY_STOP"]}
 
 
 def sens_grid():

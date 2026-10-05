@@ -1,8 +1,8 @@
 # EXP-093: refill stages only while stablecoin supply is growing (v6.80)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-977
+- Status: dropped-at-dev
+- Pre-registration commit: 893063f · Result commit: ______
 - Scope: /goal round 2 (Dino, 2026-10-05: "再繼續找30個"): beat v6 at the improvement level on ETH and WBTC, pure LP, time-split
   out-of-time holdout; idle-capital yield and swap routing excluded (rulings / assumption of 2026-10-05).
 
@@ -32,7 +32,26 @@ Pre-registered together with EXP-092..096 (same commit), run with `A` (v6) in `A
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ACECFCGCHCI`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +3.1% | -4.5 |
+| 2023 | +32.2% | +19.1% | -13.1 |
+| 2024 | +36.4% | +36.4% | +0.0 |
+| 2025 | +16.3% | +16.5% | +0.2 |
+| 2026-01..09-17 | +18.7% | +16.6% | -2.1 |
+
+Wins 1/5, median -2.08 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +75.2% | 12.7% | -24.0% | 0.68 | 0.53 | $77.4k | $0.28k | 138 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +69.7% | 14.6% | -18.1% | 0.89 | 0.81 | $54.2k | $0.64k | 107 |
+
+Verdict: **dropped-at-dev** — both assets worse: ETH CAGR 12.7% vs 14.0%, Calmar 0.53; WBTC 14.6% vs 17.3%, Calmar 0.81; wins 1/5. Holdout not run. Reading: stablecoin supply shrank through most of 2022-23, exactly when v6's refills harvested the bear-market ranges; the gate delays them on both assets.
 
 ## Deviations
 

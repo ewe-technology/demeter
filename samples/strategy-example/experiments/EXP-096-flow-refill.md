@@ -1,8 +1,8 @@
 # EXP-096: refill stages only while the pool's traders are net buyers (v6.83)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-980
+- Status: dropped-at-dev
+- Pre-registration commit: 893063f · Result commit: ______
 - Scope: /goal round 2 (Dino, 2026-10-05: "再繼續找30個"): beat v6 at the improvement level on ETH and WBTC, pure LP, time-split
   out-of-time holdout; idle-capital yield and swap routing excluded (rulings / assumption of 2026-10-05).
 
@@ -32,7 +32,26 @@ Pre-registered together with EXP-092..096 (same commit), run with `A` (v6) in `A
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ACECFCGCHCI`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +6.7% | -0.9 |
+| 2023 | +32.2% | +31.2% | -1.0 |
+| 2024 | +36.4% | +34.7% | -1.7 |
+| 2025 | +16.3% | +14.9% | -1.3 |
+| 2026-01..09-17 | +18.7% | +18.4% | -0.3 |
+
+Wins 0/5, median -1.04 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +81.3% | 13.5% | -24.4% | 0.70 | 0.55 | $84.8k | $0.28k | 147 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +85.4% | 17.3% | -18.0% | 1.01 | 0.96 | $61.3k | $0.72k | 106 |
+
+Verdict: **dropped-at-dev** — ETH CAGR 13.5% vs 14.0%, Calmar 0.55, wins 0/5; WBTC ≈ v6 (17.3%, Calmar 0.96). Holdout not run. Reading: requiring net buying delayed ETH refills without filtering the failed ones; a likely reason (not tested) is that the pool's net flow mostly follows the CEX price through arbitrage rather than carrying independent demand.
 
 ## Deviations
 

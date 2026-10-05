@@ -1,8 +1,8 @@
 # EXP-095: EMA exit only on pool volume above normal (v6.82)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-979
+- Status: dropped-at-dev
+- Pre-registration commit: 893063f · Result commit: ______
 - Scope: /goal round 2 (Dino, 2026-10-05: "再繼續找30個"): beat v6 at the improvement level on ETH and WBTC, pure LP, time-split
   out-of-time holdout; idle-capital yield and swap routing excluded (rulings / assumption of 2026-10-05).
 
@@ -32,7 +32,26 @@ Pre-registered together with EXP-092..096 (same commit), run with `A` (v6) in `A
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ACECFCGCHCI`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +7.6% | -0.0 |
+| 2023 | +32.2% | +25.6% | -6.7 |
+| 2024 | +36.4% | +29.5% | -6.8 |
+| 2025 | +16.3% | +13.6% | -2.6 |
+| 2026-01..09-17 | +18.7% | +17.2% | -1.5 |
+
+Wins 0/5, median -2.63 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +64.7% | 11.2% | -23.1% | 0.61 | 0.48 | $83.6k | $0.26k | 139 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +79.9% | 16.4% | -18.5% | 0.94 | 0.88 | $59.0k | $0.47k | 101 |
+
+Verdict: **dropped-at-dev** — ETH CAGR 11.2% vs 14.0%, Calmar 0.48, wins 0/5; WBTC 16.4% vs 17.3%. Holdout not run. Reading: slow, quiet declines below the EMA are exactly the ones v6 should leave; delaying those exits until volume rises keeps the ladder in for more of the drop. The EMA exit is v6's protection (as EXP-054).
 
 ## Deviations
 

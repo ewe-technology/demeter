@@ -319,6 +319,16 @@ BREADTH_CAP = False
 # EXTRA "flow"). False = v6.
 GAS_PANIC_HOLD = False
 STABLE_FLOW_REFILL = False
+# EXP-097..101 (v6.84..v6.88), the day's minute path read more finely (no new signal): EXIT_FULL_DAY: the EMA exit fires only
+# if the day's minute high is also below the EMA (no intraday reclaim). LOW_FROM_WICK: the account's low since the exit is the
+# lowest minute price, not the lowest close. UP_DAY_REFILL: a day counts for a refill stage only if it closed above its open.
+# STRONG_CLOSE_REFILL: a day counts for a refill stage only if it closed in the upper half of its minute range. INTRADAY_STOP:
+# the lower stop fires when the day's minute low (not only the close) is below 0.8 x centre. False = v6.
+EXIT_FULL_DAY = False
+LOW_FROM_WICK = False
+UP_DAY_REFILL = False
+STRONG_CLOSE_REFILL = False
+INTRADAY_STOP = False
 NO_WEEKEND_REFILL = False
 EXIT_VOL_CONFIRM = False
 FLOW_REFILL = False
@@ -340,8 +350,9 @@ class VirtualAccount:
     dvol_peak: float | None = None   # EXP-082: highest DVOL since the exit
     olow: float | None = None        # EXP-086: lowest close of the other asset since the exit
 
-    def exit(self, close: float) -> None:
-        self.deployed, self.centre, self.low, self.stage, self.confirm = 0.0, None, close, 0, 0
+    def exit(self, close: float, wick: float | None = None) -> None:
+        low = min(close, wick) if (LOW_FROM_WICK and wick is not None and wick == wick) else close   # EXP-098
+        self.deployed, self.centre, self.low, self.stage, self.confirm = 0.0, None, low, 0, 0
         self.dvol_peak, self.olow = None, None
 
     def step(self, close: float, ema: float, trend_ok: bool = True, ctx: dict | None = None) -> None:
@@ -354,15 +365,20 @@ class VirtualAccount:
             return
         if EXIT_VOL_CONFIRM and (ctx or {}).get("pvol_ok", 1.0) == 0.0:   # EXP-095: thin-volume breakdown -> no EMA exit
             trend_ok = False
+        dl = (ctx or {}).get("dlow", float("inf"))
+        dl = dl if dl != float("inf") else close
+        if EXIT_FULL_DAY and (ctx or {}).get("dhigh", float("-inf")) >= ema:   # EXP-097: reclaimed the EMA intraday
+            trend_ok = False
         if self.armed and close < ema and trend_ok:         # 1 EMA exit (spec: low resets even if empty); EXP-054 gate
-            self.exit(close)
+            self.exit(close, dl)
             self.armed = False
         elif not self.armed and close > ema:                # 2 re-arm, no buy
             self.armed = True
             if REARM_FULL:                                  # EXP-068: re-arm deploys fully
                 self.deployed, self.stage, self.centre = 1.0, 4, close
-        if not NO_LOWER_STOP and self.deployed > 0 and close < self.centre * LOWER_STOP:      # 3 lower stop (EXP-066 drops it)
-            self.exit(close)
+        stop_px = min(close, dl) if INTRADAY_STOP else close   # EXP-101
+        if not NO_LOWER_STOP and self.deployed > 0 and stop_px < self.centre * LOWER_STOP:      # 3 lower stop (EXP-066 drops it)
+            self.exit(close, dl)
         elif not NO_UPPER_REBUILD and self.deployed > 0 and close > self.centre * UPPER_REBUILD: # 4 upper rebuild (EXP-069 drops it)
             self.centre = close
         if self.deployed < 1 and not REARM_FULL and (self.armed or not REFILL_ARMED_ONLY):   # 5 staged refill (EXP-067 / 068)
@@ -372,8 +388,13 @@ class VirtualAccount:
                 self.dvol_peak = dv if self.dvol_peak is None else max(self.dvol_peak, dv)
             if ot == ot:   # EXP-086: track the other asset's low since the exit
                 self.olow = ot if self.olow is None else min(self.olow, ot)
-            self.low = min(self.low, close)
+            self.low = min(self.low, dl) if LOW_FROM_WICK else min(self.low, close)   # EXP-098
             ok_day = not (REFILL_NO_NEW_LOW and (ctx or {}).get("dlow", float("inf")) <= self.low)   # EXP-088
+            dop, dhi = ctx.get("dopen", float("nan")), ctx.get("dhigh", float("nan"))
+            if UP_DAY_REFILL and dop == dop and not close > dop:   # EXP-099
+                ok_day = False
+            if STRONG_CLOSE_REFILL and dhi == dhi and close < (dhi + dl) / 2:   # EXP-100
+                ok_day = False
             self.confirm = self.confirm + 1 if (close >= self.low * REFILL_STAGES[0][1] and ok_day) else 0
             # at most one stage per day (spec author's clarification); a pullback keeps the stage,
             # only an exit resets it
@@ -390,6 +411,8 @@ class VirtualAccount:
             if advance and REFILL_VOL_CONFIRM and ctx.get("pvol_ok", 1.0) == 0.0:   # EXP-087
                 advance = False
             if advance and REFILL_NO_NEW_LOW and ctx.get("dlow", float("inf")) <= self.low:   # EXP-088
+                advance = False
+            if advance and (UP_DAY_REFILL or STRONG_CLOSE_REFILL) and not ok_day:   # EXP-099 / 100
                 advance = False
             if advance and GAS_PANIC_HOLD and ctx.get("gas_panic", 0.0) == 1.0:   # EXP-092
                 advance = False
@@ -508,6 +531,8 @@ def daily_ema_frame(minute_price: pd.Series) -> pd.DataFrame:
     if TWAP_ENGINE:   # EXP-089: daily time-weighted mean of the minute prices
         close = minute_price.astype(float).resample("1D").mean().reindex(close.index)
     day_low = minute_price.astype(float).resample("1D").min().reindex(close.index)   # EXP-088
+    day_high = minute_price.astype(float).resample("1D").max().reindex(close.index)   # EXP-097 / 100
+    day_open = minute_price.astype(float).resample("1D").first().reindex(close.index)   # EXP-099
     emas = {n: close.ewm(span=n, adjust=False).mean() for n in EMA_SPANS}
     comps = regime_components()
     lines = {k: emas if k == "ema" else regime_lines(minute_price.astype(float), close, k) for k in comps}
@@ -540,6 +565,8 @@ def daily_ema_frame(minute_price: pd.Series) -> pd.DataFrame:
         ctx = {k: float(v) for k, v in ex.loc[day].items()} if ex is not None else {}
         ctx["dlow"] = float(day_low[day]) if day_low[day] == day_low[day] else float("inf")
         ctx["dow"] = float(day.weekday())   # EXP-094
+        ctx["dhigh"] = float(day_high[day]) if day_high[day] == day_high[day] else float("-inf")
+        ctx["dopen"] = float(day_open[day]) if day_open[day] == day_open[day] else float("nan")
         for k, a in accounts:
             a.step(float(c), float(lines[k][a.span][day]), bool(trend_ok[day]) if k == "ema" else True, ctx)
         deps = [a.deployed for _, a in accounts]

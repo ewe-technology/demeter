@@ -1,8 +1,8 @@
 # EXP-094: no refill stage on weekend closes (v6.81)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-978
+- Status: dropped-at-dev
+- Pre-registration commit: 893063f · Result commit: ______
 - Scope: /goal round 2 (Dino, 2026-10-05: "再繼續找30個"): beat v6 at the improvement level on ETH and WBTC, pure LP, time-split
   out-of-time holdout; idle-capital yield and swap routing excluded (rulings / assumption of 2026-10-05).
 
@@ -32,7 +32,26 @@ Pre-registered together with EXP-092..096 (same commit), run with `A` (v6) in `A
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ACECFCGCHCI`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +8.9% | +1.3 |
+| 2023 | +32.2% | +33.0% | +0.8 |
+| 2024 | +36.4% | +29.9% | -6.5 |
+| 2025 | +16.3% | +14.0% | -2.3 |
+| 2026-01..09-17 | +18.7% | +16.3% | -2.4 |
+
+Wins 2/5, median -2.32 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +78.3% | 13.1% | -24.9% | 0.70 | 0.52 | $86.1k | $0.27k | 144 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +77.9% | 16.0% | -17.7% | 0.93 | 0.90 | $56.9k | $0.69k | 104 |
+
+Verdict: **dropped-at-dev** — both assets worse: ETH CAGR 13.1% vs 14.0%, Calmar 0.52, max DD −24.9%; WBTC 16.0% vs 17.3%; wins 2/5. Holdout not run. Reading: moving a stage to Monday costs more than the weekend reversals it avoids; weekend rebounds are not worse refill points.
 
 ## Deviations
 
