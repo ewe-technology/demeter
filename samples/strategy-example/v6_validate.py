@@ -311,7 +311,14 @@ OPT = {"A": Variant("A_v6"),
        "EI": Variant("EI_tier_svr_nlxrisemacro", {"TIER": {"hi": HI_SVR, "lo": {"REFILL_NO_NEW_LOW": True, "REFILL_GATE": "xasset", "EXTRA": "pool", "REBUILD_ON_RISE": True,
                                                                                "MACRO_EVENTS": "csv", "MACRO_RESTORE": True}}}),   # EXP-147
        "EJ": Variant("EJ_nolow_xasset_route_macro", {"REFILL_NO_NEW_LOW": True, "REFILL_GATE": "xasset", "EXTRA": "pool", "SWAP_ROUTE": "pool", "MACRO_EVENTS": "csv",
-                                                     "MACRO_RESTORE": True})}   # EXP-148: one rule for both pools
+                                                     "MACRO_RESTORE": True}),   # EXP-148: one rule for both pools
+       # EXP-149..152: EXP-140's ETH half (v6.75 + cross-asset refill + macro restore) with new WBTC halves, and one clean rule
+       "EK": Variant("EK_tier_svrmacro_nlxmacro", {"TIER": {"hi": {**HI_SVR, "MACRO_EVENTS": "csv", "MACRO_RESTORE": True},
+                                                            "lo": {"REFILL_NO_NEW_LOW": True, "REFILL_GATE": "xasset", "EXTRA": "pool", "MACRO_EVENTS": "csv", "MACRO_RESTORE": True}}}),   # EXP-149
+       "EL": Variant("EL_tier_svrnolow_nlxmacro", {"TIER": {"hi": {**HI_SVR, "REFILL_NO_NEW_LOW": True}, "lo": {"REFILL_NO_NEW_LOW": True, "REFILL_GATE": "xasset", "EXTRA": "pool", "MACRO_EVENTS": "csv", "MACRO_RESTORE": True}}}),   # EXP-150
+       "EM": Variant("EM_tier_svr_nlxmacrotranche", {"TIER": {"hi": HI_SVR, "lo": {"REFILL_NO_NEW_LOW": True, "REFILL_GATE": "xasset", "EXTRA": "pool", "MACRO_EVENTS": "csv", "MACRO_RESTORE": True, "ACCOUNT_TRANCHES": True}}}),   # EXP-151
+       "EN": Variant("EN_nolow_route_macro_vol", {"REFILL_NO_NEW_LOW": True, "SWAP_ROUTE": "pool", "MACRO_EVENTS": "csv", "MACRO_RESTORE": True,
+                                                  "REFILL_VOL_CONFIRM": True, "EXTRA": "pool"})}   # EXP-152: one rule for both pools
 # EXP-082..: daily non-price inputs (samples/fetch_deribit_dvol.py, fetch_binance_funding.py, fetch_binance_daily.py)
 DVOL_CSV = "../deribit_dvol_daily.csv"
 FUND_LONG_CSV = {"ETHUSDT": "../binance_funding_ETHUSDT_long.csv", "BTCUSDT": "../binance_funding_BTCUSDT_long.csv"}

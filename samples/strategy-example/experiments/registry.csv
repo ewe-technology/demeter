@@ -148,3 +148,7 @@ EXP-145,2026-10-06,v6.75 + cross-asset refill + routing + rise rebuild on every 
 EXP-146,2026-10-06,fee tier: stop + volume + routing + cross-asset refill on 0.3% and v6.75 + cross-asset refill on 0.05% (v6.132),QUAN-1031,pre-registered,,,,,,,,f35df2e,,EXP-146-tier-svrx-nlx.md,improvement
 EXP-147,2026-10-06,fee tier: stop + volume + routing on 0.3% and v6.75 + cross-asset refill + rise rebuild + macro restore on 0.05% (v6.133),QUAN-1032,pre-registered,,,,,,,,f35df2e,,EXP-147-tier-svr-nlxrisemacro.md,improvement
 EXP-148,2026-10-06,v6.75 + cross-asset refill + routing + macro restore on every pool (v6.134),QUAN-1033,pre-registered,,,,,,,,f35df2e,,EXP-148-nolow-xasset-route-macro.md,improvement
+EXP-149,2026-10-06,fee tier: stop + volume + routing + macro restore on 0.3% and v6.75 + cross-asset refill + macro restore on 0.05% (v6.135),,pre-registered,,,,,,,,,,EXP-149-tier-svrmacro-nlxmacro.md,improvement
+EXP-150,2026-10-06,fee tier: stop + volume + routing + no-new-low refill on 0.3% and v6.75 + cross-asset refill + macro restore on 0.05% (v6.136),,pre-registered,,,,,,,,,,EXP-150-tier-svrnolow-nlxmacro.md,improvement
+EXP-151,2026-10-06,fee tier: stop + volume + routing on 0.3% and v6.75 + cross-asset refill + macro restore + account tranches on 0.05% (v6.137),,pre-registered,,,,,,,,,,EXP-151-tier-svr-nlxmacrotranche.md,improvement
+EXP-152,2026-10-06,v6.75 + routing + macro restore + volume-confirmed refill on every pool (v6.138),,pre-registered,,,,,,,,,,EXP-152-nolow-route-macro-vol.md,improvement
