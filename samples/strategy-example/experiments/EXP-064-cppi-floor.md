@@ -1,8 +1,8 @@
 # EXP-064: CPPI floor on the strategy's own net value (v6.51)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-946
+- Status: dropped-at-dev
+- Pre-registration commit: 9ea5296 · Result commit: ______
 - Scope: /goal 2026-10-05 "beat v6 at the improvement level, pure LP, time-split out-of-time holdout" (Dino); idle-capital
   yield excluded (ruling 2026-10-05).
 
@@ -40,7 +40,26 @@ Pre-registered together with EXP-065 (same commit) and run in the same invocatio
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ABBBC`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | -0.2% | -7.8 |
+| 2023 | +32.2% | +36.9% | +4.7 |
+| 2024 | +36.4% | +17.5% | -18.9 |
+| 2025 | +16.3% | +35.5% | +19.3 |
+| 2026-01..09-17 | +18.7% | +17.0% | -1.7 |
+
+Wins 2/5, median -1.67 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +46.0% | 8.4% | -18.2% | 0.57 | 0.46 | $49.0k | $0.08k | 432 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +13.2% | 3.3% | -21.1% | 0.28 | 0.15 | $17.4k | $0.52k | 361 |
+
+Verdict: **dropped-at-dev** — ETH CAGR 8.4% vs 14.0%, Calmar 0.46 vs 0.61 (max DD −18.2% vs −22.8%), wins 2/5; WBTC CAGR 3.3% vs 17.3%, Calmar 0.15, max DD −21.1% vs −17.8%. Holdout not run. Reading: the classic CPPI cash lock — on WBTC the multiplier reached 0 (book 20% below its high), the ladder was emptied, and an empty LP book cannot earn its way back to the high-water mark, so it stayed mostly out (fees .4k vs .7k). An LP's return is fee income on deployed capital; de-risking on the book's own drawdown removes exactly the income that would repair it. CPPI and other own-equity overlays are closed for this strategy.
 
 ## Deviations
 

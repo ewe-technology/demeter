@@ -63,5 +63,8 @@ EXP-060,2026-10-05,FOMC / CPI pause with an exact restore of every band's liquid
 EXP-061,2026-10-05,F up adds a new tranche at today's price; F down shrinks every band; no recentre on follow events (v6.48),QUAN-943,dropped-at-dev,-0.28,2/5,,,0.807,0.134,-0.221,c4f9b71,6bd2a35,EXP-061-tranche-add.md,improvement
 EXP-062,2026-10-05,asymmetric follow: shrink in place when F falls; v6 recentre when F rises (v6.49),QUAN-944,dropped-at-dev,-0.04,2/5,,,0.796,0.132,-0.230,c4f9b71,6bd2a35,EXP-062-follow-asym.md,improvement
 EXP-063,2026-10-05,one real sub-ladder per virtual EMA account; each rebuilt only when its account changes state (v6.50),QUAN-945,holdout-fail,1.81,3/5,1/2 windows (time-split),-5.60,0.897,0.146,-0.237,85e4da4,ffb21b1,EXP-063-account-tranches.md,improvement
-EXP-064,2026-10-05,CPPI floor: F x clip((W/HWM - 0.8)/0.2) on the strategy's own net value (v6.51),,pre-registered,,,,,,,,,,EXP-064-cppi-floor.md,improvement
-EXP-065,2026-10-05,weekly time-based full recentre on top of v6's triggers (v6.52),,pre-registered,,,,,,,,,,EXP-065-weekly-recentre.md,improvement
+EXP-064,2026-10-05,CPPI floor: F x clip((W/HWM - 0.8)/0.2) on the strategy's own net value (v6.51),QUAN-946,dropped-at-dev,-1.67,2/5,,,0.460,0.084,-0.182,9ea5296,,EXP-064-cppi-floor.md,improvement
+EXP-065,2026-10-05,weekly time-based full recentre on top of v6's triggers (v6.52),QUAN-947,dropped-at-dev,-1.95,2/5,,,1.099,0.171,-0.239,9ea5296,,EXP-065-weekly-recentre.md,improvement
+EXP-066,2026-10-05,signal engine without the accounts' lower stop (ablation) (v6.53),,pre-registered,,,,,,,,,,EXP-066-no-lower-stop.md,improvement
+EXP-067,2026-10-05,staged refill only while the account is above its EMA (ablation) (v6.54),,pre-registered,,,,,,,,,,EXP-067-refill-armed-only.md,improvement
+EXP-068,2026-10-05,full deployment at the EMA re-arm instead of the staged refill (ablation) (v6.55),,pre-registered,,,,,,,,,,EXP-068-rearm-full.md,improvement

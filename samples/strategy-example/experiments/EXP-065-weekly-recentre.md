@@ -1,8 +1,8 @@
 # EXP-065: weekly time-based recentre on top of v6's triggers (v6.52)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-947
+- Status: dropped-at-dev
+- Pre-registration commit: 9ea5296 · Result commit: ______
 - Scope: /goal 2026-10-05 "beat v6 at the improvement level, pure LP, time-split out-of-time holdout" (Dino); idle-capital
   yield excluded (ruling 2026-10-05).
 
@@ -38,7 +38,26 @@ Pre-registered together with EXP-064 (same commit) and run in the same invocatio
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ABBBC`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +8.5% | +0.9 |
+| 2023 | +32.2% | +26.9% | -5.3 |
+| 2024 | +36.4% | +30.8% | -5.6 |
+| 2025 | +16.3% | +21.3% | +5.0 |
+| 2026-01..09-17 | +18.7% | +16.8% | -1.9 |
+
+Wins 2/5, median -1.95 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +109.9% | 17.1% | -23.9% | 0.81 | 0.71 | $76.6k | $0.40k | 311 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +90.6% | 18.1% | -22.0% | 0.90 | 0.82 | $31.6k | $0.87k | 259 |
+
+Verdict: **dropped-at-dev** — ETH improves strongly (CAGR 17.1% vs 14.0%, Calmar 0.71 vs 0.61, max DD −23.9% vs −22.8%) but the ETH yearly wins are 2/5 and WBTC fails Calmar and drawdown (CAGR 18.1% vs 17.3%, Calmar 0.82 vs 0.97, max DD −22.0% vs −17.8%, 4.2 pts deeper). Holdout not run. Reading: weekly recentring cuts fee income on both pools (ETH .6k vs .5k; WBTC .6k vs .7k, the valley's thin centre again) and raises the return through realised-IL savings and trend-following (the ladder stays centred on a moving price), with deeper WBTC drawdowns. It is the strongest ETH result of this goal and confirms the time-vs-event result of the literature on the 0.05% pool; on the 0.3% pool the fee loss turns it into a riskier, not better, strategy.
 
 ## Deviations
 

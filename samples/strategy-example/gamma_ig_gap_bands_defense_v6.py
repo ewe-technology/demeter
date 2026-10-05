@@ -258,6 +258,13 @@ CPPI_FLOOR: float | None = None
 # EXP-065 (v6.52): time-based recentre in addition to v6's triggers: every Sunday at 00:00 UTC a deployed ladder gets v6's full
 # rebuild (recentre at today's price, swap to the target share, size F x equity). False = v6.
 WEEKLY_RECENTRE = False
+# EXP-066..068 (v6.53..v6.55): ablations of the signal engine's account rules (nothing tuned, one rule removed or restricted):
+# NO_LOWER_STOP drops rule 3 (exit at close < 0.8 x centre); REFILL_ARMED_ONLY allows the staged refill (rule 5) only while the
+# account is armed (close above its EMA); REARM_FULL replaces the staged refill by a full deployment at the re-arm (close crosses
+# above the EMA: deployed 1, centre = close), i.e. a plain EMA trend filter with v6's stop and upper rebuild. False = v6.
+NO_LOWER_STOP = False
+REFILL_ARMED_ONLY = False
+REARM_FULL = False
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -290,11 +297,13 @@ class VirtualAccount:
             self.armed = False
         elif not self.armed and close > ema:                # 2 re-arm, no buy
             self.armed = True
-        if self.deployed > 0 and close < self.centre * LOWER_STOP:      # 3 lower stop
+            if REARM_FULL:                                  # EXP-068: re-arm deploys fully
+                self.deployed, self.stage, self.centre = 1.0, 4, close
+        if not NO_LOWER_STOP and self.deployed > 0 and close < self.centre * LOWER_STOP:      # 3 lower stop (EXP-066 drops it)
             self.exit(close)
         elif self.deployed > 0 and close > self.centre * UPPER_REBUILD: # 4 upper rebuild, same size
             self.centre = close
-        if self.deployed < 1:                               # 5 staged refill on the rebound from low
+        if self.deployed < 1 and not REARM_FULL and (self.armed or not REFILL_ARMED_ONLY):   # 5 staged refill (EXP-067 / 068)
             self.low = min(self.low, close)
             self.confirm = self.confirm + 1 if close >= self.low * REFILL_STAGES[0][1] else 0
             # at most one stage per day (spec author's clarification); a pullback keeps the stage,
