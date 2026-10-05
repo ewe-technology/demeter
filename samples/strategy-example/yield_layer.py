@@ -14,7 +14,7 @@ indices with the gate. This assumes the LP position exists the whole time; in re
 keeps the sleeve out and re-placed around the new price. The swaps in and out are charged by sleeve_sim.
 
 Periods (data quality, see --quality): FULL 2022-08-27 ~ 2025-11-30 for A, B, B', C, where wstETH/WETH barely traded
-before 2024 and its ratio is interpolated across the gaps. SHORT 2024-01-01 ~ 2025-11-09 for A to D; BTC is held
+before mid-2023 and its ratio stays flat across the gaps. SHORT 2024-01-01 ~ 2025-11-09 for A to D; BTC is held
 spot until WBTC/cbBTC has clean data on 2024-10-13.
 
 Run from samples/strategy-example (the spot price cache of spot_btc_eth_gate.py must exist):
@@ -136,21 +136,36 @@ def quality():
 
 # ---- wstETH ratio for holding wstETH (version C) ----
 
-def wsteth_ratio(index: pd.DatetimeIndex) -> pd.Series:
+RATIO_MEDIAN_OF = 21  # traded minutes behind the causal ratio, fixed before the run
+
+
+def wsteth_ratio(index: pd.DatetimeIndex, method: str = "causal") -> pd.Series:
     """
-    WETH per wstETH on `index`: the hourly median of traded minutes only, minus single-minute outliers (more than
-    1.5% from the 7-day rolling median, e.g. 0.78 once in 2024), log-interpolated across hours without trades. The
-    ratio climbs smoothly with staking, so the interpolation carries the yield through the 2022-2023 gaps, but a
-    discount in those months would be missed.
+    WETH per wstETH on `index`, using only the trades before each timestamp (a price at t is what was known at t,
+    the same as the spot prices):
+      causal  the median of the last RATIO_MEDIAN_OF traded minutes before t. One bad print (0.78 on 2024-08-05)
+              cannot move it; a discount that holds for most of the recent trades does (2022-11, about -3.3%).
+      last    the last traded minute before t, uncleaned: the upper bound on what bad prints can do.
+      centred the old series, kept only to compare against: hourly medians minus the hours more than 1.5% off the
+              7-day centred median, log-interpolated across the gaps. Both use later prices, and the filter also
+              drops the 2022-11 discount.
+    Across hours without trades the ratio stays at its last value, so the staking yield of a long gap (the pool
+    barely traded from 2022-08 to 2023-06) arrives in one step when trading resumes.
     """
     df = read_minutes(WSTETH_POOL)
     traded = df[(df["inAmount0"] > 0) | (df["inAmount1"] > 0)]
-    hourly = (1.0001 ** traded["closeTick"]).resample("1h").median().dropna()
-    ref = hourly.rolling("7D", center=True, min_periods=1).median()
-    clean = hourly[(hourly / ref - 1).abs() <= 0.015]
-    print(f"wstETH ratio: {len(hourly)} traded hours, {len(hourly) - len(clean)} outliers dropped")
-    log = np.log(clean).reindex(index.union(clean.index)).interpolate(method="time").reindex(index)
-    return np.exp(log.ffill().bfill())
+    minute = 1.0001 ** traded["closeTick"]
+    if method == "centred":
+        hourly = minute.resample("1h").median().dropna()
+        ref = hourly.rolling("7D", center=True, min_periods=1).median()
+        clean = hourly[(hourly / ref - 1).abs() <= 0.015]
+        log = np.log(clean).reindex(index.union(clean.index)).interpolate(method="time").reindex(index)
+        return np.exp(log.ffill().bfill())
+    known = minute.rolling(RATIO_MEDIAN_OF, min_periods=1).median() if method == "causal" else minute
+    known.index = known.index + pd.Timedelta(minutes=1)  # the close of minute m is known from m + 1 on
+    out = known.reindex(index.union(known.index)).ffill().reindex(index)
+    print(f"wstETH ratio ({method}): first known {known.index[0]}, {int(out.isna().sum())} hours before it")
+    return out
 
 
 # ---- Demeter LP sleeves ----
@@ -266,7 +281,7 @@ def combine():
     prices, _, _ = load_prices()
     hours = prices.index
     w = sr.gate(prices)  # columns eth, btc
-    ratio = wsteth_ratio(hours)
+    ratios = {m: wsteth_ratio(hours, m) for m in ("causal", "last", "centred")}
     park_usdc, ev_usdc = load_sleeve("park_usdc")
     park_dai, ev_dai = load_sleeve("park_dai")
     usdc_per_usdt = park_usdc["price"]  # USDC/USDT pool, quote USDC: USDC per USDT
@@ -279,7 +294,6 @@ def combine():
     cash["park_usdc_flat"] = flatten(cash["park_usdc"], "2023-03-10", "2023-03-31")
     cash["park_dai_flat"] = flatten(cash["park_dai"], "2023-03-10", "2023-03-31")
     eth, btc = prices["eth"], prices["btc"]
-    held_wsteth = eth * ratio
 
     def version(eth_v: pd.Series, btc_v: pd.Series, cash_v: pd.Series) -> pd.DataFrame:
         return pd.DataFrame({"eth": eth_v, "btc": btc_v, "cash": cash_v}, index=hours)
@@ -295,7 +309,8 @@ def combine():
 
     spot = {"eth": 10, "btc": 10}
     rows = []
-    for capital in (None, 10_000, 100_000, 1_000_000):  # None: no gas at all (an L2 with the same pools)
+    # None: no gas at all, a low-cost case only; an L2 has its own pools, volume and liquidity
+    for capital in (None, 10_000, 100_000, 1_000_000):
         scale = 0 if capital is None else 100_000 / capital
         label = "no gas" if capital is None else f"gas, ${capital:,}"
         versions = {
@@ -306,9 +321,12 @@ def combine():
             "B' park DAI/USDT": (version(eth, btc, cash["park_dai"]), spot, 1.5, {"cash": "lp"}, {"cash": ev_dai}),
             "B' park DAI, 2023/3 flat": (version(eth, btc, cash["park_dai_flat"]), spot, 1.5, {"cash": "lp"},
                                          {"cash": ev_dai}),
-            "C wstETH + park": (version(held_wsteth, btc, cash["park_usdc"]), {"eth": 11, "btc": 10}, 0.5,
-                                {"eth": "swap", "cash": "lp"}, {"cash": ev_usdc}),
         }
+        # the causal ratio is the result; the uncleaned last trade and the old centred series are for comparison
+        for method, suffix in (("causal", ""), ("last", ", raw last trade"), ("centred", ", old centred ratio")):
+            versions[f"C wstETH + park{suffix}"] = (version(eth * ratios[method], btc, cash["park_usdc"]),
+                                                     {"eth": 11, "btc": 10}, 0.5, {"eth": "swap", "cash": "lp"},
+                                                     {"cash": ev_usdc})
         for vname, (values, cost, cash_bps, gas_on, lp_events) in versions.items():
             rows.append({"gas": label, **run(vname, FULL, values, cost, cash_bps, gas_on, lp_events, scale)})
             if not vname.endswith("flat"):

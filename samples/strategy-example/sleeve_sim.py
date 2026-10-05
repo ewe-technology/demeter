@@ -42,7 +42,7 @@ def mainnet_gas(eth_usd: pd.Series, scale: float = 1.0, swap_only: bool = False)
 def simulate(weights: pd.DataFrame, values: pd.DataFrame, start: str = IN_SAMPLE[0], cost_bps: float | dict = COST_BPS,
              cash_cost_bps: float = 0.0, threshold: float | None = None,
              gas: dict[str, Callable[[str, pd.Timestamp], float]] | None = None,
-             lp: dict[str, pd.DatetimeIndex] | None = None) -> tuple[pd.Series, int, dict]:
+             lp: dict[str, pd.DatetimeIndex] | None = None, resize: str = "recentre") -> tuple[pd.Series, int, dict]:
     """
     weights: target value share per sleeve (its columns), from each timestamp on; the rest goes to cash.
     values: hourly USD value of one unit of every sleeve in `weights`, plus a "cash" column.
@@ -50,7 +50,8 @@ def simulate(weights: pd.DataFrame, values: pd.DataFrame, start: str = IN_SAMPLE
     cash_cost_bps: paid on the notional moved into or out of cash (a parking LP takes a swap to enter and leave).
     threshold: None trades whenever the target changes; a number trades when any share drifted further than that.
     gas: {sleeve: f(kind, t) -> USD} for the sleeves (cash included) that live on chain; the others pay none.
-        Entering or leaving one pays f("enter" / "exit"), resizing it f("recentre").
+        Entering or leaving one pays f("enter" / "exit"), resizing it f("recentre"), or with resize="split"
+        f("grow") / f("shrink"): adding to a position or taking part of it out, without closing it.
     lp: {sleeve: the times its LP position was re-centred}; each one pays gas[sleeve]("recentre") while it is held.
     Returns hourly net value, the number of rebalances, and {"swap": USD, "gas": USD} paid.
     """
@@ -81,7 +82,12 @@ def simulate(weights: pd.DataFrame, values: pd.DataFrame, start: str = IN_SAMPLE
             for name, before, after in [*zip(sleeves, held, (wi * value for wi in want)), ("cash", cash_before, cash_after)]:
                 if name not in gas or abs(after - before) <= 1:
                     continue
-                kind = "enter" if before <= 1 else "exit" if after <= 1 else "recentre"  # resizing = remove + add
+                if before <= 1 or after <= 1:
+                    kind = "enter" if before <= 1 else "exit"
+                elif resize == "split":
+                    kind = "grow" if after > before else "shrink"
+                else:
+                    kind = "recentre"  # resizing = remove + add
                 spent += gas[name](kind, t)
             value -= fee + spent
             q = [wi * value / pi for wi, pi in zip(want, px)]

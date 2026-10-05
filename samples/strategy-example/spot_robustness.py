@@ -38,11 +38,12 @@ def closes(prices: pd.DataFrame, hour: int = 0) -> pd.DataFrame:
 
 
 def simulate(weights: pd.DataFrame, prices: pd.DataFrame, start: str = IN_SAMPLE[0], cost_bps: float = COST_BPS,
-             cash_yield: float = 0.0, threshold: float | None = None) -> tuple[pd.Series, int]:
+             cash_yield: float = 0.0, threshold: float | None = None, exposure: bool = False):
     """
     Hourly net value. `weights` holds the (eth, btc) value shares wanted from each timestamp on, the rest in USDC.
     threshold None: trade whenever the wanted shares change. A number: trade when any share has drifted further than
     that from the wanted one (used by the rules whose target moves a little every day).
+    Returns (nav, trades), or with exposure=True (nav, trades, the share of the net value actually in ETH and BTC).
     """
     p = prices.loc[start:]
     w = weights.loc[start:]
@@ -68,7 +69,9 @@ def simulate(weights: pd.DataFrame, prices: pd.DataFrame, start: str = IN_SAMPLE
     held = pd.DataFrame(rows, columns=["t", "eth", "btc", "units"]).set_index("t")
     held = held.reindex(p.index, method="ffill").fillna({"eth": 0.0, "btc": 0.0, "units": 100_000.0})
     g = (1 + cash_yield) ** ((p.index - t0).total_seconds() / (365.25 * 86400))
-    return held["eth"] * p["eth"] + held["btc"] * p["btc"] + held["units"] * g, trades
+    crypto = held["eth"] * p["eth"] + held["btc"] * p["btc"]
+    nav = crypto + held["units"] * g
+    return (nav, trades, crypto / nav) if exposure else (nav, trades)
 
 
 def summary(name: str, nav: pd.Series, trades: int | None = None, **extra) -> dict:
