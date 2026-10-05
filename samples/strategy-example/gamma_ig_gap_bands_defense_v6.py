@@ -244,6 +244,13 @@ TRANCHE_ADD = False
 # EXP-062 (v6.49): asymmetric follow: F down (> 0) shrinks every band in place (EXP-055's shrink, no recentre); F up is v6's full
 # rebuild (recentre at today's price). False = v6.
 FOLLOW_ASYM = False
+# EXP-063 (v6.50): the four virtual accounts become four real sub-ladders. Account j (EMA span j) owns a 17-band valley of
+# deployed_j / 4 x book equity centred on the price of the day its state last changed; the sub-ladder is rebuilt (burn, one
+# net swap for all changed sub-ladders, re-mint at today's price, v6's ETH share) only when its account's deployed fraction or
+# centre changes (staged refill, upper rebuild at 1.2 x centre, EMA exit, lower stop at 0.8 x centre), judged daily at 00:00
+# on the last completed day. v6's single-ladder range exit and follow rule are off. Each sub-ladder tracks the liquidity it
+# added, so bands shared by two sub-ladders are reduced only by the rebuilt one's part. False = v6.
+ACCOUNT_TRANCHES = False
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -397,10 +404,15 @@ def daily_ema_frame(minute_price: pd.Series) -> pd.DataFrame:
     er = ((close - close.shift(ER_DAYS)).abs() / path).fillna(1.0)
     trend_ok = (er >= 1 / np.sqrt(ER_DAYS)) if ER_GATE else pd.Series(True, index=close.index)
     fractions = []
+    states = {f"{x}{j}": [] for j in range(len(EMA_SPANS)) for x in ("dep", "ctr")}   # EXP-063
     for day, c in close.items():
         for k, a in accounts:
             a.step(float(c), float(lines[k][a.span][day]), bool(trend_ok[day]) if k == "ema" else True)
         fractions.append(sum(a.deployed for _, a in accounts) / len(accounts))
+        if ACCOUNT_TRANCHES:
+            for j, (_, a) in enumerate([x for x in accounts if x[0] == "ema"]):
+                states[f"dep{j}"].append(a.deployed)
+                states[f"ctr{j}"].append(a.centre if (a.deployed > 0 and a.centre is not None) else float("nan"))
     if F_WEEKLY:   # EXP-045: the Sunday value, held until the next Sunday
         fs = pd.Series(fractions, index=close.index)
         fractions = fs.where(fs.index.dayofweek == 6).ffill().bfill().tolist()
@@ -413,7 +425,11 @@ def daily_ema_frame(minute_price: pd.Series) -> pd.DataFrame:
         fractions = [f * (float(k) if d else 1.0) for f, k, d in zip(fractions, scale, down)]
     arm = sum((close > emas[n]).astype(float) for n in EMA_SPANS) / len(EMA_SPANS)   # EXP-029
     sigma = np.log(close).diff().rolling(WIDTH_VOL_DAYS, min_periods=WIDTH_VOL_DAYS).std()   # EXP-030
-    return pd.DataFrame({"close": close, "ema": emas[EMA_SPAN], "F": fractions, "arm": arm, "sigma": sigma})
+    out = pd.DataFrame({"close": close, "ema": emas[EMA_SPAN], "F": fractions, "arm": arm, "sigma": sigma})
+    if ACCOUNT_TRANCHES:   # EXP-063
+        for key, vals in states.items():
+            out[key] = vals
+    return out
 
 
 def fee_lvr_ratio(minute: pd.DataFrame, fee_pct: float, days: int | None = None) -> pd.Series:
@@ -716,6 +732,9 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.swapless_exits = 0          # EXP-057: range-exit rebuilds placed without a swap
         self.macro_next = 0              # EXP-059: index of the next scheduled release
         self.tranche_adds = 0            # EXP-061: follow events handled by tranche_add
+        self.tranches = None             # EXP-063: per-account sub-ladders
+        self.tranche_rebuilds = 0
+        self.tranche_io = (0, 0)
         self.fee_log: List[dict] = []    # daily: collected fees (quote) + pending fees still in the positions
         # spec sheet s: base (ETH) share of total value before the bands are placed. None keeps the
         # original behaviour, where calculate_swap_amount lets the full-range geometry pick the ratio.
@@ -865,6 +884,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
                                            do=self.rescale_work))   # EXP-056: hourly range-exit check
         if CASH_APR is not None:
             self.triggers.append(PeriodTrigger(time_delta=timedelta(days=1), do=self.accrue_cash))
+        if ACCOUNT_TRANCHES:   # EXP-063
+            self.triggers.append(PeriodTrigger(time_delta=timedelta(days=1), do=self.tranche_work))
         if STABLE_LP is not None:   # EXP-052
             self.triggers.append(PeriodTrigger(time_delta=timedelta(days=1), do=self.accrue_stable))
         if self.signal_deploy:  # spec sheet 2.3: judged once a day on the previous close
@@ -963,6 +984,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
     def follow_work(self, row_data: Snapshot):
         """Spec sheet 2.3 rule 3: rebuild to F x equity when the book drifted >= FOLLOW_THRESHOLD from F."""
+        if ACCOUNT_TRANCHES:   # EXP-063
+            return
         if self.starting_tick is None or self.out_of_fund_date is not None or self.paused_until is not None:
             return
         lp_market: UniLpMarketV2 = self.broker.markets[self.utils.market_key]
@@ -1090,6 +1113,82 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.tranche_adds += 1
         print(f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} tranche add {float(add):,.0f} at s={share} "
               f"(F {float(current):.3f} -> {float(target):.3f}), {len(self.positions)} bands")
+
+    def tranche_work(self, row_data: Snapshot) -> None:
+        """EXP-063: rebuild the sub-ladders whose virtual account changed state (see ACCOUNT_TRANCHES)."""
+        if self.starting_tick is None:
+            return
+        _, row = daily_row_for(self.daily_ema, row_data.timestamp)
+        n = len(EMA_SPANS)
+        if self.tranches is None:
+            self.tranches = [{"bands": [], "dep": 0.0, "ctr": float("nan")} for _ in range(n)]
+        want = [(float(row[f"dep{j}"]), float(row[f"ctr{j}"])) for j in range(n)]
+        same = lambda t, w: t["dep"] == w[0] and (w[0] == 0 or t["ctr"] == w[1])
+        changed = [j for j in range(n) if not same(self.tranches[j], want[j])]
+        self.tranche_io = (0, 0)
+        if not changed:
+            return
+        lp_market: UniLpMarketV2 = self.broker.markets[self.utils.market_key]
+        price = row_data.prices[self.gp.base_token.name]
+        free_b = lambda: self.broker.get_token_balance(self.gp.base_token) - self.fee_reserve_base()
+        free_q = lambda: self.broker.get_token_balance(self.gp.quote_token) - self.fee_reserve_quote()
+        lp_value = lp_market.get_market_balance().net_value if lp_market.positions else ZERO
+        equity = lp_value + free_b() * price + free_q()
+        removed = 0
+        for j in changed:   # burn the changed sub-ladders (their own liquidity only)
+            for pos, liq in self.tranches[j]["bands"]:
+                if pos not in lp_market.positions:
+                    continue
+                self.collect_fee_as_quote(lp_market, pos)
+                if pos not in lp_market.positions:
+                    continue
+                part = min(int(liq), int(lp_market.positions[pos].liquidity))
+                if part > 0:
+                    lp_market.remove_liquidity(pos, liquidity=part, collect=True)
+                    removed += 1
+            self.tranches[j]["bands"] = []
+        share = self.resolve_share(row_data.timestamp)
+        values = {j: Decimal(str(want[j][0])) / Decimal(n) * equity for j in changed if want[j][0] > 0}
+        need_b = sum((share * v / price for v in values.values()), ZERO)
+        fee = Decimal(lp_market.pool_info.fee_rate)
+        if free_b() > need_b:   # one net swap for all rebuilt sub-ladders (surplus base -> quote: the reserve stays quote)
+            _, _, fb, _ = self.execute_swap(lp_market, free_b() - need_b, ZERO)
+            self.total_base_swap_fee += fb if fb is not None else ZERO
+        elif need_b > free_b():
+            pay = min(free_q(), (need_b - free_b()) * price / (ONE - fee))
+            if pay > ZERO:
+                _, _, _, fq = self.execute_swap(lp_market, ZERO, pay)
+                self.total_quote_swap_fee += fq if fq is not None else ZERO
+        tick = lp_market.price_to_raw_tick(price)
+        k = min(ONE, free_b() / need_b) if need_b > ZERO else ONE
+        added = 0
+        for j in changed:
+            self.tranches[j]["dep"], self.tranches[j]["ctr"] = want[j]
+            if j not in values:
+                continue
+            b_j = share * values[j] / price * k
+            q_j = min((ONE - share) * values[j], max(ZERO, free_q()))
+            for config in self.ladder_configs():
+                _, _, lower_tick, upper_tick = self.calculate_range(lp_market, tick, config[0], config[1])
+                base_amt, quote_amt = self.band_amounts(b_j, q_j, config[2])
+                if base_amt <= ZERO and quote_amt <= ZERO:
+                    continue
+                pos = PositionInfo(lower_tick, upper_tick)
+                before = lp_market.positions[pos].liquidity if pos in lp_market.positions else 0
+                pos, bu, qu, _ = lp_market.add_liquidity_by_tick(lower_tick, upper_tick, base_amt, quote_amt, tick=tick)
+                if bu == ZERO and qu == ZERO:
+                    if before == 0:
+                        lp_market.positions.pop(pos, None)
+                    continue
+                self.tranches[j]["bands"].append((pos, lp_market.positions[pos].liquidity - before))
+                added += 1
+        self.positions = sorted({p for t in self.tranches for p, _ in t["bands"] if p in lp_market.positions},
+                                key=lambda p: (p[0], p[1]))
+        self.deployed_at_build = Decimal(str(sum(w[0] for w in want) / n))
+        self.tranche_rebuilds += len(changed)
+        self.tranche_io = (removed, added)
+        print(f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} sub-ladders {changed} rebuilt, deployed "
+              f"{[w[0] for w in want]}, {len(self.positions)} bands")
 
     def ladder_configs(self) -> List[List]:
         """The bands a (re)build places: all of them, or with HALF_LADDER only the quote side (a range above the
@@ -1477,7 +1576,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         lp_market: UniLpMarketV2 = self.broker.markets[self.utils.market_key]
 
         if (len(lp_market.positions) == 0 and not self.force_rebuild) or self.out_of_fund_date is not None \
-                or self.paused_until is not None:
+                or self.paused_until is not None or ACCOUNT_TRANCHES:   # EXP-063: sub-ladders handle all rebuilds
             return
 
         current_price = row_data.prices[self.gp.base_token.name]
@@ -1694,6 +1793,11 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         lowest, highest = self.shape_config[0][0], self.shape_config[-1][1]
         (_lower_price, _upper_price, lower_boundary, upper_boundary) = self.calculate_range(lp_market, current_tick, lowest, highest)
         self.starting_tick = current_tick
+        if ACCOUNT_TRANCHES:   # EXP-063: the sub-ladders are built right away by tranche_work
+            self.was_in_range = True
+            self.last_price = self.last_dca_price = self.last_check_price = current_price
+            self.tranche_work(row_data)
+            return
 
         init_base = lp_market.broker.get_token_balance(self.gp.base_token)
         init_quote = lp_market.broker.get_token_balance(self.gp.quote_token)
