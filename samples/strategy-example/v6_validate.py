@@ -159,11 +159,18 @@ OPT = {"A": Variant("A_v6"),
        "AK": Variant("AK_s50_confirm", {"SHARE_ABOVE_EMA": Decimal("0.5"), "EXIT_CONFIRM": 2}),   # EXP-048: EXP-046 + EXP-044
        "AL": Variant("AL_s50_volwidth", {"SHARE_ABOVE_EMA": Decimal("0.5"), "WIDTH_VOL": True}),   # EXP-049: EXP-046 + EXP-030
        "AM": Variant("AM_s50_consensus", {"SHARE_ABOVE_EMA": Decimal("0.5"), "REGIME": "max_ed"}),   # EXP-050: EXP-046 + EXP-031
-       "AN": Variant("AN_s50_confirm_volwidth", {"SHARE_ABOVE_EMA": Decimal("0.5"), "EXIT_CONFIRM": 2, "WIDTH_VOL": True})}   # EXP-051: EXP-046 + 044 + 030
+       "AN": Variant("AN_s50_confirm_volwidth", {"SHARE_ABOVE_EMA": Decimal("0.5"), "EXIT_CONFIRM": 2, "WIDTH_VOL": True}),   # EXP-051: EXP-046 + 044 + 030
+       "AO": Variant("AO_stable_lp", {"STABLE_LP": "pool"}),   # EXP-052: reserve LP'd in USDC/USDT ±0.1%
+       "AP": Variant("AP_down_vol_target", {"VOL_TARGET": "pool"}),   # EXP-053: F x min(1, sigma*/sigma_14) below EMA100
+       "AQ": Variant("AQ_er_gate", {"ER_GATE": True})}   # EXP-054: EMA exit only while ER(30) >= 1/sqrt(30)
+# EXP-052: daily net return per $ of the USDC/USDT LP (samples/make_stable_lp_series.py), for USDC-quoted pools
+STABLE_LP_CSV = "../stable_lp_daily.csv"
+# EXP-053: median 14-day std of daily log returns, Binance closes 2019-01-01..2021-04-30 (fixed in the pre-registration)
+VOL_TARGET_BY_ASSET = {"ETHUSDT": 0.04179, "BTCUSDT": 0.03219}
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL", "EXIT_CONFIRM", "F_WEEKLY", "F_FLOOR"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL", "EXIT_CONFIRM", "F_WEEKLY", "F_FLOOR", "STABLE_LP", "VOL_TARGET", "ER_GATE"]}
 
 
 def sens_grid():
@@ -334,6 +341,10 @@ def run_variant(args):
     for k, v in {**ENGINE_DEFAULTS, **variant.engine}.items():
         if k == "CASH_APR" and v == "pool":
             v = pd.read_csv(RATE_CSV[POOL], parse_dates=["date"]).set_index("date")["apr"].sort_index()
+        if k == "STABLE_LP" and v == "pool":
+            v = pd.read_csv(STABLE_LP_CSV, parse_dates=["date"]).set_index("date")["ret"].sort_index()
+        if k == "VOL_TARGET" and v == "pool":
+            v = VOL_TARGET_BY_ASSET[LONG_CLOSE_COL[POOL]]
         if k == "HEDGE_FUNDING" and v == "pool":
             v = pd.read_csv(FUNDING_CSV[POOL], parse_dates=["timestamp"]).set_index("timestamp")["rate"].sort_index()
         setattr(V, k, v)
@@ -368,7 +379,7 @@ def run_variant(args):
             "hedge_pnl": float(s.hedge_pnl), "hedge_funding": float(s.hedge_funding), "hedge_fees": float(s.hedge_fees),
             "hedge_trades": s.hedge_trades, "hedge_max_ratio": s.hedge_max_ratio,
             "hedge_min_cash": float(s.hedge_min_cash) if s.hedge_min_cash is not None else float("nan"),
-            "pauses": s.pauses, "pause_minutes": s.pause_minutes, "bear_short_days": s.bear_short_days, "recentres": s.recentre_count,
+            "stable_income": float(s.total_interest) if V.STABLE_LP is not None else 0.0, "pauses": s.pauses, "pause_minutes": s.pause_minutes, "bear_short_days": s.bear_short_days, "recentres": s.recentre_count,
             "benchmark_return": float(m["benchmark_rate"]), "secs": round(time.time() - t0)}
 
 

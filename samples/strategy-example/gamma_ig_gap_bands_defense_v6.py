@@ -192,6 +192,22 @@ EXIT_CONFIRM = 1
 F_WEEKLY = False
 # EXP-047 (v6.34): F never below F_FLOOR (one of the four refill stages always stays deployed). 0 = v6.
 F_FLOOR = 0.0
+# EXP-052 (v6.39): idle quote outside the ladder (the reserve (1 - F) x equity, not the paid-out fees) is LP'd in the
+# mainnet Uniswap v3 USDC/USDT pool, ±0.1% around the peg (samples/make_stable_lp_series.py). STABLE_LP = daily net
+# return per $ (fee share + mark to market), booked once a day at 00:00 on the reserve held then, paid out like the fees;
+# every change of the reserve pays STABLE_SWITCH_FEE on half the moved amount (the position is ~half USDT). None = v6.
+STABLE_LP: pd.Series | None = None
+STABLE_SWITCH_FEE = Decimal("0.0001")
+# EXP-053 (v6.40): downside volatility targeting. On days the close is <= EMA100, F x min(1, VOL_TARGET / sigma_14),
+# sigma_14 = std of the last VOL_TARGET_DAYS daily log returns, VOL_TARGET = the asset's median sigma_14 over
+# 2019-01-01..2021-04-30 (Binance daily closes, before any pool data). None = v6.
+VOL_TARGET: float | None = None
+VOL_TARGET_DAYS = 14
+# EXP-054 (v6.41): chop gate on the EMA exit. An armed account's "close < EMA" exit fires only while Kaufman's efficiency
+# ratio over ER_DAYS daily closes is >= 1 / sqrt(ER_DAYS), the random-walk level (below it the market moved less than a
+# random walk: chop, the exit would be a whipsaw). The lower stop, re-arm and refill rules are unchanged. False = v6.
+ER_GATE = False
+ER_DAYS = 30
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -211,7 +227,7 @@ class VirtualAccount:
     def exit(self, close: float) -> None:
         self.deployed, self.centre, self.low, self.stage, self.confirm = 0.0, None, close, 0, 0
 
-    def step(self, close: float, ema: float) -> None:
+    def step(self, close: float, ema: float, trend_ok: bool = True) -> None:
         if not self.started:  # ponytail: engine starts at warm-up start, not 2017; 360 days settle it
             self.started, self.armed = True, close > ema
             if self.armed:
@@ -219,7 +235,7 @@ class VirtualAccount:
             else:
                 self.low = close
             return
-        if self.armed and close < ema:                      # 1 EMA exit (spec: low resets even if empty)
+        if self.armed and close < ema and trend_ok:         # 1 EMA exit (spec: low resets even if empty); EXP-054 gate
             self.exit(close)
             self.armed = False
         elif not self.armed and close > ema:                # 2 re-arm, no buy
@@ -341,16 +357,24 @@ def daily_ema_frame(minute_price: pd.Series) -> pd.DataFrame:
     comps = regime_components()
     lines = {k: emas if k == "ema" else regime_lines(minute_price.astype(float), close, k) for k in comps}
     accounts = [(k, VirtualAccount(n)) for k in comps for n in EMA_SPANS]
+    path = close.diff().abs().rolling(ER_DAYS, min_periods=ER_DAYS).sum()   # EXP-054: Kaufman efficiency ratio
+    er = ((close - close.shift(ER_DAYS)).abs() / path).fillna(1.0)
+    trend_ok = (er >= 1 / np.sqrt(ER_DAYS)) if ER_GATE else pd.Series(True, index=close.index)
     fractions = []
     for day, c in close.items():
         for k, a in accounts:
-            a.step(float(c), float(lines[k][a.span][day]))
+            a.step(float(c), float(lines[k][a.span][day]), bool(trend_ok[day]) if k == "ema" else True)
         fractions.append(sum(a.deployed for _, a in accounts) / len(accounts))
     if F_WEEKLY:   # EXP-045: the Sunday value, held until the next Sunday
         fs = pd.Series(fractions, index=close.index)
         fractions = fs.where(fs.index.dayofweek == 6).ffill().bfill().tolist()
     if F_FLOOR > 0:   # EXP-047
         fractions = [max(f, F_FLOOR) for f in fractions]
+    if VOL_TARGET is not None:   # EXP-053: downside-only volatility targeting of F
+        s14 = np.log(close).diff().rolling(VOL_TARGET_DAYS, min_periods=VOL_TARGET_DAYS).std()
+        scale = np.minimum(1.0, VOL_TARGET / s14).fillna(1.0)
+        down = close <= close.ewm(span=EMA_SPAN, adjust=False).mean()
+        fractions = [f * (float(k) if d else 1.0) for f, k, d in zip(fractions, scale, down)]
     arm = sum((close > emas[n]).astype(float) for n in EMA_SPANS) / len(EMA_SPANS)   # EXP-029
     sigma = np.log(close).diff().rolling(WIDTH_VOL_DAYS, min_periods=WIDTH_VOL_DAYS).std()   # EXP-030
     return pd.DataFrame({"close": close, "ema": emas[EMA_SPAN], "F": fractions, "arm": arm, "sigma": sigma})
@@ -644,7 +668,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.sleeve_stopped = False
         self.stop_low_f: Decimal | None = None  # lowest F since the stop; a rise above it re-arms
         self.sleeve_stops = 0
-        self.total_interest = ZERO       # CASH_APR: lending interest earned on idle quote
+        self.total_interest = ZERO       # CASH_APR: lending interest earned on idle quote (EXP-052: stable LP income)
+        self.stable_held = ZERO          # EXP-052: reserve in the stable LP at the last accrual
         self.refill_orders = 0           # REFILL_ORDER: F increases placed as quote-only range orders
         self.ladder_span: tuple[int, int] | None = None   # (lowest, highest) tick of the last built ladder
         self.half_now = False            # HALF_WHEN_ACCEL: the latest build placed only the quote side
@@ -799,6 +824,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.triggers.append(PeriodTrigger(time_delta=self.params.rescale_frequency.value, do=self.rescale_work))
         if CASH_APR is not None:
             self.triggers.append(PeriodTrigger(time_delta=timedelta(days=1), do=self.accrue_cash))
+        if STABLE_LP is not None:   # EXP-052
+            self.triggers.append(PeriodTrigger(time_delta=timedelta(days=1), do=self.accrue_stable))
         if self.signal_deploy:  # spec sheet 2.3: judged once a day on the previous close
             self.triggers.append(PeriodTrigger(time_delta=timedelta(days=1), do=self.follow_work))
         self.triggers.append(PeriodTrigger(time_delta=timedelta(days=1), do=self.log_fees))
@@ -998,6 +1025,22 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             self.broker.add_to_balance(self.gp.quote_token, interest)
             self.total_quote_fee += interest
             self.total_interest += interest
+
+    def accrue_stable(self, row_data: Snapshot):
+        """EXP-052: one day of the USDC/USDT LP's net return on the reserve (quote held outside the ladder minus the
+        paid-out fees and income), at the previous day's return; a change of the reserve since the last day pays
+        STABLE_SWITCH_FEE on half the moved amount. Booked as income like the fees: not deployed."""
+        if self.starting_tick is None:
+            return
+        day = pd.Timestamp(row_data.timestamp - timedelta(days=1)).normalize()
+        held = max(ZERO, self.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee)
+        moved = abs(held - self.stable_held)
+        self.stable_held = held
+        ret = STABLE_LP.get(day, np.nan)
+        income = (held * Decimal(str(ret)) if not pd.isna(ret) else ZERO) - moved * STABLE_SWITCH_FEE / 2
+        self.broker.add_to_balance(self.gp.quote_token, income)
+        self.total_quote_fee += income
+        self.total_interest += income
 
     # ---- EXP-016: toxicity pause ----
     def pause_work(self, row_data: Snapshot) -> None:

@@ -4,6 +4,7 @@ Apply the pre-registered success rules (README *Success levels*) to v6_validate.
 usage (from samples/strategy-example):
     python experiments/judge.py dev  <tag> <prefix> [<prefix> ...]    # tag = opt list without commas, e.g. AABADAEAF
     python experiments/judge.py hold <tag> <prefix> [<prefix> ...]
+    python experiments/judge.py oot  <tag> <prefix> [<prefix> ...]    # EXP-052..: H5 ETH 2021 + H4 WBTC 2022, improvement level
 
 dev  reads result/v6_validate/0x88e6-opt-<tag>-<segment> (ETH yearly + continuous) and 0x99ac-opt-<tag>-2022-11-01-2026-09-17.
 hold reads the three holdout folders (Arbitrum WETH 2024-01-01..2025-07-23, Base WETH 2024-01-01..2026-09-17,
@@ -98,5 +99,23 @@ def holdbtc(tag: str, prefixes: list) -> dict:
     return out
 
 
+OOT = [("H5 ETH 2021-05..12", "0x88e6", "2021-05-06-2021-12-31"), ("H4 WBTC 2022-01..10", "0x99ac", "2022-01-01-2022-10-31")]
+
+
+def oot(tag: str, prefixes: list) -> dict:
+    """EXP-052..: time-split out-of-time holdout at the improvement level (both windows lie before the dev windows, run with
+    BINANCE_WARM=1): on H5 and H4 each, CAGR above v6's, Calmar >= v6's (v6 CAGR negative: CAGR above only) and max DD no
+    more than 3 pts deeper (`improves`)."""
+    out = {}
+    for pre in prefixes:
+        per = [(label, cont(f"{R}/{pool}-opt-{tag}-{seg}", "A_"), cont(f"{R}/{pool}-opt-{tag}-{seg}", pre)) for label, pool, seg in OOT]
+        imp = all(improves(a, v) for _, a, v in per)
+        out[pre] = {"improvement": imp, "per": per}
+        print(f"{pre:6s} improvement={'PASS' if imp else 'fail'} | " + "; ".join(
+            f"{l}: total {v['total']*100:+.1f}% (v6 {a['total']*100:+.1f}%) cagr {v['cagr']*100:.1f} (v6 {a['cagr']*100:.1f}) "
+            f"calmar {v['calmar']:.2f} (v6 {a['calmar']:.2f}) dd {v['maxdd']*100:.1f} (v6 {a['maxdd']*100:.1f})" for l, a, v in per))
+    return out
+
+
 if __name__ == "__main__":
-    {"dev": dev, "hold": hold, "holdbtc": holdbtc}[sys.argv[1]](sys.argv[2], sys.argv[3:])
+    {"dev": dev, "hold": hold, "holdbtc": holdbtc, "oot": oot}[sys.argv[1]](sys.argv[2], sys.argv[3:])
