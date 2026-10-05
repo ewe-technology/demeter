@@ -303,7 +303,15 @@ OPT = {"A": Variant("A_v6"),
        "EC": Variant("EC_tier_svrrise_nlx", {"TIER": {"hi": {**HI_SVR, "REBUILD_ON_RISE": True}, "lo": {"REFILL_NO_NEW_LOW": True, "REFILL_GATE": "xasset", "EXTRA": "pool"}}}),   # EXP-141
        "ED": Variant("ED_nolow_route_macro_rise", {"REFILL_NO_NEW_LOW": True, "SWAP_ROUTE": "pool", "MACRO_EVENTS": "csv", "MACRO_RESTORE": True,
                                                    "REBUILD_ON_RISE": True}),   # EXP-142: one rule for both pools
-       "EE": Variant("EE_tier_svr_nlxconfirm", {"TIER": {"hi": HI_SVR, "lo": {"REFILL_NO_NEW_LOW": True, "REFILL_GATE": "xasset", "EXTRA": "pool", "EXIT_CONFIRM": 2}}})}   # EXP-143
+       "EE": Variant("EE_tier_svr_nlxconfirm", {"TIER": {"hi": HI_SVR, "lo": {"REFILL_NO_NEW_LOW": True, "REFILL_GATE": "xasset", "EXTRA": "pool", "EXIT_CONFIRM": 2}}}),   # EXP-143
+       # EXP-144..148: the cross-asset refill on both pools, and EXP-139 + EXP-140 merged
+       "EF": Variant("EF_nolow_xasset_route", {"REFILL_NO_NEW_LOW": True, "REFILL_GATE": "xasset", "EXTRA": "pool", "SWAP_ROUTE": "pool"}),   # EXP-144: one rule for both pools
+       "EG": Variant("EG_nolow_xasset_route_rise", {"REFILL_NO_NEW_LOW": True, "REFILL_GATE": "xasset", "EXTRA": "pool", "SWAP_ROUTE": "pool", "REBUILD_ON_RISE": True}),   # EXP-145
+       "EH": Variant("EH_tier_svrx_nlx", {"TIER": {"hi": {**HI_SVR, "REFILL_GATE": "xasset"}, "lo": {"REFILL_NO_NEW_LOW": True, "REFILL_GATE": "xasset", "EXTRA": "pool"}}}),   # EXP-146
+       "EI": Variant("EI_tier_svr_nlxrisemacro", {"TIER": {"hi": HI_SVR, "lo": {"REFILL_NO_NEW_LOW": True, "REFILL_GATE": "xasset", "EXTRA": "pool", "REBUILD_ON_RISE": True,
+                                                                               "MACRO_EVENTS": "csv", "MACRO_RESTORE": True}}}),   # EXP-147
+       "EJ": Variant("EJ_nolow_xasset_route_macro", {"REFILL_NO_NEW_LOW": True, "REFILL_GATE": "xasset", "EXTRA": "pool", "SWAP_ROUTE": "pool", "MACRO_EVENTS": "csv",
+                                                     "MACRO_RESTORE": True})}   # EXP-148: one rule for both pools
 # EXP-082..: daily non-price inputs (samples/fetch_deribit_dvol.py, fetch_binance_funding.py, fetch_binance_daily.py)
 DVOL_CSV = "../deribit_dvol_daily.csv"
 FUND_LONG_CSV = {"ETHUSDT": "../binance_funding_ETHUSDT_long.csv", "BTCUSDT": "../binance_funding_BTCUSDT_long.csv"}
