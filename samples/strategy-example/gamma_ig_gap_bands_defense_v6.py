@@ -236,6 +236,14 @@ MACRO_BEFORE, MACRO_AFTER = timedelta(minutes=30), timedelta(hours=2)
 # its token amounts at the current price are computed, one net swap covers the difference with the tokens that came out
 # (the reserve is not used), then the bands are minted at the same ticks. No idle leftover, so no extra follow rebuild.
 MACRO_RESTORE = False
+# EXP-061 (v6.48): existing liquidity is never recentred on a follow event. F up: the increment (target - current) x equity is
+# placed as a new 17-band tranche centred on today's price at the target ETH share (one swap for the increment only); bands
+# with the same ticks merge. F down (> 0): every band shrinks by target / current (EXP-055's shrink). Range exits (price
+# outside the union of all tranches), first builds, builds from an empty book and F = 0 are v6's full rebuilds. False = v6.
+TRANCHE_ADD = False
+# EXP-062 (v6.49): asymmetric follow: F down (> 0) shrinks every band in place (EXP-055's shrink, no recentre); F up is v6's full
+# rebuild (recentre at today's price). False = v6.
+FOLLOW_ASYM = False
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -707,6 +715,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.resize_count = 0            # EXP-055: follow events handled by resize_work
         self.swapless_exits = 0          # EXP-057: range-exit rebuilds placed without a swap
         self.macro_next = 0              # EXP-059: index of the next scheduled release
+        self.tranche_adds = 0            # EXP-061: follow events handled by tranche_add
         self.fee_log: List[dict] = []    # daily: collected fees (quote) + pending fees still in the positions
         # spec sheet s: base (ETH) share of total value before the bands are placed. None keeps the
         # original behaviour, where calculate_swap_amount lets the full-range geometry pick the ratio.
@@ -983,6 +992,12 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         if REFILL_ORDER and target > current and self.place_refill_order(row_data, (target - current) * equity):
             self.deployed_at_build = target
             return
+        if (TRANCHE_ADD or FOLLOW_ASYM) and self.positions and current > FULL_TOLERANCE and ZERO < target < current:
+            self.resize_work(row_data, target, current)   # EXP-061 / EXP-062: shrink in place
+            return
+        if TRANCHE_ADD and self.positions and current > FULL_TOLERANCE and target > current:   # EXP-061: add a tranche
+            self.tranche_add(row_data, target, current, equity)
+            return
         if RESIZE_IN_PLACE and self.positions and current > FULL_TOLERANCE and target > ZERO:   # EXP-055
             self.resize_work(row_data, target, current)
             return
@@ -1043,6 +1058,38 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.resize_count += 1
         print(f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} resize in place x{float(k):.3f} "
               f"(F {float(current):.3f} -> {float(target):.3f})")
+
+    def tranche_add(self, row_data: Snapshot, target: Decimal, current: Decimal, equity: Decimal) -> None:
+        """EXP-061: place (target - current) x equity as a new ladder centred on today's price (see TRANCHE_ADD)."""
+        lp_market: UniLpMarketV2 = self.broker.markets[self.utils.market_key]
+        price = row_data.prices[self.gp.base_token.name]
+        share = self.resolve_share(row_data.timestamp)
+        add = (target - current) * equity
+        free_base = self.broker.get_token_balance(self.gp.base_token) - self.fee_reserve_base()
+        want_base = share * add / price
+        if want_base > free_base:
+            pay = (want_base - free_base) * price / (ONE - Decimal(lp_market.pool_info.fee_rate))
+            _, _, _, fee_q = self.execute_swap(lp_market, ZERO, pay)
+            self.total_quote_swap_fee += fee_q if fee_q is not None else ZERO
+        base_for = min(want_base, self.broker.get_token_balance(self.gp.base_token) - self.fee_reserve_base())
+        quote_for = (ONE - share) * add
+        tick = lp_market.price_to_raw_tick(price)
+        new = []
+        for config in self.ladder_configs():
+            _, _, lower_tick, upper_tick = self.calculate_range(lp_market, tick, config[0], config[1])
+            base_amt, quote_amt = self.band_amounts(base_for, quote_for, config[2])
+            pos, bu, qu, _ = lp_market.add_liquidity_by_tick(lower_tick, upper_tick, base_amt, quote_amt, tick=tick)
+            if bu == ZERO and qu == ZERO:
+                if pos not in self.positions:
+                    lp_market.positions.pop(pos, None)
+                continue
+            new.append(pos)
+        self.positions = sorted(set(self.positions) | set(new), key=lambda p: (p[0], p[1]))
+        self.deployed_at_build = target
+        self.reserve_quote = max(ZERO, (ONE - target) * equity)
+        self.tranche_adds += 1
+        print(f"{row_data.timestamp.strftime('%Y-%m-%d %H:%M')} tranche add {float(add):,.0f} at s={share} "
+              f"(F {float(current):.3f} -> {float(target):.3f}), {len(self.positions)} bands")
 
     def ladder_configs(self) -> List[List]:
         """The bands a (re)build places: all of them, or with HALF_LADDER only the quote side (a range above the

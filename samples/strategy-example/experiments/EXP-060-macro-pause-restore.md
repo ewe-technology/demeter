@@ -1,7 +1,7 @@
 # EXP-060: scheduled FOMC / CPI pause with an exact restore of the ladder (v6.47)
 
 - Jira: QUAN-942
-- Status: pre-registered
+- Status: holdout-fail
 - Pre-registration commit: 1ac1ba4 · Result commit: ______
 - Scope: /goal 2026-10-05 "beat v6 at the improvement level, pure LP, time-split out-of-time holdout" (Dino); idle-capital
   yield excluded (ruling 2026-10-05).
@@ -41,7 +41,35 @@ Pre-registered alone and run in the same invocations as `A` (v6).
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `AAW`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +6.8% | -0.8 |
+| 2023 | +32.2% | +32.6% | +0.4 |
+| 2024 | +36.4% | +37.6% | +1.2 |
+| 2025 | +16.3% | +16.4% | +0.1 |
+| 2026-01..09-17 | +18.7% | +18.8% | +0.1 |
+
+Wins 4/5, median +0.11 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +87.0% | 14.2% | -23.0% | 0.73 | 0.62 | $84.8k | $0.31k | 279 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +87.2% | 17.6% | -17.6% | 1.02 | 1.00 | $61.5k | $0.72k | 234 |
+
+Holdout, time-split out-of-time (`BINANCE_WARM=1`, run once):
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| H5 ETH 2021-05-06..12-31 v6 | +4.5% | 7.0% | -30.7% | 0.37 | 0.23 | $21.0k | $3.70k | 37 |
+| H5 ETH 2021-05-06..12-31 this | +5.0% | 7.8% | -30.6% | 0.39 | 0.25 | $21.3k | $3.69k | 59 |
+| H4 WBTC 2022-01-01..10-31 v6 | +2.4% | 2.9% | -12.5% | 0.24 | 0.23 | $14.3k | $0.04k | 17 |
+| H4 WBTC 2022-01-01..10-31 this | +2.3% | 2.8% | -12.5% | 0.23 | 0.22 | $13.8k | $0.04k | 40 |
+
+Verdict: **holdout-fail** — dev passed the improvement rule by small margins (ETH CAGR 14.2% vs 14.0%, Calmar 0.62 vs 0.61, max DD −23.0% vs −22.8%, wins 4/5; WBTC CAGR 17.6% vs 17.3%, Calmar 1.00 vs 0.97, max DD −17.6% vs −17.8%). Time-split holdout: H5 ETH 2021 wins (CAGR 7.8% vs 7.0%, Calmar 0.25 vs 0.23), H4 WBTC 2022 loses narrowly (CAGR 2.8% vs 2.9%, Calmar 0.22 vs 0.23, max DD equal) → fails the rule (both windows required). Reading: with the exact restore the pause is close to neutral (±0.2-0.8 pts a year, inside the noise of one path); the ETH gain of EXP-059 (CAGR 15.8%) came from its extra recentres, not from the pause. Scheduled macro releases are not toxic enough for a ±20% ladder to pay for being out of the pool. The holdout was run once; the improvement level fails.
 
 ## Deviations
 

@@ -59,4 +59,6 @@ EXP-056,2026-10-05,range-exit check every hour instead of once a day (v6.43),QUA
 EXP-057,2026-10-05,range-exit rebuild from inventory without the swap (base + limit) (v6.44),QUAN-939,dropped-at-dev,-7.65,1/5,,,0.599,0.105,-0.214,29b47c1,c02ec73,EXP-057-swapless-exit.md,improvement
 EXP-058,2026-10-05,resize in place while the price is in the ladder's inner half; recentre otherwise (v6.45),QUAN-940,dropped-at-dev,0.92,3/5,,,0.817,0.135,-0.224,02403c7,1ac1ba4,EXP-058-resize-near-centre.md,improvement
 EXP-059,2026-10-05,pull the ladder 30 min before to 2 h after scheduled FOMC / CPI releases (v6.46),QUAN-941,dropped-at-dev,0.13,3/5,,,0.995,0.158,-0.221,02403c7,1ac1ba4,EXP-059-macro-event-pause.md,improvement
-EXP-060,2026-10-05,FOMC / CPI pause with an exact restore of every band's liquidity (v6.47),QUAN-942,pre-registered,,,,,,,,1ac1ba4,,EXP-060-macro-pause-restore.md,improvement
+EXP-060,2026-10-05,FOMC / CPI pause with an exact restore of every band's liquidity (v6.47),QUAN-942,holdout-fail,0.11,4/5,1/2 windows (time-split),0.20,0.870,0.142,-0.230,1ac1ba4,,EXP-060-macro-pause-restore.md,improvement
+EXP-061,2026-10-05,F up adds a new tranche at today's price; F down shrinks every band; no recentre on follow events (v6.48),,pre-registered,,,,,,,,,,EXP-061-tranche-add.md,improvement
+EXP-062,2026-10-05,asymmetric follow: shrink in place when F falls; v6 recentre when F rises (v6.49),,pre-registered,,,,,,,,,,EXP-062-follow-asym.md,improvement
