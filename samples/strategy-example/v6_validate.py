@@ -109,16 +109,19 @@ INIT_BY_POOL = {"0x4585fe77225b41b697c938b018e2ac67ac5a20c0": Decimal(2),  # quo
 G_REMOVE, G_ADD, G_SWAP = 260_000, 450_000, 150_000
 GAS_CSV = "../gas_ethereum_hourly.csv"
 ETH_USD_CSV = "../eth_usd_hourly.csv"
-# EXP-117: swap route per LP pool, (hop pool, fee %) in order; every hop's token1 is WETH. Used when SWAP_ROUTE == "pool".
+# EXP-117: swap route per LP pool, (hop pool, fee %) in order; every hop holds WETH on one side. Used when SWAP_ROUTE == "pool".
 SWAP_ROUTES = {"0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8": (("0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", 0.05),),
                "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": (("0x4585fe77225b41b697c938b018e2ac67ac5a20c0", 0.05),
-                                                              ("0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", 0.05))}
+                                                              ("0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", 0.05)),
+               # EXP-128: Base WETH/USDC 0.3% ladder, swaps on Base WETH/USDC 0.05% (token0 is WETH there)
+               "0x6c561b446416e1a00e8e93e221854d6ea4171372": (("0xd0b53d9277642d899df5c87a3966a349a798f224", 0.05),)}
 ROUTE_DATA: list | None = None   # EXP-117: per hop (fee %, minute frame of closeTick / currentLiquidity), set in run_variant
 
 
 def route_frame(pool: str, start: date, end: date) -> pd.DataFrame:
-    """EXP-117: a hop pool's minute closeTick and currentLiquidity over [start, end] (raw files, no demeter cache)."""
-    assert POOLS[pool][1] == ("eth", 18), pool
+    """EXP-117: a hop pool's minute closeTick and currentLiquidity over [start, end] (raw files, no demeter cache), plus
+    `eth0` = 1 when WETH is the pool's token0 (EXP-128), else 0 (token1)."""
+    assert ("eth", 18) in POOLS[pool][:2], pool
     folder = f"{POOLS[pool][4]}/{pool}"
     frames = []
     for name in sorted(os.listdir(folder)):
@@ -126,7 +129,9 @@ def route_frame(pool: str, start: date, end: date) -> pd.DataFrame:
             frames.append(pd.read_csv(f"{folder}/{name}", usecols=["timestamp", "closeTick", "currentLiquidity"],
                                       parse_dates=["timestamp"]))
     m = pd.concat(frames).set_index("timestamp").sort_index()
-    return m.apply(pd.to_numeric, errors="coerce").astype(float).ffill()
+    m = m.apply(pd.to_numeric, errors="coerce").astype(float).ffill()
+    m["eth0"] = 1.0 if POOLS[pool][0] == ("eth", 18) else 0.0
+    return m
 
 
 @dataclass(frozen=True)
@@ -404,7 +409,9 @@ class Checked(V.RemixDaoDcaWeekStratStrategy):
             route = 0.0
             for _, hop in ROUTE_DATA:
                 h = hop.asof(ts)
-                route += side ** 2 / (h["currentLiquidity"] * 1.0001 ** (h["closeTick"] / 2) / 1e18 * eth_usd)
+                sp = 1.0001 ** (h["closeTick"] / 2)
+                weth = h["currentLiquidity"] / sp if h["eth0"] else h["currentLiquidity"] * sp   # WETH-side virtual reserve
+                route += side ** 2 / (weth / 1e18 * eth_usd)
             rebate = notional * (float(self.gp.fee) - sum(fee for fee, _ in ROUTE_DATA)) / 100
             self.route_rebate += rebate
             self.route_impact += route
