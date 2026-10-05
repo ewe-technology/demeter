@@ -25,6 +25,7 @@ All of these are **in-sample** for v6 research now: a new pre-registration needs
 | `0xa6cc3c25...` | Ethereum | LINK/WETH 0.3% | 2021-06-01 | `holdout-data` | EXP-021 holdout |
 | `0x1d42064f...` | Ethereum | UNI/WETH 0.3% | 2021-06-01 | `holdout-data` | EXP-021 holdout |
 | `0xc6962004...` | Arbitrum | WETH/USDC 0.05% | 2023-06-09, ends **2025-07-23** | `holdout-data` | EXP-022/023 holdout |
+| `0x8ad599c3...` | Ethereum | USDC/WETH 0.3% | 2021-05-05 (RPC, `fetch_uni_minute.py`, 2026-10-05) | `holdout-data` | EXP-117 LP pool (fee/LVR 1.70 vs `88e6` 0.75) |
 | `0x5ab53ee1...` | Ethereum | AAVE/WETH 0.3% | 2021-06-01, ends **2023-12-31** | `holdout-data` | EXP-022/023 holdout |
 | `0x3416cf6c...` | Ethereum | USDC/USDT 0.01% | 2021-11-15 (S3 to 2025-11-30, RPC 2025-12-01..2026-09-17) | `stable-data` | EXP-052 stable LP (not a v6 pool) |
 | `0x7858e59e...` | Ethereum | USDC/USDT 0.05% | 2021-05-05 to 2021-11-30 (RPC) | `stable-data` | EXP-052 stable LP before 2021-11-15 |

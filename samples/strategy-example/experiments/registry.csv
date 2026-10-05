@@ -116,3 +116,4 @@ EXP-113,2026-10-05,fee tier: volume refill on 0.3% and v6.75 + ETH share 70% on 
 EXP-114,2026-10-05,fee tier: no lower stop + volume refill on 0.3% and v6.75 on 0.05% (v6.101),,pre-registered,,,,,,,,,,EXP-114-tier-nostopvol-nolow.md,improvement
 EXP-115,2026-10-05,fee tier: account tranches + intraday stop on 0.3% and v6.75 on 0.05% (v6.102),,pre-registered,,,,,,,,,,EXP-115-tier-tranchestop-nolow.md,improvement
 EXP-116,2026-10-05,fee tier: intraday stop on 0.3% and v6.75 + ETH share 70% on 0.05% (v6.103),,pre-registered,,,,,,,,,,EXP-116-tier-stop-nolow70.md,improvement
+EXP-117,2026-10-05,LP in the 0.3% fee tier with rebuild swaps routed through the 0.05% tier (v6.104),,pre-registered,,,,,,,,,,EXP-117-lp-03-swap-005.md,improvement
