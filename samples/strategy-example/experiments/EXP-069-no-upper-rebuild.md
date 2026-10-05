@@ -1,8 +1,8 @@
 # EXP-069: signal engine without the accounts' upper rebuild (v6.56)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-952
+- Status: dropped-at-dev
+- Pre-registration commit: 7f043c5 · Result commit: ______
 - Scope: /goal 2026-10-05 "beat v6 at the improvement level, pure LP, time-split out-of-time holdout" (Dino); idle-capital
   yield excluded (ruling 2026-10-05).
 
@@ -32,7 +32,26 @@ Pre-registered together with the other experiment of the same commit (EXP-069 / 
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ABGBH`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +7.6% | +0.0 |
+| 2023 | +32.2% | +32.2% | +0.0 |
+| 2024 | +36.4% | +36.3% | -0.1 |
+| 2025 | +16.3% | +16.3% | +0.0 |
+| 2026-01..09-17 | +18.7% | +18.7% | +0.0 |
+
+Wins 0/5, median +0.00 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +85.3% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.28k | 148 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+
+Verdict: **dropped-at-dev** — identical to v6 to the dollar on both assets (ETH CAGR 14.0%, Calmar 0.61; WBTC 17.3%, 0.97; wins 0/5). Holdout not run. Reading: the upper rebuild only moves the reference of the lower stop; in 2022-2026 no stop-out happened after an upper rebuild, so removing it never changed F. The rule is inert on the dev data (it may matter in a long rally followed by a crash, like 2021, which this ablation cannot show without running the holdout it did not earn).
 
 ## Deviations
 

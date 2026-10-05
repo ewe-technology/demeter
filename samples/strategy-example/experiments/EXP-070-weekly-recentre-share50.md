@@ -1,8 +1,8 @@
 # EXP-070: weekly recentre + ETH share 50% (stack of EXP-065 and EXP-046) (v6.57)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-953
+- Status: dropped-at-dev
+- Pre-registration commit: 7f043c5 · Result commit: ______
 - Scope: /goal 2026-10-05 "beat v6 at the improvement level, pure LP, time-split out-of-time holdout" (Dino); idle-capital
   yield excluded (ruling 2026-10-05).
 
@@ -32,7 +32,26 @@ Pre-registered together with the other experiment of the same commit (EXP-069 / 
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ABGBH`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +14.7% | +7.1 |
+| 2023 | +32.2% | +23.0% | -9.2 |
+| 2024 | +36.4% | +25.5% | -10.8 |
+| 2025 | +16.3% | +16.1% | -0.1 |
+| 2026-01..09-17 | +18.7% | +16.3% | -2.4 |
+
+Wins 1/5, median -2.40 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +102.6% | 16.2% | -18.2% | 0.90 | 0.89 | $72.2k | $0.31k | 311 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +69.4% | 14.6% | -14.7% | 0.94 | 0.99 | $27.0k | $0.44k | 259 |
+
+Verdict: **dropped-at-dev** — ETH is the best result of this goal (CAGR 16.2% vs 14.0%, Calmar 0.89 vs 0.61, max DD −18.2% vs −22.8%) but the ETH yearly wins are 1/5 and WBTC's CAGR falls (14.6% vs 17.3%, Calmar 0.99 vs 0.97, max DD −14.7% vs −17.8%). Holdout not run. Reading: the stack does what was expected on drawdowns (both shallower) and keeps ETH's return gain; on WBTC the 50% share removes more return than the weekly recentre adds. The yearly-wins failure (1/5) shows the continuous-run gain is concentrated in a few periods rather than spread over years. A lower-risk ETH variant with a higher return, not a both-asset improvement.
 
 ## Deviations
 

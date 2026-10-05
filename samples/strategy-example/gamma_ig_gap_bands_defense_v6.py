@@ -268,6 +268,12 @@ REARM_FULL = False
 # EXP-069 (v6.56): ablation of rule 4 (upper rebuild: close > 1.2 x centre moves the virtual centre up); the centre then stays
 # at the price of the last refill stage, so the lower stop (0.8 x centre) does not trail a rally. False = v6.
 NO_UPPER_REBUILD = False
+# EXP-071 (v6.58): EXP-065's weekly recentre only in the uptrend state (last completed close > EMA100, the state of v6's ETH
+# share rule); below EMA100 no extra recentre. False = v6.
+WEEKLY_RECENTRE_UP = False
+# EXP-072 (v6.59): follow events below EMA100 (last completed close <= EMA100) resize the ladder in place (EXP-055); above it,
+# v6's full rebuild. False = v6.
+RESIZE_BELOW_EMA = False
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -1027,7 +1033,12 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             m = (total / self.cppi_hwm - Decimal(str(CPPI_FLOOR))) / (ONE - Decimal(str(CPPI_FLOOR)))
             target = target * min(ONE, max(ZERO, m))
             self.cppi_min_m = min(self.cppi_min_m, float(min(ONE, max(ZERO, m))))
-        if WEEKLY_RECENTRE and row_data.timestamp.weekday() == 6 and current > FULL_TOLERANCE and target > ZERO:   # EXP-065
+        up = None
+        if WEEKLY_RECENTRE_UP or RESIZE_BELOW_EMA:   # EXP-071 / EXP-072: v6's EMA100 state on the last completed day
+            _, _row = daily_row_for(self.daily_ema, row_data.timestamp)
+            up = _row["close"] > _row["ema"]
+        if (WEEKLY_RECENTRE or (WEEKLY_RECENTRE_UP and up)) and row_data.timestamp.weekday() == 6 \
+                and current > FULL_TOLERANCE and target > ZERO:   # EXP-065 / EXP-071
             self.weekly_recentres += 1
             self.force_rebuild = True
             try:
@@ -1056,6 +1067,10 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             return
         if TRANCHE_ADD and self.positions and current > FULL_TOLERANCE and target > current:   # EXP-061: add a tranche
             self.tranche_add(row_data, target, current, equity)
+            return
+        if RESIZE_BELOW_EMA and up is not None and not up and self.positions and current > FULL_TOLERANCE and target > ZERO and \
+                (abs(target - current) >= FOLLOW_THRESHOLD):   # EXP-072
+            self.resize_work(row_data, target, current)
             return
         if RESIZE_IN_PLACE and self.positions and current > FULL_TOLERANCE and target > ZERO:   # EXP-055
             self.resize_work(row_data, target, current)

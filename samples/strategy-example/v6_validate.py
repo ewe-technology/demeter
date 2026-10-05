@@ -178,7 +178,9 @@ OPT = {"A": Variant("A_v6"),
        "BE": Variant("BE_refill_armed_only", {"REFILL_ARMED_ONLY": True}),   # EXP-067: staged refill only above the EMA
        "BF": Variant("BF_rearm_full", {"REARM_FULL": True}),   # EXP-068: full deployment at the re-arm, no staged refill
        "BG": Variant("BG_no_upper_rebuild", {"NO_UPPER_REBUILD": True}),   # EXP-069: engine without the virtual upper rebuild
-       "BH": Variant("BH_weekly_s50", {"WEEKLY_RECENTRE": True, "SHARE_ABOVE_EMA": Decimal("0.5")})}   # EXP-070: EXP-065 + EXP-046
+       "BH": Variant("BH_weekly_s50", {"WEEKLY_RECENTRE": True, "SHARE_ABOVE_EMA": Decimal("0.5")}),   # EXP-070: EXP-065 + EXP-046
+       "BI": Variant("BI_weekly_recentre_up", {"WEEKLY_RECENTRE_UP": True}),   # EXP-071: weekly recentre only above EMA100
+       "BJ": Variant("BJ_resize_below_ema", {"RESIZE_BELOW_EMA": True})}   # EXP-072: follow by resize below EMA100, v6 above
 MACRO_CSV = "../macro_events_utc.csv"   # EXP-059
 # EXP-052: daily net return per $ of the USDC/USDT LP (samples/make_stable_lp_series.py), for USDC-quoted pools
 STABLE_LP_CSV = "../stable_lp_daily.csv"
@@ -187,7 +189,7 @@ VOL_TARGET_BY_ASSET = {"ETHUSDT": 0.04179, "BTCUSDT": 0.03219}
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL", "EXIT_CONFIRM", "F_WEEKLY", "F_FLOOR", "STABLE_LP", "VOL_TARGET", "ER_GATE", "RESIZE_IN_PLACE", "EXIT_CHECK_HOURLY", "SWAPLESS_EXIT", "RESIZE_NEAR_CENTRE", "MACRO_EVENTS", "MACRO_RESTORE", "TRANCHE_ADD", "FOLLOW_ASYM", "ACCOUNT_TRANCHES", "CPPI_FLOOR", "WEEKLY_RECENTRE", "NO_LOWER_STOP", "REFILL_ARMED_ONLY", "REARM_FULL", "NO_UPPER_REBUILD"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL", "EXIT_CONFIRM", "F_WEEKLY", "F_FLOOR", "STABLE_LP", "VOL_TARGET", "ER_GATE", "RESIZE_IN_PLACE", "EXIT_CHECK_HOURLY", "SWAPLESS_EXIT", "RESIZE_NEAR_CENTRE", "MACRO_EVENTS", "MACRO_RESTORE", "TRANCHE_ADD", "FOLLOW_ASYM", "ACCOUNT_TRANCHES", "CPPI_FLOOR", "WEEKLY_RECENTRE", "NO_LOWER_STOP", "REFILL_ARMED_ONLY", "REARM_FULL", "NO_UPPER_REBUILD", "WEEKLY_RECENTRE_UP", "RESIZE_BELOW_EMA"]}
 
 
 def sens_grid():
