@@ -147,6 +147,7 @@ class Variant:
 
 
 # experiment candidates for "opt:A,<key>,..." runs; A is always v6 itself. Add one entry per EXP (see experiments/).
+HI_SVR = {"INTRADAY_STOP": True, "REFILL_VOL_CONFIRM": True, "SWAP_ROUTE": "pool", "EXTRA": "pool"}   # EXP-124's WBTC half (intraday stop + volume refill + routing), reused by EXP-129..132
 OPT = {"A": Variant("A_v6"),
        "B": Variant("B_spot_sleeve", {"SPOT_SLEEVE": Decimal("0.5")}),   # EXP-001
        "C": Variant("C_sleeve_stop", {"SPOT_SLEEVE": Decimal("0.5"), "SLEEVE_STOP": 0.80}),   # EXP-002
@@ -282,7 +283,12 @@ OPT = {"A": Variant("A_v6"),
                                                              "lo": {"REFILL_NO_NEW_LOW": True}}}),   # EXP-125
        "DO": Variant("DO_nolow_macro_route", {"REFILL_NO_NEW_LOW": True, "MACRO_EVENTS": "csv", "MACRO_RESTORE": True, "SWAP_ROUTE": "pool"}),   # EXP-126
        "DP": Variant("DP_tier_svroute_nolowupday", {"TIER": {"hi": {"INTRADAY_STOP": True, "REFILL_VOL_CONFIRM": True, "SWAP_ROUTE": "pool", "EXTRA": "pool"},
-                                                              "lo": {"REFILL_NO_NEW_LOW": True, "UP_DAY_REFILL": True}}})}   # EXP-127
+                                                              "lo": {"REFILL_NO_NEW_LOW": True, "UP_DAY_REFILL": True}}}),   # EXP-127
+       # EXP-129..132: WBTC half = EXP-124's (stop + volume + routing); ETH half = v6.75 + one ETH dev winner, new on H5
+       "DQ": Variant("DQ_tier_svr_nolowbreadth", {"TIER": {"hi": HI_SVR, "lo": {"REFILL_NO_NEW_LOW": True, "BREADTH_CAP": True, "EXTRA": "pool"}}}),   # EXP-129
+       "DR": Variant("DR_tier_svr_nolowxasset", {"TIER": {"hi": HI_SVR, "lo": {"REFILL_NO_NEW_LOW": True, "REFILL_GATE": "xasset", "EXTRA": "pool"}}}),   # EXP-130
+       "DS": Variant("DS_tier_svr_nolowfundcap", {"TIER": {"hi": HI_SVR, "lo": {"REFILL_NO_NEW_LOW": True, "FUND_CAP": True, "EXTRA": "pool"}}}),   # EXP-131
+       "DT": Variant("DT_tier_svr_nolowstrong", {"TIER": {"hi": HI_SVR, "lo": {"REFILL_NO_NEW_LOW": True, "STRONG_CLOSE_REFILL": True}}})}   # EXP-132
 # EXP-082..: daily non-price inputs (samples/fetch_deribit_dvol.py, fetch_binance_funding.py, fetch_binance_daily.py)
 DVOL_CSV = "../deribit_dvol_daily.csv"
 FUND_LONG_CSV = {"ETHUSDT": "../binance_funding_ETHUSDT_long.csv", "BTCUSDT": "../binance_funding_BTCUSDT_long.csv"}
