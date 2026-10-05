@@ -122,9 +122,9 @@ EXP-119,2026-10-05,fee tier: no lower stop + account tranches on 0.3% and v6.75 
 EXP-120,2026-10-05,fee tier: intraday stop + volume refill on 0.3% and v6.75 + macro restore on 0.05% (v6.107),QUAN-1005,holdout-pass,0.58,4/5,2/2 windows (time-split),8.15,0.983,0.156,-0.244,22402c1,ecb0b0e,EXP-120-tier-stopvol-nolowmacro.md,improvement
 EXP-121,2026-10-05,fee tier: intraday stop + volume refill + tranches on 0.3% and v6.75 on 0.05% (v6.108),QUAN-1006,holdout-pass,0.47,4/5,2/2 windows (time-split),7.23,0.966,0.154,-0.243,22402c1,ecb0b0e,EXP-121-tier-stopvoltranche-nolow.md,improvement
 EXP-122,2026-10-05,v6.75 plus macro pause with exact restore on every pool (v6.109),QUAN-1007,holdout-pass,0.58,4/5,2/2 windows (time-split),4.88,0.983,0.156,-0.244,22402c1,ecb0b0e,EXP-122-nolow-macro.md,improvement
-EXP-123,2026-10-06,v6.75 plus cheapest-tier swap routing on every pool (v6.110),,pre-registered,,,,,,,,,,EXP-123-nolow-route.md,improvement
-EXP-124,2026-10-06,fee tier: stop + volume + routing on 0.3% and v6.75 on 0.05% (v6.111),,pre-registered,,,,,,,,,,EXP-124-tier-svroute-nolow.md,improvement
-EXP-125,2026-10-06,fee tier: no lower stop + routing on 0.3% and v6.75 on 0.05% (v6.112),,pre-registered,,,,,,,,,,EXP-125-tier-nostoproute-nolow.md,improvement
-EXP-126,2026-10-06,v6.75 + macro restore + cheapest-tier routing on every pool (v6.113),,pre-registered,,,,,,,,,,EXP-126-nolow-macro-route.md,improvement
-EXP-127,2026-10-06,fee tier: stop + volume + routing on 0.3% and v6.75 + up-day refill on 0.05% (v6.114),,pre-registered,,,,,,,,,,EXP-127-tier-svroute-nolowupday.md,improvement
+EXP-123,2026-10-06,v6.75 plus cheapest-tier swap routing on every pool (v6.110),QUAN-1008,holdout-pass,0.47,4/5,2/2 windows (time-split),5.02,0.966,0.154,-0.243,42d4107,,EXP-123-nolow-route.md,improvement
+EXP-124,2026-10-06,fee tier: stop + volume + routing on 0.3% and v6.75 on 0.05% (v6.111),QUAN-1009,holdout-pass,0.47,4/5,2/2 windows (time-split),8.14,0.966,0.154,-0.243,42d4107,,EXP-124-tier-svroute-nolow.md,improvement
+EXP-125,2026-10-06,fee tier: no lower stop + routing on 0.3% and v6.75 on 0.05% (v6.112),QUAN-1010,holdout-pass,0.47,4/5,2/2 windows (time-split),5.44,0.966,0.154,-0.243,42d4107,,EXP-125-tier-nostoproute-nolow.md,improvement
+EXP-126,2026-10-06,v6.75 + macro restore + cheapest-tier routing on every pool (v6.113),QUAN-1011,holdout-pass,0.58,4/5,2/2 windows (time-split),5.20,0.983,0.156,-0.244,42d4107,,EXP-126-nolow-macro-route.md,improvement
+EXP-127,2026-10-06,fee tier: stop + volume + routing on 0.3% and v6.75 + up-day refill on 0.05% (v6.114),QUAN-1012,dropped-at-dev,-2.76,1/5,,,0.954,0.153,-0.232,42d4107,,EXP-127-tier-svroute-nolowupday.md,improvement
 EXP-128,2026-10-06,v6.104 (0.3% tier ladder + 0.05% swap route) judged standalone on Base and the forward window (v6.104r),QUAN-1013,dev-done,,5/5 positive (EXP-117),H-a 1/1 (H-b pending),,0.929,0.150,-0.189,fda7278,5393511,EXP-128-lp03-swap005-standalone.md,standalone

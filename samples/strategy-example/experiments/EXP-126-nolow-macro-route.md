@@ -1,8 +1,8 @@
 # EXP-126: v6.75 + macro restore + cheapest-tier routing (one rule for both pools) (v6.113)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-1011
+- Status: holdout-pass
+- Pre-registration commit: 42d4107 · Result commit: ______
 - Scope: /goal round 2 (Dino, 2026-10-05: "再繼續找30個"): beat v6 at the improvement level on ETH and WBTC, pure LP, time-split
   out-of-time holdout; idle-capital yield and swap routing excluded (rulings / assumption of 2026-10-05).
 
@@ -32,7 +32,35 @@ Pre-registered together with EXP-123..127 (same commit), run with `A` (v6) in `A
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ADLDMDNDODP`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +7.3% | -0.3 |
+| 2023 | +32.2% | +39.3% | +7.1 |
+| 2024 | +36.4% | +37.1% | +0.7 |
+| 2025 | +16.3% | +16.9% | +0.6 |
+| 2026-01..09-17 | +18.7% | +19.2% | +0.5 |
+
+Wins 4/5, median +0.58 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +98.3% | 15.6% | -24.4% | 0.79 | 0.64 | $87.9k | $0.34k | 276 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +94.4% | 18.7% | -16.5% | 1.08 | 1.13 | $60.1k | $-5.20k | 231 |
+
+Holdout, time-split out-of-time (`BINANCE_WARM=1`, run once):
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| H5 ETH 2021-05-06..12-31 v6 | +4.5% | 7.0% | -30.7% | 0.37 | 0.23 | $21.0k | $3.70k | 37 |
+| H5 ETH 2021-05-06..12-31 this | +14.0% | 22.1% | -26.9% | 0.73 | 0.82 | $25.1k | $3.34k | 55 |
+| H4 WBTC 2022-01-01..10-31 v6 | +2.4% | 2.9% | -12.5% | 0.24 | 0.23 | $14.3k | $0.04k | 17 |
+| H4 WBTC 2022-01-01..10-31 this | +3.3% | 4.0% | -11.8% | 0.29 | 0.34 | $13.9k | $-0.67k | 40 |
+
+Verdict: **holdout-pass (improvement level), one rule for both pools** — dev: ETH CAGR 15.6% (v6.75 + macro restore), WBTC 18.7% vs 17.3%, Calmar 1.13. Holdout: H5 ETH 2021 +14.0% vs +4.5%; **H4 WBTC 2022 +3.3% vs +2.4%** (EXP-122 without routing +2.7%). Fourth clean pass. Routing makes each of EXP-122's extra rebuilds cheaper in swap fees, but it still rebuilds 2x (WBTC dev 231 vs 106, H4 40 vs 17) and gas is not charged: the gas doubt about EXP-122 remains.
 
 ## Deviations
 
