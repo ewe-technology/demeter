@@ -59,6 +59,8 @@ notes = {"credible": "Holdout Calmar within about 0.05 of v6, max DD shallower, 
 for r in rows: r["note"] = notes.get(r["reading"], "Reference.")
 json.dump({"title": "Standalone strategies", "updated": "2026-10-02", "rows": rows}, open(os.path.join(D, "s_standalone.json"), "w"))
 findings = [
+ "Round 3 of 2026-10-05 (EXP-092..122, goal: 10 improvement passes): 11 passes. 2 use one rule for both pools (EXP-088 v6.75; EXP-122 v6.75 + macro restore, 2x rebuilds), both ETH gains with WBTC within noise. 9 are fee-tier rules (v6.75 on 0.05% pools + intraday stop / volume refill / no lower stop / tranches on 0.3% pools; best H4 WBTC 2022 +9.2% vs +2.4%); Dino's ruling on fee-tier rules is open. About four independent findings; next test: the forward window after 2026-09-17.",
+ "Refill speed splits the pools: rules that change it help the 0.05% ETH pool or the 0.3% WBTC pool, never both. H4 (WBTC 2022 bear) rejected three dev passes; four WBTC rules survived it. Routing WBTC swaps through the 0.05% tier (EXP-117) raised WBTC to 18.2% at dev and is the next one-rule candidate.",
  "Round 2 of 2026-10-05 (EXP-082..091): v6.75 (EXP-088, a refill day counts only if its intraday low stays above the low since the exit) passes the improvement level on dev and on the time-split holdout: H5 ETH 2021 CAGR 21.4% vs 7.0% (Calmar 0.79 vs 0.23), H4 WBTC 2022 3.4% vs 2.9%. The gain is ETH's; on WBTC the rule barely binds (same rebuild count). First pass in 40 experiments: a candidate until the forward window confirms it.",
  "Round 2's other nine (DVOL, funding, cross-asset, pool volume, TWAP, realised-vs-implied vol, breadth) all dropped at dev: outside information moves ETH and WBTC in opposite directions, like recentring in round 1.",
  "Goal of 2026-10-05 (EXP-052..081, 30 experiments): no improvement-level pass on the time-split holdout (H5 ETH 2021, H4 WBTC 2022). Four dev passes (v6.47, v6.50, v6.53, v6.60) each won one window and lost the other; v6.39 (idle reserve in a stablecoin LP) does not count.",
@@ -69,5 +71,5 @@ findings = [
  "Faster regime lines (Hull, ROC, Supertrend) lose. Slow lines (SMA 200, Ichimoku, Aroon, ROC) beat v6 on WBTC at dev but lose the 2022 BTC bear window (-5.8% to -14.3% vs v6 +2.4%): a bull-market fit.",
  "The seven are one family (same EMA signal, same pools), not independent evidence. Thresholds were set after seeing dev results. The clean test is the forward window 2026-09-18..12-31 (not yet available).",
 ]
-json.dump({"title": "What the series found", "updated": "2026-10-05", "items": findings, "doc": "samples/strategy-example/experiments/FINDINGS-2026-10-05-round2.md"}, open(os.path.join(D, "s_findings.json"), "w"))
+json.dump({"title": "What the series found", "updated": "2026-10-05", "items": findings, "doc": "samples/strategy-example/experiments/FINDINGS-2026-10-05-round3.md"}, open(os.path.join(D, "s_findings.json"), "w"))
 print(len(rows), [ (r["exp"], len(r["windows"])) for r in rows])
