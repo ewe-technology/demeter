@@ -4,7 +4,7 @@ Standalone level (README *Success levels*): a re-judge of EXP-117 on its own fre
 
 - Jira: QUAN-1013
 - Status: dev-done (H-a pass, H-b pending)
-- Pre-registration commit: fda7278 · Result commit (H-a): 93058b1
+- Pre-registration commit: fda7278 · Result commit (H-a): 5393511
 - Scope: Dino, 2026-10-06: "開" — open v6.104r, a standalone re-judge of EXP-117 validated on forward data. Number EXP-128 reserved with
   the goal3 session.
 

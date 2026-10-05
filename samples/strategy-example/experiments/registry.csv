@@ -127,4 +127,4 @@ EXP-124,2026-10-06,fee tier: stop + volume + routing on 0.3% and v6.75 on 0.05% 
 EXP-125,2026-10-06,fee tier: no lower stop + routing on 0.3% and v6.75 on 0.05% (v6.112),,pre-registered,,,,,,,,,,EXP-125-tier-nostoproute-nolow.md,improvement
 EXP-126,2026-10-06,v6.75 + macro restore + cheapest-tier routing on every pool (v6.113),,pre-registered,,,,,,,,,,EXP-126-nolow-macro-route.md,improvement
 EXP-127,2026-10-06,fee tier: stop + volume + routing on 0.3% and v6.75 + up-day refill on 0.05% (v6.114),,pre-registered,,,,,,,,,,EXP-127-tier-svroute-nolowupday.md,improvement
-EXP-128,2026-10-06,v6.104 (0.3% tier ladder + 0.05% swap route) judged standalone on Base and the forward window (v6.104r),QUAN-1013,dev-done,,5/5 positive (EXP-117),H-a 1/1 (H-b pending),,0.929,0.150,-0.189,fda7278,93058b1,EXP-128-lp03-swap005-standalone.md,standalone
+EXP-128,2026-10-06,v6.104 (0.3% tier ladder + 0.05% swap route) judged standalone on Base and the forward window (v6.104r),QUAN-1013,dev-done,,5/5 positive (EXP-117),H-a 1/1 (H-b pending),,0.929,0.150,-0.189,fda7278,5393511,EXP-128-lp03-swap005-standalone.md,standalone
