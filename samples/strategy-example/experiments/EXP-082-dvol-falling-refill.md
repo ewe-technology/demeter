@@ -1,8 +1,8 @@
 # EXP-082: refill stages only while implied volatility is falling (v6.69)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-966
+- Status: dropped-at-dev
+- Pre-registration commit: 6a6721b · Result commit: ______
 - Scope: /goal round 2 (Dino, 2026-10-05: "再繼續找30個"): beat v6 at the improvement level on ETH and WBTC, pure LP, time-split
   out-of-time holdout; idle-capital yield and swap routing excluded (rulings / assumption of 2026-10-05).
 
@@ -32,7 +32,26 @@ Pre-registered together with EXP-082..086 (same commit), run in one invocation p
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ABUBVBWBXBY`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +7.2% | -0.4 |
+| 2023 | +32.2% | +28.7% | -3.5 |
+| 2024 | +36.4% | +27.9% | -8.5 |
+| 2025 | +16.3% | +18.6% | +2.3 |
+| 2026-01..09-17 | +18.7% | +18.6% | -0.1 |
+
+Wins 1/5, median -0.37 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +84.7% | 13.9% | -22.0% | 0.73 | 0.63 | $84.2k | $0.32k | 142 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +53.5% | 11.7% | -17.5% | 0.74 | 0.67 | $47.1k | $0.54k | 99 |
+
+Verdict: **dropped-at-dev** — ETH CAGR 13.9% vs 14.0% (Calmar 0.63, max DD −22.0%), wins 1/5; WBTC CAGR 11.7% vs 17.3%, Calmar 0.67. Holdout not run. Reading: waiting for falling implied vol delays the refills on the rebounds that carry v6's edge; on WBTC the delay costs a third of the return. DVOL keeps rising into many good rebounds (vol of a rally is still vol), so 'falling DVOL' is not a dead-cat filter.
 
 ## Deviations
 

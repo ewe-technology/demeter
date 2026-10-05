@@ -1,8 +1,8 @@
 # EXP-083: negative funding waives the 3-day hold of the first refill stage (v6.70)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-967
+- Status: dropped-at-dev
+- Pre-registration commit: 6a6721b · Result commit: ______
 - Scope: /goal round 2 (Dino, 2026-10-05: "再繼續找30個"): beat v6 at the improvement level on ETH and WBTC, pure LP, time-split
   out-of-time holdout; idle-capital yield and swap routing excluded (rulings / assumption of 2026-10-05).
 
@@ -32,7 +32,26 @@ Pre-registered together with EXP-082..086 (same commit), run in one invocation p
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `ABUBVBWBXBY`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | -1.3% | -8.9 |
+| 2023 | +32.2% | +31.9% | -0.3 |
+| 2024 | +36.4% | +36.1% | -0.2 |
+| 2025 | +16.3% | +16.4% | +0.2 |
+| 2026-01..09-17 | +18.7% | +19.9% | +1.2 |
+
+Wins 2/5, median -0.25 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +68.3% | 11.7% | -22.4% | 0.63 | 0.52 | $80.9k | $0.24k | 149 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +86.0% | 17.4% | -17.8% | 1.01 | 0.98 | $61.9k | $0.71k | 107 |
+
+Verdict: **dropped-at-dev** — ETH CAGR 11.7% vs 14.0%, Calmar 0.52, wins 2/5; WBTC ≈ v6 (17.4%, Calmar 0.98). Holdout not run. Reading: firing stage 1 on the first qualifying close when funding is negative re-enters ETH earlier into rebounds that fail more often than the 3-day hold lets through; negative funding is not a squeeze signal at daily resolution for this engine.
 
 ## Deviations
 

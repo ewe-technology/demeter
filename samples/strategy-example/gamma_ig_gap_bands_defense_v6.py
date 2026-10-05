@@ -300,6 +300,17 @@ REFILL_GATE: str | None = None
 FUND_REFILL: str | None = None
 FUND_CAP = False
 FUND_HOT = 0.0003
+# EXP-087..091 (v6.74..v6.78): REFILL_VOL_CONFIRM: a refill stage fires only if the pool's 3-day swap volume (EXTRA "pvol", daily)
+# is >= its 30-day median. REFILL_NO_NEW_LOW: a day counts for a refill stage only if its intraday low (minute data) stays above
+# the account's low since the exit. TWAP_ENGINE: the engine (EMAs, stops, refills, share rule) reads the daily time-weighted
+# mean price instead of the last price of the day. VRP_PULL: while the 7-day realised vol of daily log returns (annualised, %)
+# is above DVOL, F = max(0, F - 0.25) (one refill stage less). BREADTH_CAP: F <= the mean of F and the other asset's F (EXTRA
+# "other_F", v6's engine on the other asset's Binance closes). False = v6.
+REFILL_VOL_CONFIRM = False
+REFILL_NO_NEW_LOW = False
+TWAP_ENGINE = False
+VRP_PULL = False
+BREADTH_CAP = False
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -349,7 +360,8 @@ class VirtualAccount:
             if ot == ot:   # EXP-086: track the other asset's low since the exit
                 self.olow = ot if self.olow is None else min(self.olow, ot)
             self.low = min(self.low, close)
-            self.confirm = self.confirm + 1 if close >= self.low * REFILL_STAGES[0][1] else 0
+            ok_day = not (REFILL_NO_NEW_LOW and (ctx or {}).get("dlow", float("inf")) <= self.low)   # EXP-088
+            self.confirm = self.confirm + 1 if (close >= self.low * REFILL_STAGES[0][1] and ok_day) else 0
             # at most one stage per day (spec author's clarification); a pullback keeps the stage,
             # only an exit resets it
             nxt = self.stage + 1
@@ -361,6 +373,10 @@ class VirtualAccount:
                     and ctx.get("fund7", 0.0) < 0:   # EXP-083 / 084: shorts crowded -> no 3-day hold
                 advance = True
             if FUND_REFILL == "accel_brake" and nxt >= 2 and ctx.get("fund3", 0.0) > FUND_HOT:   # EXP-084
+                advance = False
+            if advance and REFILL_VOL_CONFIRM and ctx.get("pvol_ok", 1.0) == 0.0:   # EXP-087
+                advance = False
+            if advance and REFILL_NO_NEW_LOW and ctx.get("dlow", float("inf")) <= self.low:   # EXP-088
                 advance = False
             if advance and REFILL_GATE == "dvol_turn":   # EXP-082: implied vol must be falling
                 d3, d3p = ctx.get("dvol3", float("nan")), ctx.get("dvol3_prev", float("nan"))
@@ -468,6 +484,9 @@ def daily_ema_frame(minute_price: pd.Series) -> pd.DataFrame:
     engine's target deployment F, from a minute price series that should start EMA_WARMUP_DAYS before
     the backtest window so the EMAs and the virtual accounts are settled on day one."""
     close = minute_price.astype(float).resample("1D").last().dropna()
+    if TWAP_ENGINE:   # EXP-089: daily time-weighted mean of the minute prices
+        close = minute_price.astype(float).resample("1D").mean().reindex(close.index)
+    day_low = minute_price.astype(float).resample("1D").min().reindex(close.index)   # EXP-088
     emas = {n: close.ewm(span=n, adjust=False).mean() for n in EMA_SPANS}
     comps = regime_components()
     lines = {k: emas if k == "ema" else regime_lines(minute_price.astype(float), close, k) for k in comps}
@@ -483,11 +502,15 @@ def daily_ema_frame(minute_price: pd.Series) -> pd.DataFrame:
         if "dvol" in ex:
             ex["dvol3"] = ex["dvol"].rolling(3, min_periods=1).mean()
             ex["dvol3_prev"] = ex["dvol3"].shift(3)
+        if "pvol" in ex:   # EXP-087: 3-day volume vs its 30-day median (unknown -> ok)
+            v3, med = ex["pvol"].rolling(3, min_periods=3).sum(), (ex["pvol"].rolling(3, min_periods=3).sum()).rolling(30, min_periods=30).median()
+            ex["pvol_ok"] = (~(v3 < med)).astype(float)
         if "fund" in ex:
             ex["fund3"] = ex["fund"].rolling(3, min_periods=1).mean()
             ex["fund7"] = ex["fund"].rolling(7, min_periods=1).mean()
     for day, c in close.items():
-        ctx = {k: float(v) for k, v in ex.loc[day].items()} if ex is not None else None
+        ctx = {k: float(v) for k, v in ex.loc[day].items()} if ex is not None else {}
+        ctx["dlow"] = float(day_low[day]) if day_low[day] == day_low[day] else float("inf")
         for k, a in accounts:
             a.step(float(c), float(lines[k][a.span][day]), bool(trend_ok[day]) if k == "ema" else True, ctx)
         deps = [a.deployed for _, a in accounts]
@@ -504,6 +527,13 @@ def daily_ema_frame(minute_price: pd.Series) -> pd.DataFrame:
     if F_WEEKLY:   # EXP-045: the Sunday value, held until the next Sunday
         fs = pd.Series(fractions, index=close.index)
         fractions = fs.where(fs.index.dayofweek == 6).ffill().bfill().tolist()
+    if VRP_PULL and ex is not None and "dvol" in ex:   # EXP-090
+        rv7 = np.log(close).diff().rolling(7, min_periods=7).std() * np.sqrt(365) * 100
+        hot = (rv7 > ex["dvol"]).fillna(False).tolist()
+        fractions = [max(0.0, f - 0.25) if h else f for f, h in zip(fractions, hot)]
+    if BREADTH_CAP and ex is not None and "other_F" in ex:   # EXP-091
+        of = ex["other_F"].tolist()
+        fractions = [min(f, (f + o) / 2) if o == o else f for f, o in zip(fractions, of)]
     if FUND_CAP and ex is not None and "fund3" in ex:   # EXP-085
         hot = (ex["fund3"] > FUND_HOT).fillna(False).tolist()
         fractions = [min(f, 0.5) if h else f for f, h in zip(fractions, hot)]
