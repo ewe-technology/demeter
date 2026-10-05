@@ -1,8 +1,8 @@
 # EXP-057: range-exit rebuild from inventory, without the swap (base + limit) (v6.44)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-939
+- Status: dropped-at-dev
+- Pre-registration commit: 29b47c1 · Result commit: ______
 - Scope: /goal 2026-10-05 "beat v6 at the improvement level, pure LP, time-split out-of-time holdout" (Dino); idle-capital
   yield excluded (ruling 2026-10-05).
 
@@ -43,7 +43,26 @@ Pre-registered together with EXP-055 and EXP-056 and run in the same invocations
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `AARASAT`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | -0.0% | -7.6 |
+| 2023 | +32.2% | +36.0% | +3.8 |
+| 2024 | +36.4% | +19.9% | -16.5 |
+| 2025 | +16.3% | +6.6% | -9.7 |
+| 2026-01..09-17 | +18.7% | +15.0% | -3.7 |
+
+Wins 1/5, median -7.65 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +59.9% | 10.5% | -21.4% | 0.66 | 0.49 | $82.4k | $0.19k | 215 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +108.0% | 20.8% | -14.9% | 1.54 | 1.40 | $53.1k | $0.70k | 133 |
+
+Verdict: **dropped-at-dev** — ETH CAGR 10.5% vs 14.0%, Calmar 0.49 vs 0.61, wins 1/5 (2024 −16.5 pts, 2025 −9.7); WBTC improves strongly: CAGR 20.8% vs 17.3%, Calmar 1.40 vs 0.97, max DD −14.9% vs −17.8%. Holdout not run. Reading: the one-sided ladder after an exit is out of range again as soon as the trend continues (ETH 215 rebuilds vs 147), so in ETH's strong 2024-25 trends it sits idle in the wrong token; on WBTC the gain comes with lower fee income ($53.1k vs $61.7k): it is the extra BTC held after downward exits (asks above the price instead of a sale) during the 2023-25 BTC bull, i.e. beta, not LP income. The two assets disagree, as in most earlier batches: an asset-specific effect, not a general improvement.
 
 ## Deviations
 

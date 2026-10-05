@@ -1,8 +1,8 @@
 # EXP-056: range-exit check every hour instead of once a day (v6.43)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-938
+- Status: dropped-at-dev
+- Pre-registration commit: 29b47c1 · Result commit: ______
 - Scope: /goal 2026-10-05 "beat v6 at the improvement level, pure LP, time-split out-of-time holdout" (Dino); idle-capital
   yield excluded (ruling 2026-10-05).
 
@@ -38,7 +38,26 @@ Pre-registered together with EXP-055 (and any other file of the same commit) and
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `AARASAT`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +0.4% | -7.2 |
+| 2023 | +32.2% | +33.0% | +0.8 |
+| 2024 | +36.4% | +23.5% | -12.8 |
+| 2025 | +16.3% | +16.2% | -0.0 |
+| 2026-01..09-17 | +18.7% | +18.8% | +0.1 |
+
+Wins 2/5, median -0.05 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +67.5% | 11.6% | -23.3% | 0.62 | 0.50 | $75.5k | $0.22k | 155 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +72.6% | 15.1% | -19.9% | 0.85 | 0.76 | $50.7k | $0.72k | 110 |
+
+Verdict: **dropped-at-dev** — ETH CAGR 11.6% vs 14.0%, Calmar 0.50 vs 0.61, max DD −23.3% vs −22.8%, wins 2/5 (2024 −12.8 pts); WBTC CAGR 15.1% vs 17.3%, Calmar 0.76 vs 0.97. Holdout not run. Reading: rebuilding within the hour of an exit catches intraday spikes that v6's daily check skips (ETH 155 rebuilds vs 147) and fee income falls (.5k vs .5k ETH, .7k vs .7k WBTC): the daily check filters noise. With EXP-044 (two-day confirmation, neutral) the exit cadence is closed: v6's once-a-day check is near the best of the three.
 
 ## Deviations
 

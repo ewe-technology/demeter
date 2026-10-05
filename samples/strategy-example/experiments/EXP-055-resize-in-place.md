@@ -1,8 +1,8 @@
 # EXP-055: follow F by resizing the ladder in place instead of rebuilding it (v6.42)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-937
+- Status: dropped-at-dev
+- Pre-registration commit: 29b47c1 · Result commit: ______
 - Scope: /goal 2026-10-05 "beat v6 at the improvement level, pure LP, time-split out-of-time holdout" (Dino); idle-capital
   yield excluded (ruling 2026-10-05).
 
@@ -47,7 +47,26 @@ Pre-registered together with EXP-056 (and any other file of the same commit) and
 
 ## Result
 
-(pending)
+Development (`A` and the variant in each invocation, tag `AARASAT`):
+
+| test | v6 | this | gain |
+|---|---|---|---|
+| 2022 | +7.6% | +1.2% | -6.4 |
+| 2023 | +32.2% | +33.1% | +0.9 |
+| 2024 | +36.4% | +30.8% | -5.5 |
+| 2025 | +16.3% | +10.3% | -5.9 |
+| 2026-01..09-17 | +18.7% | +22.6% | +3.9 |
+
+Wins 2/5, median -5.55 pts.
+
+| continuous | total | CAGR | max DD | Sharpe | Calmar | LP fees | impact | rebuilds |
+|---|---|---|---|---|---|---|---|---|
+| ETH v6 | +85.4% | 14.0% | -22.8% | 0.73 | 0.61 | $86.5k | $0.29k | 147 |
+| ETH this | +61.9% | 10.8% | -21.0% | 0.62 | 0.51 | $81.6k | $0.21k | 152 |
+| WBTC v6 | +85.6% | 17.3% | -17.8% | 1.01 | 0.97 | $61.7k | $0.72k | 106 |
+| WBTC this | +79.5% | 16.3% | -13.3% | 1.01 | 1.22 | $62.9k | $0.57k | 109 |
+
+Verdict: **dropped-at-dev** — ETH CAGR 10.8% vs 14.0%, Calmar 0.51 vs 0.61 (max DD −21.0% vs −22.8%), yearly wins 2/5; WBTC CAGR 16.3% vs 17.3% with Calmar 1.22 vs 0.97 and max DD −13.3% vs −17.8%. Holdout not run. Reading: keeping the old ticks lowers risk on both assets (shallower drawdown, a large WBTC Calmar gain) but ETH fee income falls (.6k vs .5k) and ETH loses in 2022, 2024 and 2025. The mechanism of the fee loss was not isolated; the observation is that v6's recentre on F changes earns more than it costs on ETH.
 
 ## Deviations
 
