@@ -232,7 +232,18 @@ OPT = {"A": Variant("A_v6"),
        "DB": Variant("DB_tier_tranchestop_nolow", {"TIER": {"hi": {"ACCOUNT_TRANCHES": True, "INTRADAY_STOP": True},
                                                              "lo": {"REFILL_NO_NEW_LOW": True}}}),   # EXP-115
        "DC": Variant("DC_tier_stop_nolow70", {"TIER": {"hi": {"INTRADAY_STOP": True},
-                                                        "lo": {"REFILL_NO_NEW_LOW": True, "SHARE_BELOW_EMA": Decimal("0.7")}}})}   # EXP-116
+                                                        "lo": {"REFILL_NO_NEW_LOW": True, "SHARE_BELOW_EMA": Decimal("0.7")}}}),   # EXP-116
+       # EXP-118..122 (DD..DF are left to the other session's EXP-117)
+       "DG": Variant("DG_tier_tranchevol_nolow", {"TIER": {"hi": {"ACCOUNT_TRANCHES": True, "REFILL_VOL_CONFIRM": True, "EXTRA": "pool"},
+                                                            "lo": {"REFILL_NO_NEW_LOW": True}}}),   # EXP-118
+       "DH": Variant("DH_tier_nostoptranche_nolow", {"TIER": {"hi": {"NO_LOWER_STOP": True, "ACCOUNT_TRANCHES": True},
+                                                               "lo": {"REFILL_NO_NEW_LOW": True}}}),   # EXP-119
+       "DI": Variant("DI_tier_stopvol_nolowmacro", {"TIER": {"hi": {"INTRADAY_STOP": True, "REFILL_VOL_CONFIRM": True, "EXTRA": "pool"},
+                                                              "lo": {"REFILL_NO_NEW_LOW": True, "MACRO_EVENTS": "csv", "MACRO_RESTORE": True}}}),   # EXP-120
+       "DJ": Variant("DJ_tier_stopvoltranche_nolow", {"TIER": {"hi": {"INTRADAY_STOP": True, "REFILL_VOL_CONFIRM": True, "ACCOUNT_TRANCHES": True,
+                                                                       "EXTRA": "pool"},
+                                                                "lo": {"REFILL_NO_NEW_LOW": True}}}),   # EXP-121
+       "DK": Variant("DK_nolow_macro", {"REFILL_NO_NEW_LOW": True, "MACRO_EVENTS": "csv", "MACRO_RESTORE": True})}   # EXP-122: v6.75 + v6.47
 # EXP-082..: daily non-price inputs (samples/fetch_deribit_dvol.py, fetch_binance_funding.py, fetch_binance_daily.py)
 DVOL_CSV = "../deribit_dvol_daily.csv"
 FUND_LONG_CSV = {"ETHUSDT": "../binance_funding_ETHUSDT_long.csv", "BTCUSDT": "../binance_funding_BTCUSDT_long.csv"}
