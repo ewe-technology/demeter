@@ -1,7 +1,7 @@
 """
 ETH-cbBTC 防禦邏輯 規格書（WB＋ETH強勢25%）的回測入口。
 
-從 gamma_ig_gap_bands_defense_v6.py 複製後改寫，沿用資料載入、平行執行、報表框架與四個 EMA 虛擬帳戶
+從 gamma_maker_defense_ethusdc_v1.py 複製後改寫，沿用資料載入、平行執行、報表框架與四個 EMA 虛擬帳戶
 的階段復歸邏輯；訊號價格、資產配置、LP 形狀與獎勵處理改為新規格書版本。與 v6 的差異：
 
 * 訊號價格 G = sqrt(ETH/USD x BTC/USD)，EMA 退避多一條「EMA 低於 20 日前」的斜率條件
@@ -41,6 +41,12 @@ from rm_types import RescaleFrequency, TestParams, GlobalParams, RangeStrategy
 USDC = TokenInfo(name="usdc", decimal=6)
 MODE_SIGNAL, MODE_PLAIN = "signal", "plain"
 
+# price source for the signal's daily closes. POOL_SIGNAL = the pools' own minute prices (last tick of each UTC day),
+# BINANCE_SIGNAL = the spec sheet's Binance daily closes: G from BTCUSDT x ETHUSDT, R from ETHBTC (files hold date, close)
+POOL_SIGNAL, BINANCE_SIGNAL = "pool", "binance"
+SIGNAL_SOURCES = [BINANCE_SIGNAL]   # add POOL_SIGNAL to also run it; every listed source shares the minute data, one result folder each
+BINANCE_DIR = Path(__file__).parent
+
 # spec sheet 2.3: four virtual accounts on G, each with its own EMA; F = mean of their deployed fractions
 EMA_SPANS = (90, 100, 110, 120)
 EMA_SLOPE_DAYS = 20                                     # exit also needs EMA_n < EMA_n 20 days ago
@@ -60,7 +66,15 @@ RANGE_STRONG, RANGE_WEAK = Decimal("0.10"), Decimal("0.20")   # half width: 合�
 FOLLOW_THRESHOLD = Decimal("0.125")   # any of LP / ETH / BTC / USDC this far from target -> rebuild
 LP_SHORT_TOL = Decimal("0.01")        # target LP 100% but LP short by more than this
 USDC_DUST = Decimal("0.001")          # target USDC 0 but holding more than this
-SWAP_COST = Decimal("0.001")          # on the minimum converted volume; slippage cap 0.5% is not a cost
+# Cost of each rebalance swap, charged on the minimum converted volume. Default = spec sheet 2.6: 0.1%, with the 0.5%
+# slippage cap not counted as a cost. For the pool fee 0.05% plus depth slippage instead (about what a live swap pays;
+# the spec's 0.1% may already contain slippage, so 0.1% together with slippage would double count) set
+# SWAP_COST = Decimal("0.0005") and SLIPPAGE_MODEL = "depth".
+SWAP_COST = Decimal("0.001")
+# Price impact of the rebalance swaps from the pools' own depth. None = off. "depth" = for each pool leg (BTC <-> ETH on
+# WBTC/WETH, USDC <-> ETH on WETH/USDC) charge volume^2 / virtual ETH reserve at the current price (see eth_depth), in
+# ETH. A swap of D ETH moves the average price by about D / depth.
+SLIPPAGE_MODEL: str | None = None
 LOG_TICK = math.log(1.0001)
 
 
@@ -114,8 +128,26 @@ def signal_frame(btc_eth: pd.Series, eth_usd: pd.Series) -> pd.DataFrame:
     start EMA_WARMUP_DAYS before the window. BTC/USD = btc_eth x eth_usd, so G = eth_usd x sqrt(btc_eth)."""
     d = pd.concat({"p": btc_eth.astype(float).resample("1D").last(),
                    "e": eth_usd.astype(float).resample("1D").last()}, axis=1).dropna()
-    g = d["e"] * d["p"] ** 0.5
-    r = 1.0 / d["p"]
+    return signal_engine(d["e"] * d["p"] ** 0.5, 1.0 / d["p"])
+
+
+def binance_signal_frame(dsd: date, ded: date) -> pd.DataFrame:
+    """signal_engine on the Binance daily closes up to `ded`; the three files must cover the day before the window."""
+    c = {}
+    for sym in ("btcusdt", "ethusdt", "ethbtc"):
+        f = BINANCE_DIR / f"binance_{sym}_1d.csv"
+        c[sym] = pd.read_csv(f, parse_dates=["date"]).set_index("date")["close"].loc[:pd.Timestamp(ded)]
+        if c[sym].index[0] > pd.Timestamp(dsd) - timedelta(days=1) or c[sym].index[-1] < pd.Timestamp(ded):
+            raise ValueError(f"{f.name} covers {c[sym].index[0].date()}..{c[sym].index[-1].date()}, "
+                             f"needs {dsd - timedelta(days=1)}..{ded}")
+        if (c[sym].index[1:] - c[sym].index[:-1]).max() > timedelta(days=1):
+            raise ValueError(f"{f.name} has a gap in its daily closes")
+    d = pd.concat(c, axis=1).dropna()
+    return signal_engine((d["btcusdt"] * d["ethusdt"]) ** 0.5, d["ethbtc"])
+
+
+def signal_engine(g: pd.Series, r: pd.Series) -> pd.DataFrame:
+    """G = sqrt(BTC/USD x ETH/USD), R = ETH/BTC price (BTC per ETH); returns G, R, EMA100(R), strong flag, F."""
     r_ema = r.ewm(span=STRENGTH_SPAN, adjust=False).mean()
     emas = {n: g.ewm(span=n, adjust=False).mean() for n in EMA_SPANS}
     prevs = {n: emas[n].shift(EMA_SLOPE_DAYS) for n in EMA_SPANS}
@@ -160,6 +192,16 @@ def swap_deltas(cur: List[Decimal], want: List[Decimal], prices: List[Decimal],
     return [(w - c) * (ONE - cost) if w > c else w - c for c, w in zip(cur, want)], sold * cost
 
 
+def eth_depth(liquidity, price: Decimal, token0_decimal: int) -> Decimal:
+    """Virtual ETH reserve (in ETH) at the current price: the x*y=k pool a swap that stays inside this tick range sees.
+    ETH is token1 in both WBTC/WETH and USDC/WETH, `price` = ETH per token0, raw sqrt price
+    s = sqrt(price x 10^(18 - token0 decimals)), token1 reserve = L x s. Zero when the minute has no liquidity figure."""
+    if liquidity is None or pd.isna(liquidity) or liquidity <= 0:
+        return ZERO
+    sqrt_price = (price * Decimal(10) ** (18 - token0_decimal)).sqrt()
+    return Decimal(int(liquidity)) * sqrt_price / Decimal(10) ** 18
+
+
 class EthBtcDefenseStrategy(BaseRemixDaoStrategy):
     """Base = BTC, quote = ETH, plus USDC as a third broker asset priced in ETH (see run_test)."""
 
@@ -176,6 +218,8 @@ class EthBtcDefenseStrategy(BaseRemixDaoStrategy):
         self.out_of_fund_date: datetime | None = None
         self.reward_eth = ZERO                    # fees valued in ETH on the day they were collected
         self.swap_cost_eth = ZERO
+        self.slippage_eth = ZERO                  # part of swap_cost_eth that is depth slippage
+        self.usdc_liquidity: pd.Series | None = None   # WETH/USDC minute liquidity, set by run_test
         self.rebuild_count = self.out_of_range_rebuilds = 0
         self.lp_share_sum, self.lp_share_days = ZERO, 0
         self.daily_log: List[dict] = []
@@ -261,6 +305,12 @@ class EthBtcDefenseStrategy(BaseRemixDaoStrategy):
                 self.broker.add_to_balance(token, delta)
             elif delta < ZERO:
                 self.broker.subtract_from_balance(token, -delta)
+        slippage = self.depth_slippage(lp_market, row_data, p, u, deltas)
+        if slippage > ZERO:   # paid in ETH out of the wallet
+            slippage = min(slippage, max(ZERO, self._wallet()[1]))
+            self.broker.subtract_from_balance(self.gp.quote_token, slippage)
+            self.slippage_eth += slippage
+            cost += slippage
         self.swap_cost_eth += cost
         self.total_quote_swap_fee += cost
 
@@ -280,6 +330,21 @@ class EthBtcDefenseStrategy(BaseRemixDaoStrategy):
                                  "new_range": (tick_lo, tick_hi), "swap_cost_eth": float(cost)})
         print(f"[{self.mode}] {row_data.timestamp:%Y-%m-%d %H:%M} rebuild ({why}) F {float(f):.4f} "
               f"{'strong' if strong else 'weak'} equity {float(value):.4f} ETH range +-{float(ratio):.0%}")
+
+    def depth_slippage(self, lp_market, row_data: Snapshot, p: Decimal, u: Decimal, deltas: List[Decimal]) -> Decimal:
+        """Depth slippage in ETH of the swaps in `deltas` (btc, eth, usdc): the BTC leg trades on WBTC/WETH, the USDC leg
+        on WETH/USDC, each volume in ETH. A minute without a liquidity figure charges nothing for that leg."""
+        if SLIPPAGE_MODEL != "depth":
+            return ZERO
+        usdc_liquidity = None if self.usdc_liquidity is None else self.usdc_liquidity.get(row_data.timestamp)
+        legs = ((abs(deltas[0]) * p, lp_market.market_status.data.currentLiquidity, p, self.gp.base_token.decimal),
+                (abs(deltas[2]) * u, usdc_liquidity, u, USDC.decimal))
+        total = ZERO
+        for volume, liquidity, price, decimal in legs:
+            depth = eth_depth(liquidity, price, decimal)
+            if volume > ZERO and depth > ZERO:
+                total += volume * volume / depth
+        return total
 
     def first_lp(self, row_data: Snapshot) -> None:
         if self._lp_market().positions:
@@ -370,6 +435,7 @@ def run_test(bull_params: RemixDAOParams, params: TestParams, gp: GlobalParams, 
 
     utils = RemixDaoUtils(market, market_key, bull_params, bull_params, True)
     strat = EthBtcDefenseStrategy(utils, params, gp, usdc_prices, daily, mode)
+    strat.usdc_liquidity = usdc_price_data["currentLiquidity"]
     actuator.strategy = strat
     market.data_path = f"../real-data/{gp.contract_address}"
     data = copy.deepcopy(processed_data)
@@ -418,6 +484,7 @@ def run_test(bull_params: RemixDAOParams, params: TestParams, gp: GlobalParams, 
     metrics["usd_ratio"] = strat.total_net_value_usd / strat.total_invested_usdc
     metrics["max_dd_usd"] = max_draw_down(usd_series)
     metrics["swap_cost_eth"] = strat.swap_cost_eth
+    metrics["slippage_eth"] = strat.slippage_eth
     metrics["lp_avg_share"] = strat.lp_share_sum / strat.lp_share_days if strat.lp_share_days else ZERO
     return metrics
 
@@ -428,7 +495,7 @@ def _run_one(bull, tp: TestParams, gp: GlobalParams, data, usdc_price_data, dail
 
 
 EXTRA_COLUMNS = ["eth_ratio_receipt", "eth_ratio_end", "reward_eth", "btc_ratio", "usd_ratio", "max_dd_usd",
-                 "swap_cost_eth", "lp_avg_share", "rescale_count", "out_of_range_count"]
+                 "swap_cost_eth", "slippage_eth", "lp_avg_share", "rescale_count", "out_of_range_count"]
 
 
 def process_for_date(csd: datetime, dsd: date, ded: date, modes: List[str] | None = None):
@@ -449,9 +516,6 @@ def process_for_date(csd: datetime, dsd: date, ded: date, modes: List[str] | Non
                           tick_lower_boundary_offset=0, rescale_tick_upper_boundary_offset=0,
                           rescale_tick_lower_boundary_offset=0, init_tick_spread=120, tick_spacing=tick_spacing,
                           tick_gap_lower=1, tick_gap_upper=1)
-    folder = f"result/ethbtc-wb25-wbtceth-{csd:%Y%m%d}-{ded:%Y%m%d}"
-    Path(folder).mkdir(parents=True, exist_ok=True)
-
     def load(pool: UniV3Pool, address: str, start: date, end: date) -> UniLpMarketV2:
         m = UniLpMarketV2(MarketInfo("data"), pool)
         m.data_path = f"../real-data/{address}"
@@ -462,32 +526,45 @@ def process_for_date(csd: datetime, dsd: date, ded: date, modes: List[str] | Non
     print(f"preload data {dsd:%Y%m%d} ~ {ded:%Y%m%d}")
     market = load(UniV3Pool(token0, token1, fee, quote_token), contract_address, dsd, ded)
     usdc_market = load(UniV3Pool(USDC, eth, fee, USDC), contract_usdc, dsd, ded)
-    daily = None
-    if MODE_SIGNAL in modes:
-        warm_start, warm_end = max(dsd - timedelta(days=EMA_WARMUP_DAYS), DATA_FLOOR), dsd - timedelta(days=1)
-        print(f"signal warm-up {warm_start} ~ {warm_end}: {(warm_end - warm_start).days + 1} days")
-        warm = load(UniV3Pool(token0, token1, fee, quote_token), contract_address, warm_start, warm_end)
-        warm_usdc = load(UniV3Pool(USDC, eth, fee, USDC), contract_usdc, warm_start, warm_end)
-        daily = signal_frame(pd.concat([warm.data.price, market.data.price]),
-                             pd.concat([warm_usdc.data.price, usdc_market.data.price]))
-        window = daily.loc[pd.Timestamp(dsd):]
-        print(f"signal F over the window: mean {window['F'].mean():.3f}, days at 0: {(window['F'] == 0).sum()}, "
-              f"days at 1: {(window['F'] == 1).sum()}, strong days: {int(window['strong'].sum())}/{len(window)}")
-        daily.to_csv(f"{folder}/signal_frame.csv")
-
-    jobs = []
-    for mode in modes:
-        tp = TestParams(range_strategy=RangeStrategy.remix_dao, indicator_mult=1,
-                        report_name=f"{init_quote}{quote_token.name}_{mode}", cal_start_datetime=csd,
-                        data_start_date=dsd, data_end_date=ded, folder=folder,
-                        rescale_frequency=RescaleFrequency.daily)
-        jobs.append((bull, tp, gp, market.data, usdc_market.data, daily, mode))
+    jobs, folders = [], []
+    for source in SIGNAL_SOURCES:
+        # pool signal without slippage keeps the old folder name
+        tag = ("" if source == POOL_SIGNAL else f"-{source}") + (f"-slip{SLIPPAGE_MODEL}" if SLIPPAGE_MODEL else "")
+        folder = f"result/ethbtc-wb25-wbtceth{tag}-{csd:%Y%m%d}-{ded:%Y%m%d}"
+        Path(folder).mkdir(parents=True, exist_ok=True)
+        folders.append(folder)
+        daily = None
+        if MODE_SIGNAL in modes and source == BINANCE_SIGNAL:
+            daily = binance_signal_frame(dsd, ded)
+        elif MODE_SIGNAL in modes:
+            warm_start, warm_end = max(dsd - timedelta(days=EMA_WARMUP_DAYS), DATA_FLOOR), dsd - timedelta(days=1)
+            print(f"signal warm-up {warm_start} ~ {warm_end}: {(warm_end - warm_start).days + 1} days")
+            warm = load(UniV3Pool(token0, token1, fee, quote_token), contract_address, warm_start, warm_end)
+            warm_usdc = load(UniV3Pool(USDC, eth, fee, USDC), contract_usdc, warm_start, warm_end)
+            daily = signal_frame(pd.concat([warm.data.price, market.data.price]),
+                                 pd.concat([warm_usdc.data.price, usdc_market.data.price]))
+        if daily is not None:
+            window = daily.loc[pd.Timestamp(dsd):]
+            print(f"[{source}] signal F over the window: mean {window['F'].mean():.3f}, days at 0: "
+                  f"{(window['F'] == 0).sum()}, days at 1: {(window['F'] == 1).sum()}, "
+                  f"strong days: {int(window['strong'].sum())}/{len(window)}")
+            daily.to_csv(f"{folder}/signal_frame.csv")
+        for mode in modes:
+            tp = TestParams(range_strategy=RangeStrategy.remix_dao, indicator_mult=1,
+                            report_name=f"{init_quote}{quote_token.name}_{mode}", cal_start_datetime=csd,
+                            data_start_date=dsd, data_end_date=ded, folder=folder,
+                            rescale_frequency=RescaleFrequency.daily)
+            jobs.append((bull, tp, gp, market.data, usdc_market.data, daily, mode))
     with multiprocessing.Pool(min(len(jobs), 5)) as pool:
-        result = pool.starmap(_run_one, jobs)
-    export_stable_apr_results(f"{folder}/apr_results.csv", result)
-    extra = pd.DataFrame({name: {k: float(m[k]) for k in EXTRA_COLUMNS} for name, m in result}).T
-    extra.to_csv(f"{folder}/eth_summary.csv")
-    print(extra.to_string())
+        results = pool.starmap(_run_one, jobs)
+    per_source = len(modes)   # jobs are appended source by source, `modes` jobs each
+    for i, folder in enumerate(folders):
+        result = results[i * per_source:(i + 1) * per_source]
+        export_stable_apr_results(f"{folder}/apr_results.csv", result)
+        extra = pd.DataFrame({name: {k: float(m[k]) for k in EXTRA_COLUMNS} for name, m in result}).T
+        extra.to_csv(f"{folder}/eth_summary.csv")
+        print(folder)
+        print(extra.to_string())
 
 
 def _self_check():
@@ -511,10 +588,14 @@ def _self_check():
     # swaps: value is conserved except for the 0.1% on the minimum converted volume
     cur, want, px = [Decimal(1), Decimal(0), Decimal(0)], [Decimal(0), Decimal(10), Decimal(40000)], [Decimal(30), ONE, Decimal("0.0005")]
     assert sum(w * p for w, p in zip(want, px)) == Decimal(30), "targets must sum to the equity"
-    deltas, cost = swap_deltas(cur, want, px)
+    deltas, cost = swap_deltas(cur, want, px, cost=Decimal("0.001"))
     after = sum((c + d) * p for c, d, p in zip(cur, deltas, px))
     assert cost == Decimal("0.03") and abs(after - (Decimal(30) - cost)) < Decimal("1e-9"), (after, cost)
     assert deltas[0] == Decimal(-1) and deltas[1] == Decimal("9.99"), deltas
+    # depth: WBTC/WETH 2024-01-02 00:00 (L 4.27e17, 18.79 ETH per BTC) ~185k ETH; WETH/USDC (L 1.49e19, $2351) ~308k ETH
+    assert Decimal("1.8e5") < eth_depth(426736045046051387, Decimal("18.7886"), 8) < Decimal("1.9e5")
+    assert Decimal("3.0e5") < eth_depth(14926724960586878708, ONE / Decimal("2351.28"), 6) < Decimal("3.2e5")
+    assert eth_depth(0, ONE, 6) == ZERO and eth_depth(float("nan"), ONE, 6) == ZERO and eth_depth(None, ONE, 6) == ZERO
     # virtual account: EMA exit needs the falling-EMA condition; a close under a flat / rising EMA is no exit
     acct = VirtualAccount(100)
     acct.step(2000, 1900)                                   # armed, fully deployed
@@ -536,6 +617,9 @@ def _self_check():
     assert abs(fr["G"].iloc[0] - 2000 * 30 ** 0.5) < 1e-6 and fr["strong"].iloc[-1], fr.tail(2)
     fr = signal_frame(p_down.iloc[::-1].set_axis(idx), e)
     assert not fr["strong"].iloc[-1], fr.tail(2)
+    # Binance route: same engine, G = sqrt(BTCUSDT x ETHUSDT), R = ETHBTC; a pool-consistent price set gives the same F
+    fr2 = signal_engine(e * p_down ** 0.5, 1.0 / p_down)
+    assert fr2["F"].equals(signal_frame(p_down, e)["F"])
     # G falling steadily for a year: every account is out, so F ends at 0
     fr = signal_frame(pd.Series([30.0] * 420, index=idx), pd.Series([3000.0 * (0.995 ** i) for i in range(420)], index=idx))
     assert fr["F"].iloc[-1] == 0.0, fr["F"].tail(3).tolist()
@@ -544,15 +628,29 @@ def _self_check():
 if __name__ == "__main__":
     _self_check()
 
+    # spec sheet 4 / 5.1 "加入日平均": 31 join days, Jan 1 +-15, each run for 365 days (start + 364 days); average the
+    # per-run eth_ratio_receipt from the 31 result folders by hand. One year at a time: 31 runs, each loads its own data.
+    # 2024 was run: average 1.144 vs spec 1.19, same gap as the single start days, so the start day is not the cause.
+    # To run it, use `date_ranges = _join_day_ranges`.
+    join_year = 2022
+    _join_day_ranges = [(d, d.date(), (d + timedelta(days=364)).date())
+                        for d in (datetime(join_year, 1, 1) + timedelta(days=k) for k in range(-15, 16))]
     date_ranges: List[tuple[datetime, date, date]] = [
         # (cal start, data start, data end)
-        # spec sheet 5.1: start Jan 1 and run 365 days (2024 is a leap year, so it ends Dec 30)
+        # spec sheet 5.1: the "1/1 join" is priced at the 1/1 daily close (= 1/2 00:00 UTC), so start on 1/2 and run to
+        # 12/31 (365 days, also in the 2024 leap year); same one-day join shift as ethusdc v1
+        (datetime(2022, 1, 2), date(2022, 1, 2), date(2022, 12, 31)),
+        (datetime(2023, 1, 2), date(2023, 1, 2), date(2023, 12, 31)),
+        (datetime(2024, 1, 2), date(2024, 1, 2), date(2024, 12, 31)),
+        (datetime(2025, 1, 2), date(2025, 1, 2), date(2025, 12, 31)),
+        # start on 1/1 instead (spec sheet 5.1 literally: run 365 days, 2024 ends Dec 30)
         # (datetime(2022, 1, 1), date(2022, 1, 1), date(2022, 12, 31)),
         # (datetime(2023, 1, 1), date(2023, 1, 1), date(2023, 12, 31)),
         # (datetime(2024, 1, 1), date(2024, 1, 1), date(2024, 12, 30)),
-        (datetime(2025, 1, 1), date(2025, 1, 1), date(2025, 12, 31)),
+        # (datetime(2025, 1, 1), date(2025, 1, 1), date(2025, 12, 31)),
         # spec sheet 5.2: 4 years 2022-2025 in one run
         # (datetime(2022, 1, 1), date(2022, 1, 1), date(2025, 12, 31)),
     ]
+    # date_ranges = _join_day_ranges   # uncomment to run the 31 join days of join_year instead of the 1/2 single years
     for dr in date_ranges:  # one after another: each range loads its own minute data, in parallel they would eat the RAM
         process_for_date(*dr)
