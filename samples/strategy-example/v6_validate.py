@@ -199,7 +199,12 @@ OPT = {"A": Variant("A_v6"),
        "CA": Variant("CA_no_new_low_refill", {"REFILL_NO_NEW_LOW": True}),   # EXP-088: no new intraday low on refill days
        "CB": Variant("CB_twap_engine", {"TWAP_ENGINE": True}),   # EXP-089: engine on the daily TWAP
        "CC": Variant("CC_vrp_pull", {"VRP_PULL": True, "EXTRA": "pool"}),   # EXP-090: realised vol > DVOL -> one stage less
-       "CD": Variant("CD_breadth_cap", {"BREADTH_CAP": True, "EXTRA": "pool"})}   # EXP-091: F <= mean(F, other asset's F)
+       "CD": Variant("CD_breadth_cap", {"BREADTH_CAP": True, "EXTRA": "pool"}),   # EXP-091: F <= mean(F, other asset's F)
+       "CE": Variant("CE_gas_panic_hold", {"GAS_PANIC_HOLD": True, "EXTRA": "pool"}),   # EXP-092: no refill for 3 days after a gas spike
+       "CF": Variant("CF_stable_flow_refill", {"STABLE_FLOW_REFILL": True, "EXTRA": "pool"}),   # EXP-093: stablecoin supply rising
+       "CG": Variant("CG_no_weekend_refill", {"NO_WEEKEND_REFILL": True}),   # EXP-094: no refill stage on weekends
+       "CH": Variant("CH_exit_vol_confirm", {"EXIT_VOL_CONFIRM": True, "EXTRA": "pool"}),   # EXP-095: EMA exit needs volume
+       "CI": Variant("CI_flow_refill", {"FLOW_REFILL": True, "EXTRA": "pool"})}   # EXP-096: pool net buying confirms refill
 # EXP-082..: daily non-price inputs (samples/fetch_deribit_dvol.py, fetch_binance_funding.py, fetch_binance_daily.py)
 DVOL_CSV = "../deribit_dvol_daily.csv"
 FUND_LONG_CSV = {"ETHUSDT": "../binance_funding_ETHUSDT_long.csv", "BTCUSDT": "../binance_funding_BTCUSDT_long.csv"}
@@ -213,14 +218,21 @@ def extra_frame() -> pd.DataFrame:
     f = pd.read_csv(FUND_LONG_CSV[sym], parse_dates=["timestamp"]).set_index("timestamp")["rate"]
     fund = f.resample("1D").mean()
     oth = pd.read_csv(LONG_CLOSE_CSV, parse_dates=["date"]).set_index("date")[other]
-    out = pd.DataFrame({"dvol": dvol, "fund": fund, "other": oth})
+    gas = pd.read_csv(GAS_CSV, parse_dates=["timestamp"]).set_index("timestamp")["gwei"].resample("1D").median()   # EXP-092
+    stable = pd.read_csv(FLOW_CSV, parse_dates=["date"]).set_index("date")["stable_mcap"]   # EXP-093
+    out = pd.DataFrame({"dvol": dvol, "fund": fund, "other": oth, "gas": gas, "stable": stable})
     if POOL_VOL is not None:   # EXP-087
         out = out.reindex(out.index.union(POOL_VOL.index))
         out["pvol"] = POOL_VOL
+    if POOL_FLOW is not None:   # EXP-096
+        out = out.reindex(out.index.union(POOL_FLOW.index))
+        out["flow"] = POOL_FLOW
     return out
 
 
 POOL_VOL: pd.Series | None = None   # EXP-087: daily quote-token swap volume of the pool (warm-up + window)
+POOL_FLOW: pd.Series | None = None   # EXP-096: daily net base-token flow into the pool (> 0 = net selling)
+FLOW_CSV = "../flow_daily.csv"   # EXP-093: stablecoin market cap (DefiLlama), samples/fetch_flow_daily.py
 
 
 def other_fraction() -> pd.Series:
@@ -245,7 +257,7 @@ VOL_TARGET_BY_ASSET = {"ETHUSDT": 0.04179, "BTCUSDT": 0.03219}
 
 
 ENGINE_DEFAULTS = {k: getattr(V, k) for k in ["EMA_SPANS", "REFILL_STAGES", "REFILL_CONFIRM_DAYS", "LOWER_STOP",
-                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL", "EXIT_CONFIRM", "F_WEEKLY", "F_FLOOR", "STABLE_LP", "VOL_TARGET", "ER_GATE", "RESIZE_IN_PLACE", "EXIT_CHECK_HOURLY", "SWAPLESS_EXIT", "RESIZE_NEAR_CENTRE", "MACRO_EVENTS", "MACRO_RESTORE", "TRANCHE_ADD", "FOLLOW_ASYM", "ACCOUNT_TRANCHES", "CPPI_FLOOR", "WEEKLY_RECENTRE", "NO_LOWER_STOP", "REFILL_ARMED_ONLY", "REARM_FULL", "NO_UPPER_REBUILD", "WEEKLY_RECENTRE_UP", "RESIZE_BELOW_EMA", "SHARE_BELOW_EMA", "NO_EXIT_REBUILD", "F_AGG", "F_BINARY", "REFILL_ONE_STAGE", "EXTRA", "REFILL_GATE", "FUND_REFILL", "FUND_CAP", "REFILL_VOL_CONFIRM", "REFILL_NO_NEW_LOW", "TWAP_ENGINE", "VRP_PULL", "BREADTH_CAP"]}
+                                                "FOLLOW_THRESHOLD", "SHARE_ABOVE_EMA", "SPOT_SLEEVE", "SLEEVE_STOP", "SLEEVE_HIGH_KEEP", "CASH_APR", "REFILL_ORDER", "HALF_LADDER", "HALF_WHEN_ACCEL", "LVR_GATE", "SKEW", "HEDGE", "HEDGE_FUNDING", "PAUSE_RET", "BEAR_SHORT", "BEAR_CRASH_SIGMA", "HEDGE_FEE", "FEE_COMPOUND", "RECENTRE_UP", "REGIME", "SUPERTREND_MULT", "SHARE_BY_ARMED", "WIDTH_VOL", "EXIT_CONFIRM", "F_WEEKLY", "F_FLOOR", "STABLE_LP", "VOL_TARGET", "ER_GATE", "RESIZE_IN_PLACE", "EXIT_CHECK_HOURLY", "SWAPLESS_EXIT", "RESIZE_NEAR_CENTRE", "MACRO_EVENTS", "MACRO_RESTORE", "TRANCHE_ADD", "FOLLOW_ASYM", "ACCOUNT_TRANCHES", "CPPI_FLOOR", "WEEKLY_RECENTRE", "NO_LOWER_STOP", "REFILL_ARMED_ONLY", "REARM_FULL", "NO_UPPER_REBUILD", "WEEKLY_RECENTRE_UP", "RESIZE_BELOW_EMA", "SHARE_BELOW_EMA", "NO_EXIT_REBUILD", "F_AGG", "F_BINARY", "REFILL_ONE_STAGE", "EXTRA", "REFILL_GATE", "FUND_REFILL", "FUND_CAP", "REFILL_VOL_CONFIRM", "REFILL_NO_NEW_LOW", "TWAP_ENGINE", "VRP_PULL", "BREADTH_CAP", "GAS_PANIC_HOLD", "STABLE_FLOW_REFILL", "NO_WEEKEND_REFILL", "EXIT_VOL_CONFIRM", "FLOW_REFILL"]}
 
 
 def sens_grid():
@@ -504,6 +516,12 @@ def daily_quote_volume(m: pd.DataFrame, pool: str) -> pd.Series:
     return m[col].astype(float).resample("1D").sum()
 
 
+def daily_base_flow(m: pd.DataFrame, pool: str) -> pd.Series:
+    """EXP-096: daily net base-token amount swapped into the pool (> 0: net selling of the base token)."""
+    base_i = POOLS[pool][2]
+    return m[f"netAmount{base_i}"].astype(float).resample("1D").sum() / 10 ** POOLS[pool][base_i][1]
+
+
 def main():
     global POOL, DATA, PRICE, GATE_MINUTES, GAS, ETH_USD
     POOL = sys.argv[1]
@@ -527,13 +545,15 @@ def main():
         closes = pd.read_csv(LONG_CLOSE_CSV, parse_dates=["date"]).set_index("date")[col]
         seg = closes.loc[pd.Timestamp(warm_from):pd.Timestamp(min(FIRST_DATA[warm_pool], start) - timedelta(days=1))].dropna()
         parts.append(pd.Series(seg.to_numpy(), index=seg.index + pd.Timedelta(hours=23, minutes=59)))
-    vol_parts = []
+    vol_parts, flow_parts = [], []
     if start > FIRST_DATA[warm_pool]:
         warm_m = load_minutes(max(warm_from, FIRST_DATA[warm_pool]), start - timedelta(days=1), warm_pool)
         parts.append(warm_m.price)
         vol_parts.append(daily_quote_volume(warm_m, warm_pool))
-    global POOL_VOL
+        flow_parts.append(daily_base_flow(warm_m, warm_pool))
+    global POOL_VOL, POOL_FLOW
     POOL_VOL = pd.concat(vol_parts + [daily_quote_volume(DATA, POOL)])   # EXP-087
+    POOL_FLOW = pd.concat(flow_parts + [daily_base_flow(DATA, POOL)])   # EXP-096
     PRICE = pd.concat(parts + [DATA.price])
     if any(v.engine.get("LVR_GATE") for v in variants):   # EXP-012: the gate needs the pool's own week before start
         gate_start = max(start - timedelta(days=V.LVR_GATE_DAYS + 1), FIRST_DATA[POOL])

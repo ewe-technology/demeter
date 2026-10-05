@@ -91,3 +91,8 @@ EXP-088,2026-10-05,refill days count only without a new intraday low (v6.75),QUA
 EXP-089,2026-10-05,engine on the daily TWAP instead of the 00:00 price (v6.76),QUAN-973,dropped-at-dev,-0.34,2/5,,,0.808,0.134,-0.250,0f8cc14,b48fc64,EXP-089-twap-engine.md,improvement
 EXP-090,2026-10-05,one refill stage less while realised vol exceeds implied vol (v6.77),QUAN-974,dropped-at-dev,-1.29,2/5,,,0.787,0.131,-0.217,0f8cc14,b48fc64,EXP-090-vrp-pull.md,improvement
 EXP-091,2026-10-05,F capped at the mean of its own and the other asset's F (v6.78),QUAN-975,dropped-at-dev,-2.73,2/5,,,0.938,0.151,-0.217,0f8cc14,b48fc64,EXP-091-breadth-cap.md,improvement
+EXP-092,2026-10-05,no refill stage for 3 days after an on-chain gas spike (v6.79),,pre-registered,,,,,,,,,,EXP-092-gas-panic-hold.md,improvement
+EXP-093,2026-10-05,refill stages only while stablecoin supply is growing (v6.80),,pre-registered,,,,,,,,,,EXP-093-stable-flow-refill.md,improvement
+EXP-094,2026-10-05,no refill stage on weekend closes (v6.81),,pre-registered,,,,,,,,,,EXP-094-no-weekend-refill.md,improvement
+EXP-095,2026-10-05,EMA exit only on pool volume above normal (v6.82),,pre-registered,,,,,,,,,,EXP-095-exit-vol-confirm.md,improvement
+EXP-096,2026-10-05,refill stages only while the pool's traders are net buyers (v6.83),,pre-registered,,,,,,,,,,EXP-096-flow-refill.md,improvement

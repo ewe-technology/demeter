@@ -311,6 +311,17 @@ REFILL_NO_NEW_LOW = False
 TWAP_ENGINE = False
 VRP_PULL = False
 BREADTH_CAP = False
+# EXP-092..096 (v6.79..v6.83): GAS_PANIC_HOLD: no refill stage during the 3 days after a day whose median gas price is above
+# 3x its trailing 30-day median (EXTRA "gas"). STABLE_FLOW_REFILL: a refill stage fires only if the total stablecoin market cap
+# rose over the last 7 days (EXTRA "stable"). NO_WEEKEND_REFILL: no refill stage fires on a Saturday or Sunday close.
+# EXIT_VOL_CONFIRM: the EMA exit (not the lower stop) fires only if the pool's 3-day swap volume is >= its 30-day median
+# (EXTRA "pvol"). FLOW_REFILL: a refill stage fires only if the pool's 3-day net base-token flow is <= 0 (net buying;
+# EXTRA "flow"). False = v6.
+GAS_PANIC_HOLD = False
+STABLE_FLOW_REFILL = False
+NO_WEEKEND_REFILL = False
+EXIT_VOL_CONFIRM = False
+FLOW_REFILL = False
 FULL_TOLERANCE = Decimal("0.02")  # ponytail: "fully deployed" / "empty" with dust tolerance, else daily rebuilds
 POOL_FIRST_DATA_DATE = date(2021, 5, 6)  # first minute file of the mainnet USDC/WETH 0.05% pool in real-data
 
@@ -341,6 +352,8 @@ class VirtualAccount:
             else:
                 self.low = close
             return
+        if EXIT_VOL_CONFIRM and (ctx or {}).get("pvol_ok", 1.0) == 0.0:   # EXP-095: thin-volume breakdown -> no EMA exit
+            trend_ok = False
         if self.armed and close < ema and trend_ok:         # 1 EMA exit (spec: low resets even if empty); EXP-054 gate
             self.exit(close)
             self.armed = False
@@ -377,6 +390,14 @@ class VirtualAccount:
             if advance and REFILL_VOL_CONFIRM and ctx.get("pvol_ok", 1.0) == 0.0:   # EXP-087
                 advance = False
             if advance and REFILL_NO_NEW_LOW and ctx.get("dlow", float("inf")) <= self.low:   # EXP-088
+                advance = False
+            if advance and GAS_PANIC_HOLD and ctx.get("gas_panic", 0.0) == 1.0:   # EXP-092
+                advance = False
+            if advance and STABLE_FLOW_REFILL and ctx.get("stable7", 0.0) < 0:   # EXP-093
+                advance = False
+            if advance and NO_WEEKEND_REFILL and ctx.get("dow", 0.0) >= 5:   # EXP-094
+                advance = False
+            if advance and FLOW_REFILL and ctx.get("flow3", 0.0) > 0:   # EXP-096
                 advance = False
             if advance and REFILL_GATE == "dvol_turn":   # EXP-082: implied vol must be falling
                 d3, d3p = ctx.get("dvol3", float("nan")), ctx.get("dvol3_prev", float("nan"))
@@ -505,12 +526,20 @@ def daily_ema_frame(minute_price: pd.Series) -> pd.DataFrame:
         if "pvol" in ex:   # EXP-087: 3-day volume vs its 30-day median (unknown -> ok)
             v3, med = ex["pvol"].rolling(3, min_periods=3).sum(), (ex["pvol"].rolling(3, min_periods=3).sum()).rolling(30, min_periods=30).median()
             ex["pvol_ok"] = (~(v3 < med)).astype(float)
+        if "gas" in ex:   # EXP-092: panic day = median gas > 3x trailing 30-day median; hold 3 days (that day + 2)
+            spike = (ex["gas"] > 3 * ex["gas"].rolling(30, min_periods=30).median().shift(1)).astype(float)
+            ex["gas_panic"] = spike.rolling(3, min_periods=1).max()
+        if "stable" in ex:   # EXP-093
+            ex["stable7"] = ex["stable"].pct_change(7)
+        if "flow" in ex:   # EXP-096
+            ex["flow3"] = ex["flow"].rolling(3, min_periods=3).sum()
         if "fund" in ex:
             ex["fund3"] = ex["fund"].rolling(3, min_periods=1).mean()
             ex["fund7"] = ex["fund"].rolling(7, min_periods=1).mean()
     for day, c in close.items():
         ctx = {k: float(v) for k, v in ex.loc[day].items()} if ex is not None else {}
         ctx["dlow"] = float(day_low[day]) if day_low[day] == day_low[day] else float("inf")
+        ctx["dow"] = float(day.weekday())   # EXP-094
         for k, a in accounts:
             a.step(float(c), float(lines[k][a.span][day]), bool(trend_ok[day]) if k == "ema" else True, ctx)
         deps = [a.deployed for _, a in accounts]
