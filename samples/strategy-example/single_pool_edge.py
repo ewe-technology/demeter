@@ -178,7 +178,8 @@ def main():
         print(f"\n===== {name}  (always-centred +/-{(K - 1) * 100:.0f}% position, returns per year)")
         yt = year_table(e)
         print(yt.round(4))
-        # Sanity check against lp_capacity.py section 10.3 (+/-20%, 2025, $10k, fees only): ETH/USDC ~64%, WBTC/WETH ~54%.
+        # Sanity check against lp_capacity.py section 10.3 (2025, $10k, fees only): ETH/USDC +/-20% ~64%,
+        # WBTC/WETH +/-10% ~54% (the fee column above).
         scale = (1 - K ** -0.5) / (1 - 1.2 ** -0.5)
         print(f"fee 2025 rescaled to +/-20%: {yt.loc[2025, 'fee'] * scale:.1%}")
         hours, hour_stats = hour_rule(e, edge)
