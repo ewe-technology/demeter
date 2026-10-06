@@ -15,7 +15,7 @@ EMA 90–120 four-account engine. Every change is an experiment, recorded in thr
   `experiments/<EXP-id>` (registry fields + `hypothesis`, `verdict`, `order`), `curves/eth`, `curves/btc`
   (weekly net value per series key). Only editors write; the page never needs republishing for new rows.
 
-State as of 2026-10-06 (end of day): EXP-001..154 recorded (`registry.csv`); read "Handoff 2026-10-06" below first. v6 baseline (EXP-000): ETH continuous 2022-01..2026-09 +85.4%, CAGR 14.0%,
+State as of 2026-10-06 (end of day): EXP-001..156 recorded (`registry.csv`); read "Baseline since 2026-10-06 evening" and "Handoff 2026-10-06" below first. v6 baseline (EXP-000): ETH continuous 2022-01..2026-09 +85.4%, CAGR 14.0%,
 max DD −22.8%; WBTC continuous +85.6%. The /goal of 2026-10-05 (EXP-052..081, 30 experiments) found **no improvement-level pass** on the
 time-split holdout (H5 ETH 2021, H4 WBTC 2022): four dev passes each lost one window; v6.39 (idle reserve in a stablecoin LP) does not count
 (ruling). v6 is a range harvester whose edge is the staged refill below the EMA; ETH and WBTC disagree about recentring (valley shape, pool
@@ -34,6 +34,21 @@ pool, no more H4 / H5 recombinations: `experiments/FINDINGS-2026-10-06-round4.md
 `experiments/FINDINGS-2026-10-02.md`. Pure-LP scope (no perps, no lending) since 2026-10-01.
 Earlier trials (momentum width, fee compounding, EMA exit band) were discarded on purpose. Background: `V6_VALIDATION.md` (PBO 0.56, DSR < 0.95,
 regimes, capacity).
+
+## Baseline since 2026-10-06 evening: spec sheet v1 (Dino: "改")
+
+The team's baseline is the spec sheet's ETH/USDC v1 backtest (Maker's `gamma_maker_defense_ethusdc_v1.py`, branch
+`maker-defense`; Google sheet "USDC/ETH gamma maker defence v1 slippage 0.1/fee 0.05": 2022-01-02..2025-12-31 +83.5%, APR 16.4%,
+max DD −25.8%). Same logic as v6; four settings differ: Binance daily closes drive the EMA / F engine, spec weights cut in equal
+2.5% price steps, flat 0.1% swap cost (no impact ledger), windows start on 1/2. `SPEC=v1 python v6_validate.py ...` runs every
+variant on those settings and `A` is then spec v1 (reproduces the sheet's four years within 0.06 pt; USD-quoted pools only).
+Run new experiments with `SPEC=v1`; EXP-000..154 keep their verdicts (EXP-155 withdrawn). This branch's old v6 (pool-price signal) is 15 pts below
+spec v1 on the sheet window, mostly the signal (2023-03 USDC depeg).
+
+EXP-156 (v6.126 = EXP-140 on spec v1, QUAN-1041): **fail**. Sheet window: +97.6% vs +84.0%, CAGR 18.6% vs 16.5%, Calmar 0.67 vs
+0.64, yearly 3/4; full history 3/7 pools (wins mainnet ETH 0.05%, both BTC pools; ties on Base / Arbitrum ETH 0.05%; loses both
+ETH 0.3% pools, where the WBTC-fitted 0.3% half applies). About a third of its old gain was compensating the pool-price signal;
+its macro restore doubles rebuilds ($34k more mainnet gas on $100k over 2022-25, more than its $13.6k gain; gas not charged).
 
 ## Handoff 2026-10-06 (two sessions closed; a new session starts here)
 
@@ -108,7 +123,8 @@ Dino names versions `v6.1`, `v6.2`, ...; each is one experiment `EXP-NNN` (next 
 - Fee-tier rules count as one strategy (Dino, 2026-10-06): a variant may apply one switch set on pools with fee >= 0.3% and another
   on cheaper pools (`TIER` in `v6_validate.py`). Routing the rebuild swap through a cheaper pool also counts as a strategy change
   (Dino, ruling relayed by the EXP-117 session).
-- Baseline v6 runs in the same invocation. Costs: pool fee + price impact; gas reported, not charged.
+- Baseline v6 runs in the same invocation. Costs: pool fee + price impact; gas reported, not charged. From EXP-157 on, run with
+  `SPEC=v1` (baseline = spec v1, flat 0.1% swap cost; see "Baseline since 2026-10-06 evening").
 - **No in-sample / out-of-sample split (Dino, 2026-10-06).** Every pool in `INVENTORY.md`, local or in the team S3 bucket, may be
   used, and a pool may be downloaded from S3 (or with `fetch_uni_minute.py`) without asking; add it to `POOLS` and `INVENTORY.md`
   in the same commit. A strategy is judged on its **full-history** result: one continuous run per pool over all the data that pool
@@ -139,6 +155,7 @@ Run (from `samples/strategy-example`, `PYTHONPATH=../..`):
     python v6_validate.py <pool> <start> <end> sens|bench 3   # sensitivity grid / continuous v6 vs plain LP
     python v6_validate_report.py                              # validation numbers
     BINANCE_WARM=1 python v6_validate.py <pool> <start> <end> opt:A,B 4   # window before the pool's data: warm-up from Binance daily closes
+    SPEC=v1 python v6_validate.py <pool> <start> <end> opt:A,B 2   # the baseline since EXP-156: A = spec sheet v1 (tag "-specv1")
     python experiments/judge.py dev|hold|holdbtc <tag> <prefix...>    # apply the pre-registered success rules to a run
     # results -> result/v6_validate/ (gitignored); daily equity CSV per variant
 
