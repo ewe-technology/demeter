@@ -40,6 +40,22 @@ Run with `A` (v6) in `opt:A,EO,EP` per window (together with EXP-154).
     more than 3 pts deeper → `holdout-pass`; otherwise `holdout-fail`.
 - Reported, not deciding: bull-year gains (ETH 2023, 2024 segments), rebuild count, LP fees.
 
+## Pre-registration addendum — full-history rule (Dino, 2026-10-06, `88f4706`)
+
+The rule changed after this experiment was pre-registered (`356df3d`) and after its dev run had started under the old rule.
+Both verdicts are reported: the old dev + H5/H4 verdict as registered above, and the full-history verdict below, which is the
+one recorded as `pass` / `fail` from 2026-10-06. Written and committed before any full-history run.
+
+- Pools (every v6-capable pool with local data, one continuous run each over all of its data, `opt:A,EO,EP` together with
+  EXP-153/154, `BINANCE_WARM=1`):
+  - ETH: mainnet WETH/USDC 0.05% `0x88e6` 2021-05-06..2026-09-17; mainnet USDC/WETH 0.3% `0x8ad5` 2021-05-06..2026-09-17;
+    Base WETH/USDC 0.05% `0xd0b5` 2023-12-01..2026-09-17; Arbitrum WETH/USDC 0.05% `0xc696` 2023-06-09..2025-07-23; Base
+    WETH/USDC 0.3% `0x6c56` 2025-01-01..2026-09-17 (2024 excluded: too thin for a $100k ladder, EXP-015).
+  - BTC: mainnet WBTC/USDC 0.3% `0x99ac` 2021-11-02..2026-09-17; Base USDC/cbBTC 0.05% `0xfbb6` 2024-10-01..2026-09-17.
+- Pool win: CAGR above v6's, Calmar ≥ v6's, max DD no more than 3 pts deeper (same run).
+- Pass: wins on at least 4 of the 7 pools, with at least one ETH pool and one BTC pool among the wins. Otherwise fail.
+  Every pool is reported.
+
 ## Result
 
 Pending.
