@@ -1,8 +1,8 @@
 # EXP-153: one-sided ETH ladder above EMA100 (ETH share 100% while the close is above EMA100) (v6.139)
 
-- Jira: QUAN-___
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Jira: QUAN-1038
+- Status: fail (full-history rule; old rule: dropped-at-dev)
+- Pre-registration commit: 356df3d (addendum 2253804) · Result commit: see registry
 - Scope: Dino, 2026-10-06: "那怎麼樣牛市可以賺的多" → two bull-only changes proposed, "好". Number EXP-153 / v6.139 and OPT
   key `EO` reserved with the goal4 session. Pre-registered together with EXP-154.
 
@@ -58,8 +58,56 @@ one recorded as `pass` / `fail` from 2026-10-06. Written and committed before an
 
 ## Result
 
-Pending.
+Code `59821e1` (+ `3178b15`, see *Deviations*). Two verdicts, both **fail**.
+
+### Old rule (dev + H5/H4, as pre-registered `356df3d`)
+
+`opt:A,EO,EP` per window (tag `AEOEP`). v6 reproduces EXP-000 (ETH +85.4%, WBTC +85.6%).
+
+| year (ETH, yearly reset) | v6 | this | gain | LP fees v6 → this | rebuilds v6 → this |
+|---|---|---|---|---|---|
+| 2022 | +7.6% | +1.7% | −5.9 | $20.1k → $20.0k | 41 → 46 |
+| 2023 | +32.2% | +45.1% | +12.9 | $23.3k → $30.4k | 24 → 64 |
+| 2024 | +36.4% | +34.1% | −2.3 | $30.9k → $40.6k | 29 → 76 |
+| 2025 | +16.3% | +31.3% | +15.0 | $20.8k → $37.2k | 32 → 58 |
+| 2026-01..09-17 | +18.7% | +20.3% | +1.6 | $6.2k → $7.2k | 24 → 32 |
+
+Continuous: ETH CAGR 13.9% vs 14.0%, Calmar 0.55 vs 0.61, max DD −25.4% vs −22.8%; WBTC CAGR 19.8% vs 17.3%, Calmar 0.85 vs
+0.97, max DD −23.3% vs −17.8% (5.5 pts deeper). Wins 3/5. → **dropped-at-dev** (ETH CAGR and Calmar below v6, WBTC max DD
+beyond the 3-pt limit). Holdout not run.
+
+### Full-history rule (addendum `2253804`, Dino 2026-10-06) — the recorded verdict
+
+`opt:A,EO,EP`, `BINANCE_WARM=1`, one continuous run per pool from the main checkout (results in its `result/v6_validate/`).
+
+| pool | v6 total / CAGR / max DD / Calmar | this | win |
+|---|---|---|---|
+| ETH mainnet WETH/USDC 0.05% 2021-05..2026-09 | +85.6% / 12.2% / −30.7% / 0.40 | +46.2% / 7.3% / −40.7% / 0.18 | lose |
+| ETH mainnet USDC/WETH 0.3% 2021-05..2026-09 | +94.6% / 13.2% / −26.6% / 0.50 | +57.9% / 8.9% / −34.0% / 0.26 | lose |
+| ETH Base WETH/USDC 0.05% 2023-12..2026-09 | +53.1% / 16.5% / −31.8% / 0.52 | +56.3% / 17.3% / −34.7% / 0.50 | lose |
+| ETH Arbitrum WETH/USDC 0.05% 2023-06..2025-07 | invalid (v6 impact ledger $500k) | invalid | lose |
+| ETH Base WETH/USDC 0.3% 2025-01..2026-09 | +28.1% / 15.6% / −22.0% / 0.71 | +40.6% / 22.1% / −22.5% / 0.98 | **win** |
+| BTC mainnet WBTC/USDC 0.3% 2021-11..2026-09 | +54.8% / 9.4% / −25.1% / 0.37 | +58.6% / 9.9% / −30.0% / 0.33 | lose |
+| BTC Base USDC/cbBTC 0.05% 2024-10..2026-09 | invalid (v6 impact ledger $58.5k) | invalid | lose |
+
+Wins 1/7 (1/5 on the valid pools), no BTC win → **fail**.
+
+Reading: the one-sided ladder does what it was built for in rallies (ETH 2023 +12.9 pts, 2025 +15.0 pts; WBTC continuous CAGR
++2.5 pts) and pays for it twice: every dip below the build price leaves the ladder out of range holding 100% ETH, so it is
+rebuilt far more often (ETH 2024: 76 rebuilds vs 29) and carries full exposure into the first leg of every decline before
+the EMA exit (ETH 2021–26 max DD −40.7% vs −30.7%, 2022 −5.9 pts). Fees rise (more concentrated liquidity near the price) but
+not enough. Same lesson as EXP-073 / EXP-001: more ETH above the EMA is paid for in the falls that start above it.
 
 ## Deviations
 
-None so far. (v6's numbers on every window are known; EXP-073's share-70% result motivated the "above EMA only" design.)
+- v6's numbers on every window are known; EXP-073's share-70% result motivated the "above EMA only" design.
+- The rule changed (Dino, 2026-10-06) after pre-registration and while the dev run was in flight; the full-history addendum
+  (`2253804`) was committed before any full-history run. Both verdicts are reported; the full-history one is recorded.
+- The ETH 2025 dev segment crashed for this variant (broker assertion: a one-sided build left ~1e-30 USDC of rounding dust to
+  swap with 0 USDC held). Fix `3178b15` caps every pre-placement swap at the broker's balance — a no-op for runs that did not
+  raise (2025 rerun: v6 +16.2771% and EXP-154 +31.8122%, identical to the first run). The 2025 segment was rerun with
+  `opt:A,EO,EP`; all full-history runs used the fixed code.
+- Two full-history pools are outside the model: Arbitrum `0xc696` from 2023-06-09 and Base cbBTC `0xfbb6` from 2024-10-01
+  start in their first, thin weeks and the quadratic impact ledger exceeds the equity (v6 alone: $500k and $58.5k), as
+  EXP-015 found for Base 0.3% in 2024. The addendum did not define invalid runs; the verdict is the same with or without them
+  (counted as losses: 1/7; excluded: 1/5).
