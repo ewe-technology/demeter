@@ -29,7 +29,7 @@ All of these are **in-sample** for v6 research now: a new pre-registration needs
 | `0x5ab53ee1...` | Ethereum | AAVE/WETH 0.3% | 2021-06-01, ends **2023-12-31** | `holdout-data` | EXP-022/023 holdout |
 | `0x7aea2e8a...` | Base | WETH/cbBTC 0.05% (token0 WETH) | 2024-09-13, ends **2026-09-30** (S3, 2026-10-06) | `base-data` | BTC/ETH full-history check 2026-10-06 |
 | `0x2f5e87c9...` | Arbitrum | WBTC/WETH 0.05% | 2023-01-01, ends **2026-01-13** (S3, 2026-10-06) | `holdout-data` | BTC/ETH full-history check 2026-10-06 |
-| `0xcbcdf962...` | Ethereum | WBTC/WETH **0.3%** | 2021-05-04, ends **2024-10-01** (S3, 2026-10-06; low volume) | `holdout-data` | BTC/ETH full-history check 2026-10-06 |
+| `0xcbcdf962...` | Ethereum | WBTC/WETH **0.3%** | 2021-05-04, ends **2024-10-01** (S3, 2026-10-06; low volume) | `holdout-data` | **too thin for a 2 BTC book**: v6's net value is −29% on day 1 (price-impact ledger > capital), result invalid (2026-10-06) |
 | `0x3416cf6c...` | Ethereum | USDC/USDT 0.01% | 2021-11-15 (S3 to 2025-11-30, RPC 2025-12-01..2026-09-17) | `stable-data` | EXP-052 stable LP (not a v6 pool) |
 | `0x7858e59e...` | Ethereum | USDC/USDT 0.05% | 2021-05-05 to 2021-11-30 (RPC) | `stable-data` | EXP-052 stable LP before 2021-11-15 |
 
