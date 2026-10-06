@@ -3,6 +3,8 @@
 Goal (Dino, 2026-10-05): continue until 10 improvement-level passes (dev + time-split holdout H5 ETH/USDC 0.05% 2021-05..12,
 H4 WBTC/USDC 0.3% 2022-01..10; CAGR above v6, Calmar ≥ v6, max DD no more than 3 pts deeper, ETH yearly wins ≥ 3/5, on both).
 Dino later said "keep searching until 10 passes" without ruling on fee-tier rules; they were counted toward the 10 and labelled.
+(Update 2026-10-06: Dino ruled that fee-tier rules count; see `FINDINGS-2026-10-06-round4.md`. The text below is as written on
+2026-10-05.)
 
 ## Result: 11 passes, of which 2 are one rule for both pools
 
