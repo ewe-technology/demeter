@@ -37,6 +37,7 @@ import pandas as pd
 
 from demeter import Actuator, MarketInfo, Snapshot, Strategy, TokenInfo
 from demeter.uniswap import UniLpMarket, UniV3Pool
+from demeter.uniswap.helper import nearest_usable_tick
 import single_pool_edge as spe
 from tri_btc_eth_gate import ETH_POOL, GAS_GWEI, GAS_UNITS, RATIO_POOL, load_market, usdc, wbtc, weth
 
@@ -153,6 +154,13 @@ class SinglePool(Strategy):
         self.bounds = (price / k, price * k)
         self.events.append((t, kind))
 
+    def inside(self, bounds: tuple, price: Decimal) -> bool:
+        """The current tick strictly inside the range's usable ticks, as add_liquidity_by_value requires."""
+        m: UniLpMarket = self.markets[KEY]
+        spacing = m.pool_info.tick_spacing
+        t1, t2 = sorted(nearest_usable_tick(m.price_to_tick(b), spacing) for b in bounds)
+        return t1 < m.price_to_tick(price) < t2
+
     def remove(self):
         self.markets[KEY].remove_all_liquidity()
         self.bounds = None
@@ -187,9 +195,8 @@ class SinglePool(Strategy):
             if t < self.blocked_until:
                 return
             self.blocked_until = None
-            if cfg.keep_range and self.saved[0] <= price <= self.saved[1]:
-                lo, hi = self.saved
-                t1, t2 = m.price_to_tick(lo), m.price_to_tick(hi)
+            if cfg.keep_range and self.inside(self.saved, price):
+                t1, t2 = (m.price_to_tick(b) for b in self.saved)
                 m.add_liquidity_by_value(min(t1, t2), max(t1, t2), None)  # swaps only what the move shifted
                 self.bounds = self.saved
                 self.events.append((t, "resume"))
@@ -269,6 +276,7 @@ def main():
     p.add_argument("--end", type=date.fromisoformat, default=END)
     p.add_argument("--only", nargs="*", default=None)
     p.add_argument("--workers", type=int, default=WORKERS)
+    p.add_argument("--skip-done", action="store_true", help="skip config-years whose nav file already exists")
     a = p.parse_args()
     os.makedirs(RESULT_DIR, exist_ok=True)
     configs = [c for c in CONFIGS if a.only is None or c.name in a.only]
@@ -276,7 +284,9 @@ def main():
         print(address, "cut %.5f sigma_ref %.5f" % train_stats(address))
     spans = [(max(a.start, date(y, 1, 1)), min(a.end, date(y, 12, 31))) for y in range(a.start.year, a.end.year + 1)]
     with multiprocessing.Pool(a.workers, maxtasksperchild=1) as pool:
-        runs = pool.starmap(run, [(c, s, e) for c in configs for s, e in spans], chunksize=1)
+        tasks = [(c, s, e) for c in configs for s, e in spans
+                 if not (a.skip_done and os.path.exists(f"{RESULT_DIR}/nav_{c.name}_{s.year}.csv"))]
+        runs = pool.starmap(run, tasks, chunksize=1)
     meta = pd.DataFrame(runs)
     meta.to_csv(f"{RESULT_DIR}/runs.csv", index=False)
     pd.set_option("display.width", 250)
