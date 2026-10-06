@@ -70,7 +70,13 @@ Overlap with section A: `4585`, `88e6` (S3 ends 2026-09-09, local is longer: do 
 
 Files for a pool's first days can be 111 bytes (header only, no trades yet); readers must tolerate empty days.
 
-## D. Choosing a fresh holdout
+## D. Choosing pools (since 2026-10-06: no in-sample / out-of-sample split)
+
+Dino, 2026-10-06: every pool in A and C may be used and judged on its full history; S3 pools may be downloaded without asking
+(add them to `POOLS` and this file in the same commit). The note below still matters for how much a multi-pool result says:
+pools that share a price path are not independent evidence.
+
+### Price paths (written for fresh holdouts, before 2026-10-06)
 
 A different pool is not a different price path: `7aea`, `2f5e`, `CBCd` are BTC/ETH like `4585`; `5653` is WBTC like
 `99ac`; Arbitrum/Base WETH/USDC follow ETH like `88e6`. They vary liquidity, fee and chain, not the price sample.

@@ -74,16 +74,22 @@ Dino names versions `v6.1`, `v6.2`, ...; each is one experiment `EXP-NNN` (next 
 
 ## Rules for experiments
 
-- Pre-register (hypothesis, fixed constants, dev data, holdout, success rule) and commit **before** running.
+- Pre-register (hypothesis, fixed constants, pools, success rule) and commit **before** running.
 - Structural changes only; no parameter tuning inside v6's family (PBO 0.56).
 - Idle-capital yield (lending, a stablecoin LP or any other income on the (1 − F) reserve) is not a strategy change and never counts
   as an improvement (Dino, 2026-10-05): an experiment must change how the ETH/BTC liquidity itself is placed, sized, rebuilt or timed.
 - Fee-tier rules count as one strategy (Dino, 2026-10-06): a variant may apply one switch set on pools with fee >= 0.3% and another
   on cheaper pools (`TIER` in `v6_validate.py`). Routing the rebuild swap through a cheaper pool also counts as a strategy change
-  (Dino, ruling relayed by the EXP-117 session). Every fee-tier pair must have at least one half not yet run on its holdout window.
+  (Dino, ruling relayed by the EXP-117 session).
 - Baseline v6 runs in the same invocation. Costs: pool fee + price impact; gas reported, not charged.
-- ETH/USDC 0.05% (2021-05..2026-09-17) and WBTC/USDC 0.3% (2021-11..2026-09-17) are in-sample now: every new
-  pre-registration names a fresh holdout (another pool or chain, or data after 2026-09-17).
+- **No in-sample / out-of-sample split (Dino, 2026-10-06).** Every pool in `INVENTORY.md`, local or in the team S3 bucket, may be
+  used, and a pool may be downloaded from S3 (or with `fetch_uni_minute.py`) without asking; add it to `POOLS` and `INVENTORY.md`
+  in the same commit. A strategy is judged on its **full-history** result: one continuous run per pool over all the data that pool
+  has, v6 in the same invocation. Working bar (my reading of "全歷史獲利不錯", Dino may change it): CAGR above v6, Calmar ≥ v6,
+  max DD no more than 3 pts deeper, on most of the pools run (ETH and BTC pools both represented), not on one pool alone. Report
+  every pool run, including the ones it loses. Pre-register the rule and the pool list before running. EXP-001..152 were judged
+  under the old dev + holdout rule; their verdicts stay as recorded (rounds 2-4 reused the H5 / H4 windows, which by the old
+  rule were already in-sample).
 - Anything seen out of order goes under *Deviations* in the EXP file.
 - Two success levels exist, "improvement over v6" and "standalone good": see `experiments/README.md` (Success levels).
 
@@ -93,10 +99,12 @@ Dino names versions `v6.1`, `v6.2`, ...; each is one experiment `EXP-NNN` (next 
     # pool minute data is gitignored: samples/real-data (ETH pool) and samples/holdout-data (WBTC pools) live in the
     # main checkout /Users/dinohuang/Desktop/demeter-momentum; a worktree symlinks both from there (and samples/stable-data, the
     # USDC/USDT pools behind samples/stable_lp_daily.csv for v6.39).
-    # samples/fetch_uni_minute.py downloads more (e.g. data after 2026-09-17 for a fresh holdout).
+    # samples/fetch_uni_minute.py downloads more (RPC); S3 pools: aws s3 cp from the bucket in INVENTORY.md section C.
     # gas and ETH/USD hourly CSVs are committed in samples/ (regenerate with samples/fetch_gas.py).
     # samples/strategy-example/experiments/INVENTORY.md lists every pool and series (downloaded, in the team S3 bucket, fit for v6): read it before
-    # picking a holdout, and update it whenever data is added or used.
+    # picking pools, and update it whenever data is added or used.
+    # Write backtest results to the main checkout's samples/strategy-example/result/ (gitignored), not inside a worktree:
+    # removing a worktree deletes its result/ folder (round 4's raw CSVs were lost that way).
 
 Run (from `samples/strategy-example`, `PYTHONPATH=../..`):
 

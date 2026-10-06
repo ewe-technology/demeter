@@ -28,12 +28,14 @@ definition of done is in the repo's `CLAUDE.md`.
 - Costs: pool fee + price impact always; gas reported, not charged (deployment chain not fixed yet).
 - No parameter tuning inside v6's family: its PBO is 0.56 (`../V6_VALIDATION.md`). Structural changes only,
   constants fixed in the pre-registration.
-- Data seen so far: ETH/USDC 0.05% 2021-05..2026-09 and WBTC/USDC 0.3% 2021-11..2026-09 are both in-sample now.
-  A new clean holdout must be named in the pre-registration (another pool, chain, or data after 2026-09-17).
+- Since 2026-10-06 (Dino): no in-sample / out-of-sample split. Any pool in `INVENTORY.md` (local or S3) may be used; a
+  strategy is judged on full-history continuous runs over the pools named in its pre-registration (bar in the repo's
+  `CLAUDE.md`, Rules for experiments). Before that date the rule was dev data + a fresh holdout run once (text below).
 
 ## Registry status values
 
-`pre-registered` → `dev-done` → `holdout-pass` | `holdout-fail` | `dropped-at-dev`; `fail` = a single-stage test failed
+`pre-registered` → `dev-done` → `holdout-pass` | `holdout-fail` | `dropped-at-dev`; `fail` = a single-stage test failed.
+From 2026-10-06 (full-history rule): `pre-registered` → `pass` | `fail`.
 
 ## Run
 
@@ -41,7 +43,10 @@ definition of done is in the repo's `CLAUDE.md`.
     PYTHONPATH=../.. python v6_validate.py <pool> <start> <end> opt:A,<id> 4
     # results: result/v6_validate/<pool>-opt-...csv (+ daily equity per variant)
 
-## Success levels (added 2026-10-02, /goal "find five well-performing Uniswap strategies")
+## Success levels (added 2026-10-02, /goal "find five well-performing Uniswap strategies"; holdout parts superseded 2026-10-06)
+
+New experiments use the full-history bar in `CLAUDE.md`; status `pass` / `fail` (`pre-registered` while open). The two
+levels below are how EXP-001..152 were judged.
 
 Two different questions, never mixed in a verdict:
 
