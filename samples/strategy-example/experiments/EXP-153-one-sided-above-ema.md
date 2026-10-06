@@ -2,7 +2,7 @@
 
 - Jira: QUAN-1038
 - Status: fail (full-history rule; old rule: dropped-at-dev)
-- Pre-registration commit: 356df3d (addendum 2253804) · Result commit: see registry
+- Pre-registration commit: 356df3d (addendum 2253804) · Result commit: 36d7049
 - Scope: Dino, 2026-10-06: "那怎麼樣牛市可以賺的多" → two bull-only changes proposed, "好". Number EXP-153 / v6.139 and OPT
   key `EO` reserved with the goal4 session. Pre-registered together with EXP-154.
 
