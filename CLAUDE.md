@@ -15,7 +15,7 @@ EMA 90–120 four-account engine. Every change is an experiment, recorded in thr
   `experiments/<EXP-id>` (registry fields + `hypothesis`, `verdict`, `order`), `curves/eth`, `curves/btc`
   (weekly net value per series key). Only editors write; the page never needs republishing for new rows.
 
-State as of 2026-10-06: EXP-001..152 recorded (`registry.csv`). v6 baseline (EXP-000): ETH continuous 2022-01..2026-09 +85.4%, CAGR 14.0%,
+State as of 2026-10-06 (end of day): EXP-001..154 recorded (`registry.csv`); read "Handoff 2026-10-06" below first. v6 baseline (EXP-000): ETH continuous 2022-01..2026-09 +85.4%, CAGR 14.0%,
 max DD −22.8%; WBTC continuous +85.6%. The /goal of 2026-10-05 (EXP-052..081, 30 experiments) found **no improvement-level pass** on the
 time-split holdout (H5 ETH 2021, H4 WBTC 2022): four dev passes each lost one window; v6.39 (idle reserve in a stablecoin LP) does not count
 (ruling). v6 is a range harvester whose edge is the staged refill below the EMA; ETH and WBTC disagree about recentring (valley shape, pool
@@ -34,6 +34,33 @@ pool, no more H4 / H5 recombinations: `experiments/FINDINGS-2026-10-06-round4.md
 `experiments/FINDINGS-2026-10-02.md`. Pure-LP scope (no perps, no lending) since 2026-10-01.
 Earlier trials (momentum width, fee compounding, EMA exit band) were discarded on purpose. Background: `V6_VALIDATION.md` (PBO 0.56, DSR < 0.95,
 regimes, capacity).
+
+## Handoff 2026-10-06 (two sessions closed; a new session starts here)
+
+Done since round 4, all committed, Jira and dashboard in sync:
+- Rule change: no in-sample / out-of-sample split, full-history judging on every usable pool (Rules for experiments below).
+- EXP-153 / 154 (v6.139 / v6.140, bull-only ladder changes above EMA100): both **fail** under the full-history rule. One-sided ETH
+  ladder wins 1/7 pools (max DD ETH −40.7% vs −30.7%); +40% / −20% ladder raises CAGR on every valid ETH pool but loses both BTC
+  pools (3/7). Jira QUAN-1038 / 1039 (Done).
+- BTC/ETH pools (not an EXP, a comparison): three S3 pools added to `POOLS` / `INVENTORY.md` (Base `0x7aea`, Arbitrum `0x2f5e`,
+  mainnet 0.3% `0xcbcd`) and `0x4585` got a Binance ETH/BTC warm-up. In BTC terms EXP-140 beats v6 on all three valid pools but the
+  gain is small (best: Base 2024-09..2026-09 +14.3% vs v6 +11.0%). In USD terms every variant is close to holding BTC (Arbitrum
+  2023-26 v6 +480% vs hold BTC +474%; mainnet 2021-26 max DD −77%): on a BTC/ETH pool the F engine only moves between ETH and
+  BTC, never to USD, so there is no bear-market protection. `0xcbcd` is too thin for a 2 BTC book (result invalid). Raw runs:
+  `result/v6_validate/0x4585-opt-ACADOEBAIAK-*`, `0x7aea-*`, `0x2f5e-*` in the main checkout.
+- Research note `experiments/RESEARCH-2026-10-06-is-lp-worth-it.md`: passive LP vs holding (fees ≈ 0.8–1.0 × LVR on 5 bp pools);
+  v6's edge is timing, its ETH LP leg is about zero.
+- Records audit: registry, EXP files, Jira and dashboard agree for EXP-000..154. Open Jira under QUAN-834: only QUAN-842 (EXP-008)
+  and QUAN-1013 (EXP-128), both waiting for the forward window. Dashboard curves now show EXP-126 / 140 / 150 (v6.39 and v6.4
+  lines dropped as rulings say they do not count; v6.33 dropped on BTC). Round 4's other raw CSVs were lost with a removed
+  worktree; their numbers stay in the EXP files.
+
+Open decisions for Dino (ask before acting on them):
+1. Confirm or change the full-history bar (my reading of "全歷史獲利不錯", Rules for experiments).
+2. Re-judge the round-4 candidates EXP-126 / 140 / 150 under the full-history rule on all usable pools (about 1 h of runs)?
+3. Add a "Running a /goal search" section here (batch size, when to stop, how to report, keep raw results)? Not written yet.
+4. Build a combined strategy: v6's F from a USDC pool decides coin vs USD, the coin part LPs in a BTC/ETH pool (new code, ~half a day)?
+5. EXP-008 (v6.8, ETH + BTC 50/50 portfolio) can be judged now under the full-history rule instead of waiting for Jan 2027.
 
 ## Git workflow (Dino's standing instruction)
 
