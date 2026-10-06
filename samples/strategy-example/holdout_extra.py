@@ -14,6 +14,7 @@ Both need yield_layer.py --sleeves --holdout first (the sleeves on to 2026-09-30
 Run from samples/strategy-example:
   PYTHONPATH=../.. python holdout_extra.py --d
   PYTHONPATH=../.. python holdout_extra.py --park
+  PYTHONPATH=../.. python holdout_extra.py --park --gwei 20   # one gas price for every year, shown only
 """
 import argparse
 import multiprocessing
@@ -106,13 +107,13 @@ def gaps(table, key, ref, cols=("capital", "tranches")):
     return pd.DataFrame(rows)
 
 
-def setup():
+def setup(gwei=None):
     prices, _, _ = load_prices()
     hours = prices.index
     park, park_events = load_sleeve("park_usdc", HOLDOUT_TAG)
     cash = index_on(park["nav"], hours, FULL[0])
     eth = prices["eth"] * wsteth_ratio(hours, "causal")
-    G.update(gwei=None, btc_direct=False, prices=prices, eth=prices["eth"], park_events=park_events,
+    G.update(gwei=gwei, btc_direct=False, prices=prices, eth=prices["eth"], park_events=park_events,
              C=pd.DataFrame({"eth": eth, "btc": prices["btc"], "cash": cash}, index=hours),
              P=pd.DataFrame({"eth": eth, "btc": prices["btc"], "park": cash, "cash": 1.0}, index=hours))
     return prices, hours, cash
@@ -147,16 +148,18 @@ def main_d():
     print("D_HOLDOUT_DONE")
 
 
-def main_park():
-    setup()
+def main_park(gwei=None):
+    setup(gwei)
+    tag = "" if gwei is None else f"_gwei{gwei:g}"
     jobs = [(p, n, o, r, c) for p in PERIODS for n in cm.TRANCHES for o in range(24 // n) for r in prereg.PARK_RULES
             for c in cm.CAPITALS]
     print(f"{len(jobs)} runs", flush=True)
     with multiprocessing.Pool(cm.WORKERS) as pool:
         table = pd.DataFrame(pool.map(run_park, jobs, chunksize=4))
-    table.to_csv(f"{RESULT_DIR}/park_runs.csv", index=False)
+    table.to_csv(f"{RESULT_DIR}/park_runs{tag}.csv", index=False)
     # "every change" must be C of cost_matrix, offset by offset
-    for period, path in (("short", f"{cm.RESULT_DIR}/runs.csv"), ("holdout", f"{cm.RESULT_DIR}/runs_holdout.csv")):
+    for period, path in (("short", f"{cm.RESULT_DIR}/runs{tag}.csv"),
+                         ("holdout", f"{cm.RESULT_DIR}/runs_holdout{tag}.csv")):
         ref = pd.read_csv(path)
         ref = ref[(ref["version"] == "C on-chain") & ref["period"].str.startswith(PERIODS[period][0])]
         mine = table[(table["period"] == period) & (table["rule"] == "every change")]
@@ -166,12 +169,13 @@ def main_park():
     summary = gaps(table, "rule", "every change")
     gas = table.groupby(["period", "rule", "capital", "tranches"], sort=False)["gas $"].median().rename("gas $ med")
     summary = summary.merge(gas.reset_index(), on=["period", "rule", "capital", "tranches"], how="left")
-    summary.to_csv(f"{RESULT_DIR}/park_summary.csv", index=False)
+    summary.to_csv(f"{RESULT_DIR}/park_summary{tag}.csv", index=False)
     pd.set_option("display.width", 250)
     print(summary.round(3).to_string(index=False))
     short = table[table["period"] == "short"].drop(columns="period")
     holdout = table[table["period"] == "holdout"].drop(columns="period")
-    print(f"\n== preregistered verdict, parking rule to use: {prereg.park_verdict(short, holdout)} ==")
+    if gwei is None:
+        print(f"\n== preregistered verdict, parking rule to use: {prereg.park_verdict(short, holdout)} ==")
     print("PARK_DONE")
 
 
@@ -179,9 +183,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--d", action="store_true")
     parser.add_argument("--park", action="store_true")
+    parser.add_argument("--gwei", type=float, default=None, help="with --park: one gas price for every year")
     cli = parser.parse_args()
     os.makedirs(RESULT_DIR, exist_ok=True)
     if cli.d:
         main_d()
     if cli.park:
-        main_park()
+        main_park(cli.gwei)
