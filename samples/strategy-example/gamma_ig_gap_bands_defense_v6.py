@@ -183,6 +183,9 @@ SHARE_BY_ARMED = False
 # WIDTH_VOL_DAYS completed daily log returns, clamped to [WIDTH_VOL_MIN, WIDTH_VOL_MAX] and rounded to WIDTH_VOL_GRID, the
 # same width up and down (the ladder keeps v6's valley shape). False = v6's fixed +-20%.
 WIDTH_VOL = False
+# EXP-154 (v6.140): at a build whose last completed daily close is above EMA100 (the share rule's test), the ladder's upper
+# reach is WIDE_TOP_ABOVE_EMA instead of upper_ratio; the lower reach and builds below EMA100 stay v6's. None = v6.
+WIDE_TOP_ABOVE_EMA: Decimal | None = None
 WIDTH_VOL_K, WIDTH_VOL_DAYS = 1.0, 30
 WIDTH_VOL_MIN, WIDTH_VOL_MAX, WIDTH_VOL_GRID = 0.10, 0.30, 0.05
 # EXP-044 (v6.31): the ladder is rebuilt after a range exit only when the price is outside it at EXIT_CONFIRM consecutive
@@ -1083,6 +1086,17 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             self.skew_state = f"w{width}"
             if self.skew_state not in self.shape_configs:
                 self.shape_configs[self.skew_state] = self._config(Decimal(str(width)), Decimal(str(width)))
+            self.width_builds[self.skew_state] = self.width_builds.get(self.skew_state, 0) + 1
+            return
+        if WIDE_TOP_ABOVE_EMA is not None and self.daily_ema is not None:   # EXP-154
+            try:
+                _, _, close, ema = ema_share_for(self.daily_ema, timestamp)
+                above = close > ema
+            except KeyError:
+                above = False
+            self.skew_state = "widetop" if above else "flat"
+            if above and self.skew_state not in self.shape_configs:
+                self.shape_configs[self.skew_state] = self._config(WIDE_TOP_ABOVE_EMA, self.lower_ratio)
             self.width_builds[self.skew_state] = self.width_builds.get(self.skew_state, 0) + 1
             return
         if SKEW <= ZERO or self.daily_ema is None:
