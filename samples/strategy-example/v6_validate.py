@@ -99,7 +99,8 @@ LONG_CLOSE_COL = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": "ETHUSDT",
                   "0xfad57d2039c21811c8f2b5d5b65308aa99d31559": "LINKUSDT",
                   # EXP-021: ETH-quoted pools read the ratio of two USDT closes
                   "0xa6cc3c2531fdaa6ae1a3ca84c2855806728693e8": ("LINKUSDT", "ETHUSDT"),
-                  "0x1d42064fc4beb5f8aaf85f4617ae8b3b5b8bd801": ("UNIUSDT", "ETHUSDT")}
+                  "0x1d42064fc4beb5f8aaf85f4617ae8b3b5b8bd801": ("UNIUSDT", "ETHUSDT"),
+                  "0x4585fe77225b41b697c938b018e2ac67ac5a20c0": ("BTCUSDT", "ETHUSDT")}   # WBTC/WETH: BTC in ETH
 INIT_QUOTE = Decimal(100000)
 INIT_BY_POOL = {"0x4585fe77225b41b697c938b018e2ac67ac5a20c0": Decimal(2),  # quote units; default INIT_QUOTE
                 "0xfad57d2039c21811c8f2b5d5b65308aa99d31559": Decimal(10000),   # thin pool: keep the fee share small
@@ -329,8 +330,12 @@ FUND_LONG_CSV = {"ETHUSDT": "../binance_funding_ETHUSDT_long.csv", "BTCUSDT": ".
 def extra_frame() -> pd.DataFrame:
     """EXP-082..: daily dvol / fund / other for the pool's asset (ETH or BTC by LONG_CLOSE_COL)."""
     sym = LONG_CLOSE_COL[POOL]
-    asset, other = ("ETH", "BTCUSDT") if sym == "ETHUSDT" else ("BTC", "ETHUSDT")
-    dvol = pd.read_csv(DVOL_CSV, parse_dates=["date"]).set_index("date")[asset]
+    if isinstance(sym, tuple):   # ETH-quoted pool (e.g. WBTC/WETH): base asset's series; "other" = the quote asset in USD
+        sym, other = sym
+        asset = "ETH" if sym == "ETHUSDT" else "BTC"
+    else:
+        asset, other = ("ETH", "BTCUSDT") if sym == "ETHUSDT" else ("BTC", "ETHUSDT")
+    dvol =pd.read_csv(DVOL_CSV, parse_dates=["date"]).set_index("date")[asset]
     f = pd.read_csv(FUND_LONG_CSV[sym], parse_dates=["timestamp"]).set_index("timestamp")["rate"]
     fund = f.resample("1D").mean()
     oth = pd.read_csv(LONG_CLOSE_CSV, parse_dates=["date"]).set_index("date")[other]
@@ -690,7 +695,8 @@ def main():
         # EXP-040..: window before the pool's own data (out-of-time holdout): the missing warm-up days come from the
         # Binance daily closes of the base asset (close only: the day's high and low equal its close on those days)
         col = LONG_CLOSE_COL[POOL]
-        closes = pd.read_csv(LONG_CLOSE_CSV, parse_dates=["date"]).set_index("date")[col]
+        closes = pd.read_csv(LONG_CLOSE_CSV, parse_dates=["date"]).set_index("date")
+        closes = closes[col[0]] / closes[col[1]] if isinstance(col, tuple) else closes[col]   # ETH-quoted pools: ratio
         seg = closes.loc[pd.Timestamp(warm_from):pd.Timestamp(min(FIRST_DATA[warm_pool], start) - timedelta(days=1))].dropna()
         parts.append(pd.Series(seg.to_numpy(), index=seg.index + pd.Timedelta(hours=23, minutes=59)))
     vol_parts, flow_parts, liq_parts = [], [], []
