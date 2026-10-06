@@ -1950,6 +1950,10 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
                 if SWAPLESS_EXIT and old_position_infos and not self.force_rebuild:   # EXP-057: range exit, no swap
                     base_to_swap, quote_to_swap = ZERO, ZERO
                     self.swapless_exits += 1
+                # EXP-153: never swap more than the broker holds (a one-sided build with 0 quote left rounding dust of
+                # ~1e-30 to swap and the broker asserted); a no-op for every run that did not raise before
+                base_to_swap = min(base_to_swap, lp_market.broker.get_token_balance(self.gp.base_token))
+                quote_to_swap = min(quote_to_swap, lp_market.broker.get_token_balance(self.gp.quote_token))
                 swapped_base, swapped_quote, rebalance_base_fee, rebalance_quote_fee = self.execute_swap(lp_market, base_to_swap, quote_to_swap)
 
                 self.total_base_swap_fee += rebalance_base_fee if rebalance_base_fee is not None else ZERO
