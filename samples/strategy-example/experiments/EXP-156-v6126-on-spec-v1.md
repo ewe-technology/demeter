@@ -3,7 +3,7 @@
 - Jira: QUAN-1041
 - Status: fail
 - Level: improvement (over the new baseline, spec v1)
-- Pre-registration commit: 94737a3 · Result commit: ______
+- Pre-registration commit: 94737a3 · Result commit: c44f088
 - Scope: Dino, 2026-10-06, shared the team's baseline sheet "USDC/ETH gamma maker defence v1 slippage 0.1/fee 0.05"
   (Mark: the spec sheet's ETH/USDC v1 backtest; Maker's `gamma_maker_defense_ethusdc_v1.py`, branch `maker-defense`
   `fb293bc`) and asked whether v6.126 beats it. The answer in this session was "+90.1% vs +83.5% on 2022-01-02..2025-12-31, but
