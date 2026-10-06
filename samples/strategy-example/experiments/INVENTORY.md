@@ -27,6 +27,9 @@ All of these are **in-sample** for v6 research now: a new pre-registration needs
 | `0xc6962004...` | Arbitrum | WETH/USDC 0.05% | 2023-06-09, ends **2025-07-23** | `holdout-data` | EXP-022/023 holdout |
 | `0x8ad599c3...` | Ethereum | USDC/WETH 0.3% | 2021-05-05 (RPC, `fetch_uni_minute.py`, 2026-10-05) | `holdout-data` | EXP-117 LP pool (fee/LVR 1.70 vs `88e6` 0.75) |
 | `0x5ab53ee1...` | Ethereum | AAVE/WETH 0.3% | 2021-06-01, ends **2023-12-31** | `holdout-data` | EXP-022/023 holdout |
+| `0x7aea2e8a...` | Base | WETH/cbBTC 0.05% (token0 WETH) | 2024-09-13, ends **2026-09-30** (S3, 2026-10-06) | `base-data` | BTC/ETH full-history check 2026-10-06 |
+| `0x2f5e87c9...` | Arbitrum | WBTC/WETH 0.05% | 2023-01-01, ends **2026-01-13** (S3, 2026-10-06) | `holdout-data` | BTC/ETH full-history check 2026-10-06 |
+| `0xcbcdf962...` | Ethereum | WBTC/WETH **0.3%** | 2021-05-04, ends **2024-10-01** (S3, 2026-10-06; low volume) | `holdout-data` | BTC/ETH full-history check 2026-10-06 |
 | `0x3416cf6c...` | Ethereum | USDC/USDT 0.01% | 2021-11-15 (S3 to 2025-11-30, RPC 2025-12-01..2026-09-17) | `stable-data` | EXP-052 stable LP (not a v6 pool) |
 | `0x7858e59e...` | Ethereum | USDC/USDT 0.05% | 2021-05-05 to 2021-11-30 (RPC) | `stable-data` | EXP-052 stable LP before 2021-11-15 |
 
@@ -58,10 +61,10 @@ Overlap with section A: `4585`, `88e6` (S3 ends 2026-09-09, local is longer: do 
 
 | Pool | Chain | Pair | S3 range | Fit for v6 |
 |---|---|---|---|---|
-| `0x7AeA2E8A...` | Base | cbBTC/WETH | 2024-09-13 to 2026-09-29 | yes; has days after 2026-09-17 |
-| `0x2f5e87C9...` | Arbitrum | WBTC/WETH | 2023-01-01 to 2026-01-13 | yes |
+| `0x7AeA2E8A...` | Base | cbBTC/WETH 0.05% | 2024-09-13 to 2026-09-30 | downloaded 2026-10-06 (section A) |
+| `0x2f5e87C9...` | Arbitrum | WBTC/WETH 0.05% | 2023-01-01 to 2026-01-13 | downloaded 2026-10-06 (section A) |
 | `0x56534741...` | Ethereum | WBTC/USDT | 2021-06-11 to 2025-10-21 | yes, same price path as `99ac` |
-| `0xCBCdF962...` | Ethereum | WBTC/WETH (likely 0.3%) | 2021-05-04 to 2024-10-01 | yes, low volume |
+| `0xCBCdF962...` | Ethereum | WBTC/WETH 0.3% (read on chain) | 2021-05-04 to 2024-10-01 | downloaded 2026-10-06 (section A), low volume |
 | `0xc473e2aE...` | Arbitrum | USDC/WETH | 2023-06-09 to 2024-08-13 (2023-09-09 missing) | short |
 | `0x109830a1...` | Ethereum | wstETH/WETH | 2022-08-25 to 2025-12-01 | no: pegged ratio, no trend |
 | `0xe8f7c89C...` | Ethereum | cbBTC/WBTC | 2024-09-20 to 2025-11-09 | no: pegged ratio |

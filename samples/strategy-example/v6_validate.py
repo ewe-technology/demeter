@@ -54,6 +54,11 @@ POOLS = {
     "0x5ab53ee1d50eef2c1dd3d5402789cd27bb52c1bb": (("aave", 18), ("eth", 18), 0, 0.3, "../holdout-data"),
     # EXP-117: mainnet USDC/WETH 0.3% (same token order as 0x88e6, tick spacing 60), fetched with fetch_uni_minute.py
     "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8": (("usdc", 6), ("eth", 18), 1, 0.3, "../holdout-data"),
+    # BTC/ETH pools from the team S3 bucket (2026-10-06; fee and token order read on chain). As on 0x4585, ETH is the base and
+    # BTC the quote / numeraire. Base WETH/cbBTC 0.05% (token0 WETH), Arbitrum WBTC/WETH 0.05%, mainnet WBTC/WETH 0.3%.
+    "0x7aea2e8a3843516afa07293a10ac8e49906dabd1": (("eth", 18), ("btc", 8), 0, 0.05, "../base-data"),
+    "0x2f5e87c9312fa29aed5c179e456625d79015299c": (("btc", 8), ("eth", 18), 1, 0.05, "../holdout-data"),
+    "0xcbcdf9626bc03e24f779434178a73a0b4bad62ed": (("btc", 8), ("eth", 18), 1, 0.3, "../holdout-data"),
 }
 # the EMA warm-up needs a year of history before the pool existed: read ETH/USD from the mainnet pool
 WARM_POOL = {"0xd0b53d9277642d899df5c87a3966a349a798f224": "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
@@ -71,7 +76,10 @@ FIRST_DATA = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": date(2021, 5, 6),
               "0x1d42064fc4beb5f8aaf85f4617ae8b3b5b8bd801": date(2021, 6, 1),
               "0xc6962004f452be9203591991d15f6b388e09e8d0": date(2023, 6, 9),
               "0x5ab53ee1d50eef2c1dd3d5402789cd27bb52c1bb": date(2021, 6, 1),
-              "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8": date(2021, 5, 6)}
+              "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8": date(2021, 5, 6),
+              "0x7aea2e8a3843516afa07293a10ac8e49906dabd1": date(2024, 9, 13),
+              "0x2f5e87c9312fa29aed5c179e456625d79015299c": date(2023, 1, 1),
+              "0xcbcdf9626bc03e24f779434178a73a0b4bad62ed": date(2021, 5, 4)}
 # EXP-004: daily Aave USDC supply APR per pool's chain (samples/fetch_aave_rates.py)
 RATE_CSV = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": "../aave_usdc_ethereum_daily.csv",
             "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": "../aave_usdc_ethereum_daily.csv",
@@ -100,9 +108,15 @@ LONG_CLOSE_COL = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": "ETHUSDT",
                   # EXP-021: ETH-quoted pools read the ratio of two USDT closes
                   "0xa6cc3c2531fdaa6ae1a3ca84c2855806728693e8": ("LINKUSDT", "ETHUSDT"),
                   "0x1d42064fc4beb5f8aaf85f4617ae8b3b5b8bd801": ("UNIUSDT", "ETHUSDT"),
-                  "0x4585fe77225b41b697c938b018e2ac67ac5a20c0": ("ETHUSDT", "BTCUSDT")}   # WBTC/WETH: base ETH priced in WBTC
+                  "0x4585fe77225b41b697c938b018e2ac67ac5a20c0": ("ETHUSDT", "BTCUSDT"),   # WBTC/WETH: base ETH priced in WBTC
+                  "0x7aea2e8a3843516afa07293a10ac8e49906dabd1": ("ETHUSDT", "BTCUSDT"),
+                  "0x2f5e87c9312fa29aed5c179e456625d79015299c": ("ETHUSDT", "BTCUSDT"),
+                  "0xcbcdf9626bc03e24f779434178a73a0b4bad62ed": ("ETHUSDT", "BTCUSDT")}
 INIT_QUOTE = Decimal(100000)
 INIT_BY_POOL = {"0x4585fe77225b41b697c938b018e2ac67ac5a20c0": Decimal(2),  # quote units; default INIT_QUOTE
+                "0x7aea2e8a3843516afa07293a10ac8e49906dabd1": Decimal(2),       # BTC/ETH pools: 2 BTC
+                "0x2f5e87c9312fa29aed5c179e456625d79015299c": Decimal(2),
+                "0xcbcdf9626bc03e24f779434178a73a0b4bad62ed": Decimal(2),
                 "0xfad57d2039c21811c8f2b5d5b65308aa99d31559": Decimal(10000),   # thin pool: keep the fee share small
                 "0xa6cc3c2531fdaa6ae1a3ca84c2855806728693e8": Decimal(40),      # EXP-021: 40 WETH ≈ $100k
                 "0x1d42064fc4beb5f8aaf85f4617ae8b3b5b8bd801": Decimal(40),
