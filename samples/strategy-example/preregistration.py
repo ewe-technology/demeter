@@ -7,12 +7,15 @@ What gets backfilled (the colleague's list): on Ethereum the tails of USDC/USDT 
 WBTC/cbBTC 0.01%; on Arbitrum the tails of WETH/USDC and WBTC/WETH 0.05% and new USDC/USDT, wstETH/WETH and
 WBTC/cbBTC 0.01% pools; optionally the BTC/stablecoin pools of both chains.
 
-Five tests, each with its candidates and its verdict rule:
+Five tests, each with its candidates and its verdict rule (tests 6 and 7 were added on 2026-10-06, after tests 1-3
+and 5 had run, and before either of them ran):
   1. yield layer holdout  A / C x 1 / 3 / 6 tranches on Ethereum, 2026-01-01 ~ 2026-09-30 (cost_matrix.py)
   2. gate price source    derived BTC (ETH/USDC x WBTC/WETH) or a direct BTC/stablecoin pool
   3. BTC/stablecoin LP    a diagnostic like vol_lp_check.py; no strategy is designed unless it passes
   4. Arbitrum             the same rules and parameters as Ethereum, never re-picked on Arbitrum data
   5. depeg stress         fixed synthetic shocks to the wstETH and cbBTC sleeves
+  6. D holdout            the full LP version against C, 2026-01-01 ~ 2026-09-30
+  7. parking buffer       fewer resizes of the parking LP, for C at $100k
 
 The verdict functions read the per-offset rows that cost_matrix.py writes (runs*.csv): period, tranches, offset,
 version, capital, total, maxDD. A holdout of nine months is short: "consistent" only means the data did not
@@ -186,6 +189,66 @@ DEPEG_SHOCKS = (  # (sleeve, discount to the peg, days held at that discount bef
 # no pass or fail, it sizes the risk.
 
 
+# ---- 6. D holdout (Ethereum) -------------------------------------------------------------------------------------
+
+# D (ETH in wstETH/WETH LP, BTC in WBTC/cbBTC LP, idle USDC parked) was the best in-sample version (+13.4 pt over A,
+# C +5.0, 2024-01 ~ 2025-11, no gas) and is kept to paper trading because its fees are the least trustworthy number.
+# Its sleeves run on to HOLDOUT's end from the same start. One and three tranches, every offset, as in cost_matrix.
+D_WIDTHS = (0.005, 0.01, 0.02)  # +/- range of both LP sleeves; only 0.005 is judged, the others are shown
+D_TRANCHES = (1, 3)
+D_CAPITALS = (None, 100_000, 1_000_000)
+D_CLAIM_CAPITALS = ("no gas", "$100,000")  # D beats C at one tranche, median over offsets, at both
+
+
+def d_holdout_verdict(runs: pd.DataFrame) -> str:
+    """runs: one period, per-offset rows with version ("C" or "D +/-0.5%" ...), capital, tranches, offset, total.
+    Consistent if D +/-0.5% beats C at both claim capitals; contradicted if it loses at both; else inconclusive."""
+    runs = one_period(runs)
+    gaps = []
+    for capital in D_CLAIM_CAPITALS:
+        part = runs[(runs["capital"] == capital) & (runs["tranches"] == 1)].set_index(["version", "offset"])
+        gaps.append((100 * (part.loc["D +/-0.5%", "total"] - part.loc["C", "total"])).median())
+    if all(g > 0 for g in gaps):
+        return "consistent"
+    return "contradicted" if all(g < 0 for g in gaps) else "inconclusive"
+
+
+# ---- 7. parking buffer ---------------------------------------------------------------------------------------------
+
+# Most of C's gas at $100k is resizing the parking LP each time one tranche flips (cost_matrix.py, report 14.4), and in
+# the holdout C at $100k, 3 tranches turned negative at 20 gwei. The idea came after seeing that, so neither period
+# below is clean: SHORT is in-sample, and HOLDOUT has been looked at three times. Hence the strict rule.
+# The idle part of the portfolio (1 - ETH - BTC) is split into parked USDC/USDT LP and plain USDC:
+PARK_RULES = {
+    "every change": "park all idle USDC, resized whenever a tranche flips (C as tested so far)",
+    "fully out only": "park only while every tranche is out; any partial idle share stays plain USDC",
+    "whole halves": "park the idle share rounded down to 0, 1/2 or 1, so the LP moves only when that crosses 1/2 or 1",
+}
+PARK_CLAIM = ("$100,000", 3)  # capital, tranches; 3 gwei for 2026 and the yearly gwei before, as in test 1
+PARK_MAX_GIVEUP = 0.5  # pt: the most a rule may lose against "every change" without gas, in SHORT (forgone yield)
+
+
+def park_verdict(short: pd.DataFrame, holdout: pd.DataFrame) -> str:
+    """Per-offset rows of C with columns rule, capital, tranches, offset, total, one frame per period. A rule is
+    adopted only if, against "every change", its median gap at PARK_CLAIM is > 0 in both periods and its median gap
+    without gas in SHORT is > -PARK_MAX_GIVEUP. If both rules qualify, the one whose smaller of the two claim gaps is
+    larger wins. Returns the adopted rule, or "every change" when none qualifies."""
+    def gap(runs, rule, capital, tranches):
+        part = one_period(runs)
+        part = part[(part["capital"] == capital) & (part["tranches"] == tranches)].set_index(["rule", "offset"])
+        return (100 * (part.loc[rule, "total"] - part.loc["every change", "total"])).median()
+
+    best, best_score = "every change", 0.0
+    for rule in PARK_RULES:
+        if rule == "every change":
+            continue
+        claim = min(gap(short, rule, *PARK_CLAIM), gap(holdout, rule, *PARK_CLAIM))
+        giveup = gap(short, rule, "no gas", PARK_CLAIM[1])
+        if claim > 0 and giveup > -PARK_MAX_GIVEUP and claim > best_score:
+            best, best_score = rule, claim
+    return best
+
+
 if __name__ == "__main__":
     print(__doc__)
     print("holdout", HOLDOUT, f"EMA{EMA_SPAN}", VERSIONS, TRANCHES, CAPITALS, f"{HOLDOUT_GWEI} gwei")
@@ -197,3 +260,7 @@ if __name__ == "__main__":
         print("LP test", test, "widths", LP_WIDTHS, "capital", LP_CAPITAL)
     print("arbitrum", ARBITRUM_PERIOD, ARBITRUM_POOLS, "|", ARBITRUM_CLAIM)
     print("depeg shocks", DEPEG_SHOCKS)
+    print("D holdout widths", D_WIDTHS, "tranches", D_TRANCHES, "claim at", D_CLAIM_CAPITALS)
+    for rule, what in PARK_RULES.items():
+        print(f"park rule {rule}: {what}")
+    print("park claim", PARK_CLAIM, "max give-up", PARK_MAX_GIVEUP)
