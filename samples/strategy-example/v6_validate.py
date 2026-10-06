@@ -100,7 +100,7 @@ LONG_CLOSE_COL = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": "ETHUSDT",
                   # EXP-021: ETH-quoted pools read the ratio of two USDT closes
                   "0xa6cc3c2531fdaa6ae1a3ca84c2855806728693e8": ("LINKUSDT", "ETHUSDT"),
                   "0x1d42064fc4beb5f8aaf85f4617ae8b3b5b8bd801": ("UNIUSDT", "ETHUSDT"),
-                  "0x4585fe77225b41b697c938b018e2ac67ac5a20c0": ("BTCUSDT", "ETHUSDT")}   # WBTC/WETH: BTC in ETH
+                  "0x4585fe77225b41b697c938b018e2ac67ac5a20c0": ("ETHUSDT", "BTCUSDT")}   # WBTC/WETH: base ETH priced in WBTC
 INIT_QUOTE = Decimal(100000)
 INIT_BY_POOL = {"0x4585fe77225b41b697c938b018e2ac67ac5a20c0": Decimal(2),  # quote units; default INIT_QUOTE
                 "0xfad57d2039c21811c8f2b5d5b65308aa99d31559": Decimal(10000),   # thin pool: keep the fee share small
