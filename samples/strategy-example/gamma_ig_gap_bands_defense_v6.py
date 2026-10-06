@@ -859,6 +859,13 @@ SHAPE_WEIGHTS: Dict[str, List[Decimal]] = {
                             ["0.191805", "0.169667", "0.109101", "0.029427",
                              "0",
                              "0.029427", "0.109101", "0.169667", "0.191805"]],
+    # EXP-155: v6's 16 side bands (zero-width centre at half_gap 0) with other weights, so only the shape changes.
+    # gaussian_16 is the bell above without its centre band (peak one band out each side); uniform_16 is flat.
+    "gaussian_16": [Decimal(w) for w in
+                    ["0.0017", "0.0048", "0.0119", "0.0258", "0.0486", "0.0796", "0.1131", "0.1396",
+                     "0",
+                     "0.1396", "0.1131", "0.0796", "0.0486", "0.0258", "0.0119", "0.0048", "0.0017"]],
+    "uniform_16": [Decimal("0.0625")] * 8 + [Decimal("0")] + [Decimal("0.0625")] * 8,
     "inverted_exponential": [Decimal(w) for w in
                              ["0.080287", "0.078469", "0.075739", "0.071697", "0.065765", "0.057112",
                               "0.044542", "0.026332",

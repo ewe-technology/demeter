@@ -156,6 +156,7 @@ class Variant:
     ratio: str = "0.20"
     deploy: str = V.DEPLOY_SIGNAL
     eth_share: object = V.EMA_SHARE
+    shape: str = "inverted_gaussian"   # EXP-155: ladder weights (SHAPE_WEIGHTS key in the v6 module)
 
     def __hash__(self):
         return hash(self.name)
@@ -335,7 +336,16 @@ OPT = {"A": Variant("A_v6"),
        "EN": Variant("EN_nolow_route_macro_vol", {"REFILL_NO_NEW_LOW": True, "SWAP_ROUTE": "pool", "MACRO_EVENTS": "csv", "MACRO_RESTORE": True,
                                                   "REFILL_VOL_CONFIRM": True, "EXTRA": "pool"}),   # EXP-152: one rule for both pools
        "EO": Variant("EO_onesided_above_ema", {"SHARE_ABOVE_EMA": Decimal("1.0")}),   # EXP-153: one-sided ETH ladder above EMA100
-       "EP": Variant("EP_widetop_above_ema", {"WIDE_TOP_ABOVE_EMA": Decimal("0.40")})}   # EXP-154: +40% / -20% above EMA100
+       "EP": Variant("EP_widetop_above_ema", {"WIDE_TOP_ABOVE_EMA": Decimal("0.40")}),   # EXP-154: +40% / -20% above EMA100
+       # EXP-155 (v6.141, diagnostic): 3 half-widths x 3 shapes; A is the valley at 0.20
+       "EQ": Variant("EQ_valley10", ratio="0.10"),
+       "ER": Variant("ER_valley30", ratio="0.30"),
+       "ES": Variant("ES_uniform10", ratio="0.10", shape="uniform_16"),
+       "ET": Variant("ET_uniform20", ratio="0.20", shape="uniform_16"),
+       "EU": Variant("EU_uniform30", ratio="0.30", shape="uniform_16"),
+       "EV": Variant("EV_bell10", ratio="0.10", shape="gaussian_16"),
+       "EW": Variant("EW_bell20", ratio="0.20", shape="gaussian_16"),
+       "EX": Variant("EX_bell30", ratio="0.30", shape="gaussian_16")}
 # EXP-082..: daily non-price inputs (samples/fetch_deribit_dvol.py, fetch_binance_funding.py, fetch_binance_daily.py)
 DVOL_CSV = "../deribit_dvol_daily.csv"
 FUND_LONG_CSV = {"ETHUSDT": "../binance_funding_ETHUSDT_long.csv", "BTCUSDT": "../binance_funding_BTCUSDT_long.csv"}
@@ -638,7 +648,7 @@ def run_variant(args):
     ratio = Decimal(variant.ratio)
     try:
         with contextlib.redirect_stdout(open(os.environ["DEBUG_LOG"], "w") if os.environ.get("DEBUG_LOG") else io.StringIO()):
-            m = V.run_test(bull, bear, tp, gp, DATA, usdc_price, shape="inverted_gaussian", upper_ratio=ratio,
+            m = V.run_test(bull, bear, tp, gp, DATA, usdc_price, shape=variant.shape, upper_ratio=ratio,
                            lower_ratio=ratio, half_gap=0, eth_share=variant.eth_share, daily_ema=daily,
                            deploy=variant.deploy)
     except Exception as e:

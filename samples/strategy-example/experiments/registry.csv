@@ -154,3 +154,4 @@ EXP-151,2026-10-06,fee tier: stop + volume + routing on 0.3% and v6.75 + cross-a
 EXP-152,2026-10-06,v6.75 + routing + macro restore + volume-confirmed refill on every pool (v6.138),QUAN-1037,dropped-at-dev,-3.11,1/5,,,0.834,0.137,-0.222,8428450,32f78f4,EXP-152-nolow-route-macro-vol.md,improvement
 EXP-153,2026-10-06,one-sided ETH ladder above EMA100: ETH share 100% while the close is above EMA100 (v6.139),QUAN-1038,fail,1.63,3/5,full-history 1/7 pools (no BTC win),,0.847,0.139,-0.254,356df3d,36d7049,EXP-153-one-sided-above-ema.md,improvement
 EXP-154,2026-10-06,asymmetric ladder +40% / -20% while the close is above EMA100 (v6.140),QUAN-1039,fail,-0.28,2/5,full-history 3/7 pools (ETH 3 of 4 valid; no BTC win),,1.120,0.173,-0.246,356df3d,36d7049,EXP-154-wide-top-above-ema.md,improvement
+EXP-155,2026-10-06,ladder half-width x liquidity shape 3 x 3 grid (diagnostic) (v6.141),,pre-registered,,,,,,,,,,EXP-155-width-shape-grid.md,validation
