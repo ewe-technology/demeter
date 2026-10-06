@@ -102,6 +102,8 @@ LONG_CLOSE_CSV = "../binance_daily_closes.csv"
 LONG_CLOSE_COL = {"0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": "ETHUSDT",
                   "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8": "ETHUSDT",
                   "0xd0b53d9277642d899df5c87a3966a349a798f224": "ETHUSDT",
+                  "0xc6962004f452be9203591991d15f6b388e09e8d0": "ETHUSDT",   # EXP-156: spec v1 signal on Arbitrum
+                  "0x6c561b446416e1a00e8e93e221854d6ea4171372": "ETHUSDT",
                   "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35": "BTCUSDT",
                   "0xfbb6eed8e7aa03b138556eedaf5d271a5e1e43ef": "BTCUSDT",
                   "0xfad57d2039c21811c8f2b5d5b65308aa99d31559": "LINKUSDT",
@@ -131,6 +133,12 @@ SWAP_ROUTES = {"0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8": (("0x88e6a0c2ddd26f
                # EXP-128: Base WETH/USDC 0.3% ladder, swaps on Base WETH/USDC 0.05% (token0 is WETH there)
                "0x6c561b446416e1a00e8e93e221854d6ea4171372": (("0xd0b53d9277642d899df5c87a3966a349a798f224", 0.05),)}
 ROUTE_DATA: list | None = None   # EXP-117: per hop (fee %, minute frame of closeTick / currentLiquidity), set in run_variant
+# EXP-156: SPEC=v1 runs every variant on spec sheet v1's settings (Maker's gamma_maker_defense_ethusdc_v1.py, the team's
+# baseline from 2026-10-06): Binance daily closes for the engine, spec weights cut in equal price steps, and each swap
+# costs a flat 0.1% (pool fee included, no price impact). Start windows on 1/2 to match the spec's join day.
+SPEC = os.environ.get("SPEC", "")
+SPEC_SWAP_COST = 0.001
+SPEC_SHAPE = "inverted_gaussian_spec_price"
 
 
 def route_frame(pool: str, start: date, end: date) -> pd.DataFrame:
@@ -389,7 +397,8 @@ def other_fraction() -> pd.Series:
     sym = LONG_CLOSE_COL[POOL]
     other = "BTCUSDT" if sym == "ETHUSDT" else "ETHUSDT"
     c = pd.read_csv(LONG_CLOSE_CSV, parse_dates=["date"]).set_index("date")[other].dropna()
-    saved = {k: getattr(V, k) for k in ENGINE_DEFAULTS}
+    saved = {k: getattr(V, k) for k in [*ENGINE_DEFAULTS, "SIGNAL_CLOSE"]}
+    V.SIGNAL_CLOSE = None   # EXP-156: the other asset's own closes, never the pool asset's spec signal
     try:
         for k, v in ENGINE_DEFAULTS.items():
             setattr(V, k, v)
@@ -470,7 +479,9 @@ class Checked(V.RemixDaoDcaWeekStratStrategy):
         elif quote_in > 0:
             impact = float(quote_in) * 10 ** self.gp.quote_token.decimal / (x1 if base_is_0 else x0) * float(quote_in)
         notional = float(base_in) * price + float(quote_in)
-        if ROUTE_DATA and notional > 0:   # EXP-117: the swap is charged on the 0.05% route instead (only when the pool has a route)
+        if SPEC == "v1":   # EXP-156: flat spec cost on top of the pool fee demeter already took, no impact
+            impact = notional * max(0.0, SPEC_SWAP_COST - float(self.gp.fee) / 100)
+        elif ROUTE_DATA and notional > 0:   # EXP-117: the swap is charged on the 0.05% route instead (only when the pool has a route)
             eth_usd = float(ETH_USD.asof(ts))
             side = float(base_in) * price if base_in > 0 else float(quote_in)   # same side as v6's impact above
             route = 0.0
@@ -646,9 +657,10 @@ def run_variant(args):
     usdc_price = pd.DataFrame(index=pd.date_range(start=start, end=datetime.combine(end, datetime.max.time()),
                                                   freq="min"), data={"price": ONE})
     ratio = Decimal(variant.ratio)
+    shape = SPEC_SHAPE if SPEC == "v1" and variant.shape == "inverted_gaussian" else variant.shape   # EXP-156
     try:
         with contextlib.redirect_stdout(open(os.environ["DEBUG_LOG"], "w") if os.environ.get("DEBUG_LOG") else io.StringIO()):
-            m = V.run_test(bull, bear, tp, gp, DATA, usdc_price, shape=variant.shape, upper_ratio=ratio,
+            m = V.run_test(bull, bear, tp, gp, DATA, usdc_price, shape=shape, upper_ratio=ratio,
                            lower_ratio=ratio, half_gap=0, eth_share=variant.eth_share, daily_ema=daily,
                            deploy=variant.deploy)
     except Exception as e:
@@ -735,11 +747,16 @@ def main():
     POOL_VOL = pd.concat(vol_parts + [daily_quote_volume(DATA, POOL)])   # EXP-087
     POOL_FLOW = pd.concat(flow_parts + [daily_base_flow(DATA, POOL)])   # EXP-096
     PRICE = pd.concat(parts + [DATA.price])
+    if SPEC == "v1":   # EXP-156: the engine's closes from Binance (USD-quoted pools only: one LONG_CLOSE_COL symbol)
+        col = LONG_CLOSE_COL[POOL]
+        assert isinstance(col, str), f"SPEC=v1 needs a USD-quoted pool, {POOL} is quoted in {col[1]}"
+        V.SIGNAL_CLOSE = pd.read_csv(LONG_CLOSE_CSV, parse_dates=["date"]).set_index("date")[col].dropna()
+        assert V.SIGNAL_CLOSE.index[-1] >= pd.Timestamp(end), f"{LONG_CLOSE_CSV} ends {V.SIGNAL_CLOSE.index[-1].date()}"
     if any(v.engine.get("LVR_GATE") for v in variants):   # EXP-012: the gate needs the pool's own week before start
         gate_start = max(start - timedelta(days=V.LVR_GATE_DAYS + 1), FIRST_DATA[POOL])
         GATE_MINUTES = DATA if gate_start >= start else \
             pd.concat([load_minutes(gate_start, start - timedelta(days=1)), DATA])
-    tag = f"{POOL[:6]}-{grid}-{start}-{end}"
+    tag = f"{POOL[:6]}-{grid}{'-spec' + SPEC if SPEC else ''}-{start}-{end}"
     folder = os.path.join("result", "v6_validate", tag)
     os.makedirs(folder, exist_ok=True)
     out_csv = os.path.join("result", "v6_validate", f"{tag}.csv")

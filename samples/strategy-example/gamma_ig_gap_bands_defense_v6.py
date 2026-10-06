@@ -319,6 +319,9 @@ FUND_HOT = 0.0003
 REFILL_VOL_CONFIRM = False
 REFILL_NO_NEW_LOW = False
 TWAP_ENGINE = False
+# EXP-156: daily closes for the EMA / F engine indexed by UTC day (spec v1: Binance ETHUSDT); the day's low / high / open
+# still come from the pool's minutes. None = v6 (the pool's last minute price of each day).
+SIGNAL_CLOSE: pd.Series | None = None
 VRP_PULL = False
 BREADTH_CAP = False
 # EXP-092..096 (v6.79..v6.83): GAS_PANIC_HOLD: no refill stage during the 3 days after a day whose median gas price is above
@@ -568,6 +571,8 @@ def daily_ema_frame(minute_price: pd.Series) -> pd.DataFrame:
     engine's target deployment F, from a minute price series that should start EMA_WARMUP_DAYS before
     the backtest window so the EMAs and the virtual accounts are settled on day one."""
     close = minute_price.astype(float).resample("1D").last().dropna()
+    if SIGNAL_CLOSE is not None:   # EXP-156: spec v1, closes from Binance (warm-up from its first day); intraday from the pool
+        close = SIGNAL_CLOSE.loc[:close.index[-1]].astype(float).dropna()
     if TWAP_ENGINE:   # EXP-089: daily time-weighted mean of the minute prices
         close = minute_price.astype(float).resample("1D").mean().reindex(close.index)
     day_low = minute_price.astype(float).resample("1D").min().reindex(close.index)   # EXP-088
@@ -866,6 +871,12 @@ SHAPE_WEIGHTS: Dict[str, List[Decimal]] = {
                      "0",
                      "0.1396", "0.1131", "0.0796", "0.0486", "0.0258", "0.0119", "0.0048", "0.0017"]],
     "uniform_16": [Decimal("0.0625")] * 8 + [Decimal("0")] + [Decimal("0.0625")] * 8,
+    # EXP-156: spec sheet v1 (Maker's gamma_maker_defense_ethusdc_v1.py): the spec's own 8+8 weights, centre outward
+    # 1.2/4.6/8.8/13/16/18/19/19.4% of each side (x0.005 of total). Within 0.1 pt of inverted_gaussian per band.
+    "inverted_gaussian_spec": [Decimal(w) for w in
+                               ["0.097", "0.095", "0.09", "0.08", "0.065", "0.044", "0.023", "0.006",
+                                "0",
+                                "0.006", "0.023", "0.044", "0.065", "0.08", "0.09", "0.095", "0.097"]],
     "inverted_exponential": [Decimal(w) for w in
                              ["0.080287", "0.078469", "0.075739", "0.071697", "0.065765", "0.057112",
                               "0.044542", "0.026332",
@@ -875,8 +886,34 @@ SHAPE_WEIGHTS: Dict[str, List[Decimal]] = {
 }
 
 
+def build_price_bands(upper_ratio: Decimal, lower_ratio: Decimal, tick_spacing: int, side_count: int,
+                      token0_is_quote: bool) -> List[Tuple[int, int]]:
+    """
+    EXP-156, copied from Maker's spec v1: every band is (upper or lower ratio) / side_count of the centre price wide,
+    i.e. equal PRICE steps (build_gap_bands cuts equal tick counts). Takes the ORIGINAL ratios (+upper / -lower in
+    base price); token0_is_quote flips which tick direction is the rising side (USDC/WETH: higher tick = lower price).
+    """
+    if not (ZERO < upper_ratio and ZERO < lower_ratio < ONE) or side_count <= 0:
+        raise ValueError(f"need upper_ratio > 0, 0 < lower_ratio < 1, side_count > 0, got {upper_ratio} / {lower_ratio} / {side_count}")
+
+    def edge(i: int, rising: bool) -> int:
+        price = 1 + float(upper_ratio) * i / side_count if rising else 1 - float(lower_ratio) * i / side_count
+        return abs(round(math.log(price) / math.log(1.0001) / tick_spacing)) * tick_spacing
+
+    pos = [edge(i, not token0_is_quote) for i in range(side_count + 1)]
+    neg = [edge(i, token0_is_quote) for i in range(side_count + 1)]
+    right = [(pos[i], pos[i + 1]) for i in range(side_count)]
+    left = [(-neg[i + 1], -neg[i]) for i in reversed(range(side_count))]
+    if any(hi <= lo for lo, hi in left + right):
+        raise ValueError(f"a band is narrower than tick spacing {tick_spacing}: {left + right}")
+    return left + [(0, 0)] + right
+
+
+PRICE_SUFFIX = "_price"   # EXP-156: a shape name ending in this cuts its bands in equal price steps (build_price_bands)
+
+
 def build_shape_config(shape: str, upper_ratio: Decimal, lower_ratio: Decimal | str, tick_spacing: int,
-                       half_gap: int | str) -> List[List]:
+                       half_gap: int | str, bands: List[Tuple[int, int]] | None = None) -> List[List]:
     """
     Turn one column of the shape sheet into the [lower tick offset, upper tick offset, share] rows
     the strategy places liquidity with.
@@ -903,7 +940,10 @@ def build_shape_config(shape: str, upper_ratio: Decimal, lower_ratio: Decimal | 
     if half_gap == 0 and weights[side_count] != ZERO:
         raise ValueError(f"shape {shape} puts weight on the centre band, so half_gap 0 would leave it "
                          f"zero width; use an inverted shape or a positive gap")
-    bands = build_gap_bands(upper_ratio, lower_ratio, tick_spacing, side_count, half_gap)
+    if bands is None:
+        bands = build_gap_bands(upper_ratio, lower_ratio, tick_spacing, side_count, half_gap)
+    elif len(bands) != len(weights):
+        raise ValueError(f"shape {shape} has {len(weights)} bands, got {len(bands)}")
 
     total = sum(weights)
     if total <= ZERO:
@@ -1057,6 +1097,12 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             # side must reach "-lower_ratio" and the negative side "+upper_ratio". Re-express both in the other
             # side's formula: 1+u' = 1/(1-l) and 1/(1-l') = 1+u. Swapping the ratios alone is a no-op when they
             # are equal, which is why the first dnprice rerun still came out as +102%/-34%. MIRROR_TICKS is symmetric.
+            if shape.endswith(PRICE_SUFFIX):   # EXP-156: equal price steps, takes the original ratios
+                name = shape[:-len(PRICE_SUFFIX)]
+                if half_gap != 0 or lo == MIRROR_TICKS:
+                    raise ValueError(f"shape {shape}: equal price steps need half_gap 0 and a price ratio for the lower side")
+                bands = build_price_bands(up, lo, spacing, len(SHAPE_WEIGHTS[name]) // 2, quote_is_0)
+                return build_shape_config(name, up, lo, spacing, half_gap, bands)
             if lo != MIRROR_TICKS and quote_is_0:
                 up, lo = lo / (ONE - lo), up / (ONE + up)
             return build_shape_config(shape, up, lo, spacing, half_gap)
