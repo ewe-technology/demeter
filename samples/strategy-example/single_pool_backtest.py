@@ -6,7 +6,8 @@ One pool, one position of [p/k, p k] with k = 1 + width, checked at every full h
   out of range                       -> re-centre (remove, add by value: only the difference is swapped)
   breaker: last hour |log return| above train's (2022-2023) 99th percentile
                                      -> remove; hold the two tokens (hold) or swap the base to the quote (park);
-                                        re-centre once `off` hours pass without another hit
+                                        re-centre once `off` hours pass without another hit (step 1b, keep_range:
+                                        re-enter in the range held before the exit if the price is still inside it)
   dyn: multiplier m = clip(sigma_ref / sigma_24h, 0.25, 4) rounded to the nearest power of two, sigma_ref such that
        m averages 1 over train (single_pool_width.py W24h a1); a new level or out of range -> re-centre at the
        width whose per-capital edge is m times that of +/-10%
@@ -60,6 +61,7 @@ class Config:
     breaker_off: int = 0  # hours out after a hit, 0 = no breaker
     park: bool = False
     dyn: bool = False
+    keep_range: bool = False  # breaker re-entry reuses the range held before the exit while the price is inside it
 
     @property
     def base(self) -> TokenInfo:
@@ -84,6 +86,9 @@ CONFIGS = [
     eth("dyn", 0.10, dyn=True),
     btc("base10", 0.10), btc("base5", 0.05),
     btc("hold1h", 0.10, breaker_off=1), btc("hold4h", 0.10, breaker_off=4),
+    # step 1b: pause instead of re-centre
+    eth("pause1h", 0.10, breaker_off=1, keep_range=True), eth("pause4h", 0.10, breaker_off=4, keep_range=True),
+    btc("pause1h", 0.10, breaker_off=1, keep_range=True), btc("pause4h", 0.10, breaker_off=4, keep_range=True),
 ]
 
 
@@ -130,6 +135,7 @@ class SinglePool(Strategy):
         self.last_price = None
         self.returns = deque(maxlen=24)
         self.blocked_until = None
+        self.saved = None  # range held before a breaker exit, for keep_range
         self.events = []  # (time, kind)
 
     def target_level(self) -> float:
@@ -169,6 +175,7 @@ class SinglePool(Strategy):
         if cfg.breaker_off and abs(ret) > self.cut:
             self.blocked_until = t + pd.Timedelta(hours=cfg.breaker_off)
             if self.bounds is not None:
+                self.saved = self.bounds
                 self.remove()
                 if cfg.park:
                     base = self.broker.get_token_balance(cfg.base)
@@ -180,7 +187,14 @@ class SinglePool(Strategy):
             if t < self.blocked_until:
                 return
             self.blocked_until = None
-            self.place(price, cfg.width, "reenter", t)
+            if cfg.keep_range and self.saved[0] <= price <= self.saved[1]:
+                lo, hi = self.saved
+                t1, t2 = m.price_to_tick(lo), m.price_to_tick(hi)
+                m.add_liquidity_by_value(min(t1, t2), max(t1, t2), None)  # swaps only what the move shifted
+                self.bounds = self.saved
+                self.events.append((t, "resume"))
+            else:
+                self.place(price, cfg.width, "reenter", t)
             return
 
         out = not (self.bounds[0] <= price <= self.bounds[1])
