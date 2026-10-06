@@ -22,7 +22,7 @@ Run from samples/strategy-example (the spot price cache of spot_btc_eth_gate.py 
   PYTHONPATH=../.. python yield_layer.py --sleeves            # Demeter LP runs, hourly bars
   PYTHONPATH=../.. python yield_layer.py --sleeves --minute   # the same on minute bars over 2025, as a check
   PYTHONPATH=../.. python yield_layer.py --combine
-  PYTHONPATH=../.. python yield_layer.py --sleeves --holdout  # park_usdc on to HOLDOUT_END, for cost_matrix --holdout
+  PYTHONPATH=../.. python yield_layer.py --sleeves --holdout  # park_usdc and the D sleeves on to HOLDOUT_END
 """
 import argparse
 import glob
@@ -231,7 +231,7 @@ def sleeves(minute: bool, holdout: bool = False):
     jobs = []
     for s in build_sleeves():
         if holdout:
-            if s.name == "park_usdc":
+            if s.name == "park_usdc" or s.name.startswith(("wsteth_lp", "cbbtc_lp")):
                 jobs.append((s, "1h", s.start, HOLDOUT_END))
         elif minute:
             jobs.append((s, None, max(s.start, MINUTE_WINDOW[0]), min(s.end, MINUTE_WINDOW[1])))
@@ -372,7 +372,7 @@ if __name__ == "__main__":
     parser.add_argument("--quality", action="store_true")
     parser.add_argument("--sleeves", action="store_true")
     parser.add_argument("--minute", action="store_true", help="with --sleeves: minute bars over MINUTE_WINDOW")
-    parser.add_argument("--holdout", action="store_true", help="with --sleeves: only park_usdc, on to HOLDOUT_END")
+    parser.add_argument("--holdout", action="store_true", help="with --sleeves: park_usdc and the D sleeves, on to HOLDOUT_END")
     parser.add_argument("--combine", action="store_true")
     cli = parser.parse_args()
     os.makedirs(RESULT_DIR, exist_ok=True)
