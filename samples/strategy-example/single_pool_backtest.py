@@ -11,7 +11,9 @@ One pool, one position of [p/k, p k] with k = 1 + width, checked at every full h
        m averages 1 over train (single_pool_width.py W24h a1); a new level or out of range -> re-centre at the
        width whose per-capital edge is m times that of +/-10%
 
-Per year: net return (after gas) minus a 50/50 hold from the year's first bar, in the quote (USDC for ETH/USDC,
+Each calendar year is its own run, starting from the quote at a centred position on 1 January (2026: to 30
+September), which keeps one worker at about a year of minute data. Per year: net return (after gas) minus a 50/50
+hold from the year's first bar, in the quote (USDC for ETH/USDC,
 WETH for WBTC/WETH). Gas: tri_btc_eth_gate.GAS_UNITS per action, its yearly gwei, 3 gwei in 2026.
 
 Run from samples/strategy-example (minute CSVs in ../real-data/<pool>/):
@@ -43,7 +45,7 @@ START, END = date(2022, 1, 1), date(2026, 9, 30)
 TRAIN = (2022, 2023)
 REF_K = 1.10
 LEVELS = (0.25, 0.5, 1.0, 2.0, 4.0)
-WORKERS = 3
+WORKERS = 3  # about 1 GB each with a year of minute data
 
 
 @dataclass(frozen=True)
@@ -224,20 +226,22 @@ def run(cfg: Config, start: date, end: date) -> dict:
     nav.index = pd.DatetimeIndex(nav.index)
     gas = gas_in_quote(actuator.actions, cfg, price)
     net = nav - gas.reindex(nav.index, method="ffill").fillna(0.0)
-    swap_fee = sum(float(a.fee) * (1.0 if a.fee.unit.upper() == cfg.quote.name else float(price.asof(pd.Timestamp(a.timestamp))))
+    swap_fee = sum(float(a.fee) * (1.0 if a.fee.unit.upper() == cfg.quote.name
+                                   else float(price.asof(pd.Timestamp(a.timestamp))))
                    for a in actuator.actions if type(a).__name__ == "SwapAction")
-    pd.DataFrame({"net": net, "price": price.reindex(net.index)}).to_csv(f"{RESULT_DIR}/nav_{cfg.name}.csv")
+    tag = f"{cfg.name}_{start.year}"
+    pd.DataFrame({"net": net, "price": price.reindex(net.index)}).to_csv(f"{RESULT_DIR}/nav_{tag}.csv")
     ev = pd.DataFrame(strategy.events, columns=["t", "kind"])
-    ev.to_csv(f"{RESULT_DIR}/events_{cfg.name}.csv", index=False)
-    return {"config": cfg.name, "cut": cut, "sigma_ref": sigma_ref, "gas": float(gas.iloc[-1]) if len(gas) else 0.0,
-            "swap_fee": swap_fee, **{f"n_{k}": v for k, v in ev["kind"].value_counts().items()},
+    ev.to_csv(f"{RESULT_DIR}/events_{tag}.csv", index=False)
+    return {"config": cfg.name, "year": start.year, "cut": cut, "sigma_ref": sigma_ref,
+            "gas": float(gas.iloc[-1]) if len(gas) else 0.0, "swap_fee": swap_fee, **{f"n_{k}": v for k, v in ev["kind"].value_counts().items()},
             "secs": round(time.time() - started)}
 
 
-def yearly(name: str) -> pd.DataFrame:
-    df = pd.read_csv(f"{RESULT_DIR}/nav_{name}.csv", index_col=0, parse_dates=True)
+def yearly(name: str, years: list[int]) -> pd.DataFrame:
     rows = []
-    for y, g in df.groupby(df.index.year):
+    for y in years:
+        g = pd.read_csv(f"{RESULT_DIR}/nav_{name}_{y}.csv", index_col=0, parse_dates=True)
         net = g["net"].iloc[-1] / g["net"].iloc[0] - 1
         hold = 0.5 * (g["price"].iloc[-1] / g["price"].iloc[0]) + 0.5 - 1
         rows.append({"config": name, "year": y, "net": net, "hold5050": hold, "excess": net - hold,
@@ -256,14 +260,15 @@ def main():
     configs = [c for c in CONFIGS if a.only is None or c.name in a.only]
     for address in {c.address for c in configs}:  # fill the cache before the workers read it
         print(address, "cut %.5f sigma_ref %.5f" % train_stats(address))
+    spans = [(max(a.start, date(y, 1, 1)), min(a.end, date(y, 12, 31))) for y in range(a.start.year, a.end.year + 1)]
     with multiprocessing.Pool(a.workers, maxtasksperchild=1) as pool:
-        runs = pool.starmap(run, [(c, a.start, a.end) for c in configs], chunksize=1)
+        runs = pool.starmap(run, [(c, s, e) for c in configs for s, e in spans], chunksize=1)
     meta = pd.DataFrame(runs)
     meta.to_csv(f"{RESULT_DIR}/runs.csv", index=False)
     pd.set_option("display.width", 250)
     pd.set_option("display.max_columns", 30)
     print(meta.to_string(index=False))
-    years = pd.concat([yearly(c.name) for c in configs], ignore_index=True)
+    years = pd.concat([yearly(c.name, [s.year for s, _ in spans]) for c in configs], ignore_index=True)
     years.to_csv(f"{RESULT_DIR}/years.csv", index=False)
     print(years.pivot(index="config", columns="year", values="excess").round(4))
 
