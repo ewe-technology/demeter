@@ -22,6 +22,7 @@ Run from samples/strategy-example (the spot price cache of spot_btc_eth_gate.py 
   PYTHONPATH=../.. python yield_layer.py --sleeves            # Demeter LP runs, hourly bars
   PYTHONPATH=../.. python yield_layer.py --sleeves --minute   # the same on minute bars over 2025, as a check
   PYTHONPATH=../.. python yield_layer.py --combine
+  PYTHONPATH=../.. python yield_layer.py --sleeves --holdout  # park_usdc on to HOLDOUT_END, for cost_matrix --holdout
 """
 import argparse
 import glob
@@ -57,6 +58,8 @@ SHORT = ("2024-01-01", "2025-11-10")
 CBBTC_CLEAN = "2024-10-13"
 CRASH_DAYS = ("2024-08-05", "2025-02-03")  # the wstETH/WETH LP's biggest fee days, found after the sleeve runs
 MINUTE_WINDOW = (date(2025, 1, 1), date(2025, 11, 9))
+HOLDOUT_END = date(2026, 9, 30)  # the backfilled data; same start, so the path up to 2025-11-30 must not change
+HOLDOUT_TAG = "_to2026"
 WIDTHS = (0.005, 0.01, 0.02)
 WORKERS = 4
 KEY = MarketInfo("lp")
@@ -224,14 +227,17 @@ def run_sleeve(s: Sleeve, bar: str | None, start: date, end: date) -> tuple[str,
     return s.name, out, strategy.events, time.time() - started
 
 
-def sleeves(minute: bool):
+def sleeves(minute: bool, holdout: bool = False):
     jobs = []
     for s in build_sleeves():
-        if minute:
+        if holdout:
+            if s.name == "park_usdc":
+                jobs.append((s, "1h", s.start, HOLDOUT_END))
+        elif minute:
             jobs.append((s, None, max(s.start, MINUTE_WINDOW[0]), min(s.end, MINUTE_WINDOW[1])))
         else:
             jobs.append((s, "1h", s.start, s.end))
-    tag = "_1min" if minute else ""
+    tag = HOLDOUT_TAG if holdout else "_1min" if minute else ""
     with multiprocessing.Pool(WORKERS) as pool:
         results = pool.starmap(run_sleeve, jobs)
     rows = []
@@ -366,13 +372,14 @@ if __name__ == "__main__":
     parser.add_argument("--quality", action="store_true")
     parser.add_argument("--sleeves", action="store_true")
     parser.add_argument("--minute", action="store_true", help="with --sleeves: minute bars over MINUTE_WINDOW")
+    parser.add_argument("--holdout", action="store_true", help="with --sleeves: only park_usdc, on to HOLDOUT_END")
     parser.add_argument("--combine", action="store_true")
     cli = parser.parse_args()
     os.makedirs(RESULT_DIR, exist_ok=True)
     if cli.quality:
         quality()
     if cli.sleeves:
-        sleeves(cli.minute)
+        sleeves(cli.minute, cli.holdout)
     if cli.combine:
         combine()
     print("YIELD_DONE")

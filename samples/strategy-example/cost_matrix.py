@@ -21,6 +21,8 @@ traded before mid-2023, so C there is more a valuation than a trade that could h
 Run from samples/strategy-example after yield_layer.py --sleeves (the parking LP) and the spot price cache:
   PYTHONPATH=../.. python cost_matrix.py
   PYTHONPATH=../.. python cost_matrix.py --gwei 10   # one gas price for every year, writes *_gwei10.csv
+  PYTHONPATH=../.. python cost_matrix.py --holdout    # preregistration.HOLDOUT only, judged by its fixed rules;
+                                                      # needs yield_layer.py --sleeves --holdout first
 """
 import argparse
 import multiprocessing
@@ -28,12 +30,13 @@ import os
 
 import pandas as pd
 
+import preregistration as prereg
 import spot_robustness as sr
 from ensemble_gate import ensemble_weights
 from sleeve_sim import GAS_EVENT_UNITS, simulate
 from spot_btc_eth_gate import load_prices
 from tri_btc_eth_gate import GAS_GWEI
-from yield_layer import FULL, SHORT, index_on, load_sleeve, wsteth_ratio
+from yield_layer import FULL, HOLDOUT_TAG, SHORT, index_on, load_sleeve, wsteth_ratio
 
 RESULT_DIR = "result/cost-matrix"
 TRANCHES = (1, 3, 6)
@@ -92,18 +95,19 @@ def run(job):
             "gas $": paid["gas"]}
 
 
-def main(gwei: float | None = None):
+def main(gwei: float | None = None, holdout: bool = False):
     os.makedirs(RESULT_DIR, exist_ok=True)
-    tag = "" if gwei is None else f"_gwei{gwei:g}"
+    tag = ("_holdout" if holdout else "") + ("" if gwei is None else f"_gwei{gwei:g}")
+    periods = (prereg.HOLDOUT,) if holdout else (FULL, SHORT)
     prices, _, _ = load_prices()
     hours = prices.index
-    park, park_events = load_sleeve("park_usdc")
+    park, park_events = load_sleeve("park_usdc", HOLDOUT_TAG if holdout else "")
     G.update(gwei=gwei, prices=prices, eth=prices["eth"], park_events=park_events,
              A=pd.DataFrame({"eth": prices["eth"], "btc": prices["btc"], "cash": 1.0}, index=hours),
              C=pd.DataFrame({"eth": prices["eth"] * wsteth_ratio(hours, "causal"), "btc": prices["btc"],
                              "cash": index_on(park["nav"], hours, FULL[0])}, index=hours))
     jobs = []
-    for period in (FULL, SHORT):
+    for period in periods:
         for n in TRANCHES:
             for offset in range(24 // n):
                 jobs.append((period, n, offset, "A exchange", None))
@@ -160,6 +164,13 @@ def main(gwei: float | None = None):
     for (period, capital), part in shown.groupby(["period", "capital"], sort=False):
         print(f"\n== {period}, {capital} (A on-chain vs A exchange; C vs A on-chain, or A exchange without gas) ==")
         print(part.drop(columns=["period", "capital"]).to_string(index=False))
+    if holdout:
+        verdict = prereg.holdout_verdict(table)
+        verdict.to_csv(f"{RESULT_DIR}/verdict{tag}.csv", index=False)
+        gas_label = "yearly gwei" if gwei is None else f"{gwei:g} gwei"
+        print(f"\n== preregistered verdict ({gas_label}) ==")
+        print(verdict.round(2).to_string(index=False))
+        print("3 tranches narrower than 1 at $100k:", prereg.spread_verdict(table))
     print("MATRIX_DONE")
 
 
@@ -167,4 +178,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--gwei", type=float, default=None,
                         help="one gas price for every year instead of GAS_GWEI, for the sensitivity runs")
-    main(parser.parse_args().gwei)
+    parser.add_argument("--holdout", action="store_true", help="preregistration.HOLDOUT instead of FULL and SHORT")
+    cli = parser.parse_args()
+    main(cli.gwei, cli.holdout)
