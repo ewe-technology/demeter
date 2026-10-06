@@ -23,6 +23,8 @@ Run from samples/strategy-example after yield_layer.py --sleeves (the parking LP
   PYTHONPATH=../.. python cost_matrix.py --gwei 10   # one gas price for every year, writes *_gwei10.csv
   PYTHONPATH=../.. python cost_matrix.py --holdout    # preregistration.HOLDOUT only, judged by its fixed rules;
                                                       # needs yield_layer.py --sleeves --holdout first
+  PYTHONPATH=../.. python cost_matrix.py --btc-direct  # on chain, BTC trades from 2025 on go USDC -> USDT -> WBTC
+                                                      # (0.01% + 0.05% = 6 bps) instead of through WETH (10 bps)
 """
 import argparse
 import multiprocessing
@@ -45,6 +47,14 @@ SWAP = GAS_EVENT_UNITS["swap"]
 PARK_UNITS = {"enter": GAS_EVENT_UNITS["enter"], "exit": GAS_EVENT_UNITS["exit"], "grow": GAS_EVENT_UNITS["enter"],
               "shrink": GAS_EVENT_UNITS["exit"], "recentre": GAS_EVENT_UNITS["recentre"]}
 WORKERS = 4
+# WBTC/USDT 0.05% barely traded before 2025 (reports/btc_eth_tri_pool_research.md 1.2); before that the only BTC/USD
+# pools were 0.30%, dearer than the two 0.05% hops through WETH
+DIRECT_FROM = pd.Timestamp("2025-01-01")
+DIRECT_BPS, TWO_HOP_BPS = 6, 10
+
+
+def btc_route_bps(t: pd.Timestamp) -> float:
+    return DIRECT_BPS if t >= DIRECT_FROM else TWO_HOP_BPS
 
 G = {}  # filled in main before the pool forks
 
@@ -76,13 +86,14 @@ def run(job):
     hours = tuple((h + offset) % 24 for h in range(0, 24, 24 // n))
     w = changes(ensemble_weights(G["prices"], hours, (100,)).loc[lo:])  # sliced first: keeps the state at lo
     scale = 0.0 if capital is None else 100_000 / capital
+    btc_bps = btc_route_bps if G.get("btc_direct") else 10
     if version == "A exchange":
         values, cost, cash_bps, gas, lp = G["A"], 10, 0.0, None, None
     elif version == "A on-chain":
-        values, cost, cash_bps, lp = G["A"], 10, 0.0, None
+        values, cost, cash_bps, lp = G["A"], {"eth": 10, "btc": btc_bps}, 0.0, None
         gas = {"eth": gas_fn(scale, SWAP), "btc": gas_fn(scale, SWAP)} if scale else None
     else:
-        values, cost, cash_bps, lp = G["C"], {"eth": 11, "btc": 10}, 0.5, {"cash": G["park_events"]}
+        values, cost, cash_bps, lp = G["C"], {"eth": 11, "btc": btc_bps}, 0.5, {"cash": G["park_events"]}
         gas = {"eth": gas_fn(scale, 2 * SWAP), "btc": gas_fn(scale, SWAP), "cash": gas_fn(scale, PARK_UNITS)} \
             if scale else None
     nav, trades, paid = simulate(w, values, start=lo, cost_bps=cost, cash_cost_bps=cash_bps, gas=gas, lp=lp,
@@ -95,14 +106,16 @@ def run(job):
             "gas $": paid["gas"]}
 
 
-def main(gwei: float | None = None, holdout: bool = False):
+def main(gwei: float | None = None, holdout: bool = False, btc_direct: bool = False):
     os.makedirs(RESULT_DIR, exist_ok=True)
-    tag = ("_holdout" if holdout else "") + ("" if gwei is None else f"_gwei{gwei:g}")
+    tag = "_holdout" if holdout else ""
+    tag += "" if gwei is None else f"_gwei{gwei:g}"
+    tag += "_btcdirect" if btc_direct else ""
     periods = (prereg.HOLDOUT,) if holdout else (FULL, SHORT)
     prices, _, _ = load_prices()
     hours = prices.index
     park, park_events = load_sleeve("park_usdc", HOLDOUT_TAG if holdout else "")
-    G.update(gwei=gwei, prices=prices, eth=prices["eth"], park_events=park_events,
+    G.update(gwei=gwei, btc_direct=btc_direct, prices=prices, eth=prices["eth"], park_events=park_events,
              A=pd.DataFrame({"eth": prices["eth"], "btc": prices["btc"], "cash": 1.0}, index=hours),
              C=pd.DataFrame({"eth": prices["eth"] * wsteth_ratio(hours, "causal"), "btc": prices["btc"],
                              "cash": index_on(park["nav"], hours, FULL[0])}, index=hours))
@@ -179,5 +192,6 @@ if __name__ == "__main__":
     parser.add_argument("--gwei", type=float, default=None,
                         help="one gas price for every year instead of GAS_GWEI, for the sensitivity runs")
     parser.add_argument("--holdout", action="store_true", help="preregistration.HOLDOUT instead of FULL and SHORT")
+    parser.add_argument("--btc-direct", action="store_true", help="on-chain BTC trades from 2025 on: 6 bps, not 10")
     cli = parser.parse_args()
-    main(cli.gwei, cli.holdout)
+    main(cli.gwei, cli.holdout, cli.btc_direct)
