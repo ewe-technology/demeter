@@ -1,0 +1,19 @@
+<section id="single" data-transition="fade" style="background:#F4F1EA;color:#16202B;font-family:'Noto Sans TC', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:36px">
+<h2 style="font-size:64px;font-weight:700">只在單一資產上看到效果的規則（都還沒單獨通過）</h2>
+<div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:32px">
+<div style="display:flex;flex-direction:column;gap:18px">
+<p style="font-size:32px;font-weight:700;color:#2B5BB8">只在 ETH 看到效果</p>
+<p style="font-size:28px;line-height:1.45;background:#FFFFFF;border-radius:12px;padding:20px 28px"><b>跨資產確認 refill</b>（EXP-158）<br>mainnet ETH 0.05% CAGR +3.3 pts（含 v6.75，比它單獨多 1.8）、rebuild 更少；WBTC 0.3% 變差</p>
+<p style="font-size:28px;line-height:1.45;background:#FFFFFF;border-radius:12px;padding:20px 28px"><b>每週重新置中</b>（EXP-065）<br>ETH CAGR 17.1% vs 14.0%（年度只贏 2/5）；WBTC Calmar 0.82、手續費少一半</p>
+<p style="font-size:28px;line-height:1.45;background:#FFFFFF;border-radius:12px;padding:20px 28px"><b>ladder 上緣加寬</b>（EXP-154/164）<br>EXP-154 每個有效 ETH 池 CAGR 都更高（+0.9～+10.0 pts），EXP-164 的 Arbitrum 例外（−1.6）；兩個 BTC 池都輸</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:18px">
+<p style="font-size:32px;font-weight:700;color:#2B5BB8">只在 WBTC 看到效果</p>
+<p style="font-size:28px;line-height:1.45;background:#FFFFFF;border-radius:12px;padding:20px 28px"><b>intraday stop</b>（EXP-161）<br>WBTC 0.3% CAGR +2.6 pts、max DD −26.3% vs −30.1%；ETH 0.05% 池全輸</p>
+<p style="font-size:28px;line-height:1.45;background:#FFFFFF;border-radius:12px;padding:20px 28px"><b>成交量確認 refill</b>（EXP-087）<br>2022 WBTC 熊市（H4）單獨勝出；ETH 變差</p>
+<p style="font-size:28px;line-height:1.45;background:#FFFFFF;border-radius:12px;padding:20px 28px"><b>不設 lower stop</b>（EXP-066）<br>H4 單獨勝出；但 2021 ETH 崩盤 −24.6%（原 +4.5%，總報酬）</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5B6B7C">為什麼會分家：谷形 ladder 的流動性在邊緣，0.3% WBTC 池每單位風險的手續費高得多（7 日 fee/LVR 中位數 3.49 vs ETH 1.23），兩邊要的節奏相反（FINDINGS-2026-10-05 §2）</p>
+<aside>這頁是只在一個資產上看到效果的規則，它們都還沒單獨通過驗證。ETH 這邊：跨資產確認 refill、每週重新置中、ladder 上緣加寬。WBTC 這邊：intraday stop、成交量確認 refill、不設 lower stop。原因是谷形 ladder 的流動性集中在邊緣，而 0.3% 的 WBTC 池每單位風險賺的手續費高得多，所以兩邊要的節奏剛好相反。下一步是把 ETH、WBTC 的規則分開預先登記再驗證。</aside>
+</section>

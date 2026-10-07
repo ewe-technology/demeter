@@ -1,0 +1,25 @@
+<section id="discount" data-transition="fade" style="background:#F4F1EA;color:#16202B;font-family:'Noto Sans TC', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<h2 style="font-size:64px;font-weight:700">要打折扣的三類：routing、macro、fee-tier</h2>
+<div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:28px;align-items:stretch">
+<div style="background:#FFFFFF;border-top:10px solid #9AA6B2;border-radius:16px;padding:36px;display:flex;flex-direction:column;gap:20px">
+<h3 style="font-size:40px;font-weight:700">swap routing</h3>
+<p style="font-size:28px;line-height:1.5;color:#3E4C5A">rebuild 的 swap 改走 0.05% 池，是模擬出來的手續費折讓</p>
+<p style="font-size:28px;line-height:1.5">2022 WBTC（H4）+3.4%，v6.75 +2.8%、v6 +2.4%</p>
+<p style="font-size:28px;line-height:1.5;color:#B5601F">spec v1 用固定 0.1% swap 成本，測不出來；沒跑過全歷史</p>
+</div>
+<div style="background:#FFFFFF;border-top:10px solid #9AA6B2;border-radius:16px;padding:36px;display:flex;flex-direction:column;gap:20px">
+<h3 style="font-size:40px;font-weight:700">macro 事件</h3>
+<p style="font-size:28px;line-height:1.5;color:#3E4C5A">FOMC／CPI 前後撤出，之後原樣恢復</p>
+<p style="font-size:28px;line-height:1.5">2021 ETH（H5）只多 0.4～0.5 pt；全歷史 EXP-160 贏 5/7，和 v6.75 單獨一樣</p>
+<p style="font-size:28px;line-height:1.5;color:#B5601F">rebuild 約翻倍，gas 未計</p>
+</div>
+<div style="background:#FFFFFF;border-top:10px solid #9AA6B2;border-radius:16px;padding:36px;display:flex;flex-direction:column;gap:20px">
+<h3 style="font-size:40px;font-weight:700">fee-tier 分組</h3>
+<p style="font-size:28px;line-height:1.5;color:#3E4C5A">0.3% 池一套規則、0.05% 池另一套</p>
+<p style="font-size:28px;line-height:1.5">只有兩個池時，等於「ETH 一套、WBTC 一套」；通過的組合（round 3 有 11 個、round 4 有 16 個）每輪約只有 4 個獨立發現</p>
+<p style="font-size:28px;line-height:1.5;color:#B5601F">全歷史：EXP-163 贏 5/7（池數和 v6.75 一樣；0.05% 池 rebuild 翻倍）；EXP-140 整包 3/7</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5B6B7C">gas 例子：EXP-140 整包在 sheet 期間（2022–25）mainnet gas 比 spec v1 多 $34.2k，超過它多賺的 $13.6k（$100k 本金；回測只回報 gas、不扣）</p>
+<aside>這三類要打折扣。routing 是模擬出來的手續費折讓，在 2022 WBTC 熊市比 v6.75 多 0.6 個百分點，但換到 spec v1 的固定 swap 成本就測不出來，也沒跑過全歷史。macro 事件只多 0.4 到 0.5，rebuild 卻翻倍。fee-tier 在兩個池時，本質就是 ETH 一套、WBTC 一套；全歷史上 EXP-163 贏 5/7，但贏的池數和 v6.75 一樣；EXP-140 整包只贏 3/7，而且 gas 比多賺的還多。</aside>
+</section>

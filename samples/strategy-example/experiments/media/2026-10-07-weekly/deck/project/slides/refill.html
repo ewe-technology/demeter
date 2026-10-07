@@ -1,5 +1,5 @@
 <section id="refill" data-transition="fade" style="background:#F4F1EA;color:#16202B;font-family:'Noto Sans TC', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
-<h2 style="font-size:64px;font-weight:700">有用 ①：refill 時機只看「有沒有創新低」</h2>
+<h2 style="font-size:64px;font-weight:700">唯一的通用規則：refill 時「當天創新低不算」</h2>
 <div style="display:flex;gap:56px;align-items:start">
 <div style="position:relative;width:900px;height:560px;background:#FFFFFF;border:2px solid #D5D9DE;border-radius:16px">
 <svg aria-label="跌破 EMA 後 14 天的價格示意：創新低的 4 天以橘色叉號標示不計入 refill，其餘 10 天以藍點標示計入" width="900" height="560" viewBox="0 0 900 560">
@@ -19,10 +19,10 @@
 <p style="font-size:30px;line-height:1.5"><b>v6：</b>跌破 EMA 後，每天都算一天 refill</p>
 <p style="font-size:30px;line-height:1.5"><b style="color:#2B5BB8">v6.75：</b>當天創新低的那天不算，等止跌才補</p>
 <hr style="border-top:2px solid #D5D9DE">
-<p style="font-size:28px;line-height:1.5;color:#3E4C5A">2021 年 ETH（H5）CAGR<br><b style="color:#2B5BB8">21.4%</b> vs v6 7.0%</p>
+<p style="font-size:28px;line-height:1.5;color:#3E4C5A">2021 年 ETH（H5，舊 v6 模型）CAGR<br><b style="color:#2B5BB8">21.4%</b> vs v6 7.0%</p>
 <p style="font-size:28px;line-height:1.5;color:#3E4C5A">spec v1 全歷史：mainnet 兩個 ETH 池 CAGR <b style="color:#2B5BB8">+1.5～2.1 pts</b>；BTC 只 +0.06 pt（雜訊）</p>
 </div>
 </div>
-<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5B6B7C">同一類裡沒用的：DVOL、funding、gas、穩定幣流量、成交量、週末、跨資產 — 都只改 refill 速度，一個池變好、另一個就變差（23 個試了 3 個通過）</p>
-<aside>v6 的收益主要來自跌破 EMA 之後的分段補回。原本每天都算一天，v6.75 改成當天創新低的那天不算，等止跌才往下補，避免接刀。2021 年 ETH 從 7% 變 21.4%。在 spec v1 基準的全歷史上，mainnet 兩個 ETH 池 CAGR 多 1.5 到 2.1 個百分點，BTC 只多 0.06，算雜訊。同一類裡用外部訊號控制 refill 的都沒用。</aside>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5B6B7C">同類其他規則：跨資產確認只對 ETH 有效、成交量確認只對 WBTC 有效（下一頁）；穩定幣流量、週末兩邊都變差，gas 沒影響（23 個試了 3 個通過）</p>
+<aside>v6 的收益主要來自跌破 EMA 之後的分段補回。原本每天都算一天，v6.75 改成當天創新低的那天不算，等止跌才往下補，避免接刀。2021 年 ETH（舊 v6 模型）年化從 7% 變 21.4%。在 spec v1 基準的全歷史上，mainnet 兩個 ETH 池 CAGR 多 1.5 到 2.1 個百分點，BTC 只多 0.06，算雜訊，但 BTC 不吃虧，所以是唯一的通用規則。同類的跨資產確認只對 ETH 有效，成交量確認只對 WBTC 有效；穩定幣流量、週末兩邊都變差，gas 沒影響。</aside>
 </section>

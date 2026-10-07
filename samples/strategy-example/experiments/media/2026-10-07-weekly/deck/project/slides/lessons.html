@@ -3,24 +3,24 @@
 <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:32px">
 <div style="background:#1F2C3A;border-radius:16px;padding:40px;display:flex;flex-direction:column;gap:16px">
 <p style="font-size:30px;font-family:'IBM Plex Mono', 'Courier New', monospace;color:#7FA8F0">01</p>
-<h3 style="font-size:40px;font-weight:700">一個資產變好，另一個就變差</h3>
-<p style="font-size:28px;line-height:1.5;color:#C9D3DD">置中、refill 速度、成交量、funding 都讓 ETH 0.05% 和 WBTC 0.3% 往相反方向走</p>
+<h3 style="font-size:40px;font-weight:700">ETH 和 WBTC 要分開設計</h3>
+<p style="font-size:28px;line-height:1.5;color:#C9D3DD">置中、refill 速度、stop 都讓 ETH 0.05% 和 WBTC 0.3% 往相反方向走；單一資產版本存在，共用版本還沒找到</p>
 </div>
 <div style="background:#1F2C3A;border-radius:16px;padding:40px;display:flex;flex-direction:column;gap:16px">
 <p style="font-size:30px;font-family:'IBM Plex Mono', 'Courier New', monospace;color:#7FA8F0">02</p>
-<h3 style="font-size:40px;font-weight:700">所有通過的，都是同一個發現</h3>
-<p style="font-size:28px;line-height:1.5;color:#C9D3DD">spec v1 的 5 個 pass 和乾淨的 holdout pass 全都帶著 no-new-low refill</p>
+<h3 style="font-size:40px;font-weight:700">通用的只有一條</h3>
+<p style="font-size:28px;line-height:1.5;color:#C9D3DD">乾淨通過的全都帶 no-new-low；其他通過的是單一資產規則的組合</p>
 </div>
 <div style="background:#1F2C3A;border-radius:16px;padding:40px;display:flex;flex-direction:column;gap:16px">
 <p style="font-size:30px;font-family:'IBM Plex Mono', 'Courier New', monospace;color:#7FA8F0">03</p>
-<h3 style="font-size:40px;font-weight:700">rebuild 越多，gas 越吃掉收益</h3>
-<p style="font-size:28px;line-height:1.5;color:#C9D3DD">rebuild 翻倍的變體：mainnet gas 約 $200k vs $122k（$100k 本金，2022–25）</p>
+<h3 style="font-size:40px;font-weight:700">rebuild 翻倍，gas 吃掉收益</h3>
+<p style="font-size:28px;line-height:1.5;color:#C9D3DD">EXP-160：mainnet gas $204k vs spec v1 $122k（$100k，2021-05～2026-09 全歷史，未扣）</p>
 </div>
 <div style="background:#1F2C3A;border-radius:16px;padding:40px;display:flex;flex-direction:column;gap:16px">
 <p style="font-size:30px;font-family:'IBM Plex Mono', 'Courier New', monospace;color:#7FA8F0">04</p>
 <h3 style="font-size:40px;font-weight:700">訊號來源比規則細節重要</h3>
-<p style="font-size:28px;line-height:1.5;color:#C9D3DD">EXP-140 的收益有三分之一是在補池價訊號（2023-03 USDC depeg）</p>
+<p style="font-size:28px;line-height:1.5;color:#C9D3DD">EXP-140 的收益約三分之一是在補池價訊號；換成 Binance 收盤價後只剩 3/7 池</p>
 </div>
 </div>
-<aside>四個跨類別的教訓。第一，大多數規則讓 ETH 和 WBTC 往相反方向走。第二，所有通過的變體其實都是同一個發現：no-new-low refill。第三，rebuild 次數翻倍的變體，gas 成本吃掉收益。第四，訊號用池價還是 Binance 收盤價，比大多數規則細節影響更大。</aside>
+<aside>四個跨類別的教訓。第一，ETH 和 WBTC 要分開設計，單一資產版本存在，共用版本還沒找到。第二，通用的只有 no-new-low 一條。第三，rebuild 翻倍的變體，mainnet 全歷史 gas 從 12 萬多到 20 萬美元。第四，訊號用池價還是 Binance 收盤價，比大多數規則細節影響更大。</aside>
 </section>
