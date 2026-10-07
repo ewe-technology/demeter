@@ -1,0 +1,33 @@
+<section id="context" data-transition="fade" style="background:#F4F1EA;color:#16202B;font-family:'Noto Sans TC', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<h2 style="font-size:64px;font-weight:700">前情：v6 怎麼運作、哪裡可以改</h2>
+<div style="display:flex;align-items:stretch;gap:24px">
+<div style="flex:1;background:#FFFFFF;border:2px solid #D5D9DE;border-radius:16px;padding:32px;display:flex;flex-direction:column;gap:12px">
+<p style="font-size:26px;color:#5B6B7C;font-family:'IBM Plex Mono', 'Courier New', monospace">① 訊號</p>
+<h3 style="font-size:36px;font-weight:700">EMA 90–120</h3>
+<p style="font-size:28px;color:#3E4C5A;line-height:1.4">Binance 日收盤價（spec v1）</p>
+</div>
+<x-shape kind="arrow-right" style="width:64px;height:40px;align-self:center;background:#9AA6B2"></x-shape>
+<div style="flex:1;background:#FFFFFF;border:2px solid #D5D9DE;border-radius:16px;padding:32px;display:flex;flex-direction:column;gap:12px">
+<p style="font-size:26px;color:#5B6B7C;font-family:'IBM Plex Mono', 'Courier New', monospace">② F 引擎</p>
+<h3 style="font-size:36px;font-weight:700">部署比例 F</h3>
+<p style="font-size:28px;color:#3E4C5A;line-height:1.4">四個 EMA 帳戶，各自決定進出</p>
+</div>
+<x-shape kind="arrow-right" style="width:64px;height:40px;align-self:center;background:#9AA6B2"></x-shape>
+<div style="flex:1;background:#FFFFFF;border:2px solid #D5D9DE;border-radius:16px;padding:32px;display:flex;flex-direction:column;gap:12px">
+<p style="font-size:26px;color:#5B6B7C;font-family:'IBM Plex Mono', 'Courier New', monospace">③ LP ladder</p>
+<h3 style="font-size:36px;font-weight:700">±20% 谷形流動性</h3>
+<p style="font-size:28px;color:#3E4C5A;line-height:1.4">Uniswap v3，邊緣厚、中間薄</p>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:20px">
+<p style="font-size:30px;font-weight:700;color:#2B5BB8">本週動過的地方</p>
+<div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:20px">
+<p style="font-size:28px;background:#E3EBF8;border-radius:12px;padding:20px 24px;line-height:1.4"><b>refill</b><br>跌破 EMA 後何時分段補回</p>
+<p style="font-size:28px;background:#E3EBF8;border-radius:12px;padding:20px 24px;line-height:1.4"><b>exit / stop</b><br>何時撤出、要不要止損</p>
+<p style="font-size:28px;background:#E3EBF8;border-radius:12px;padding:20px 24px;line-height:1.4"><b>rebuild</b><br>出界後何時重新置中</p>
+<p style="font-size:28px;background:#E3EBF8;border-radius:12px;padding:20px 24px;line-height:1.4"><b>執行</b><br>swap 走哪個池、哪個 fee tier</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5B6B7C">基準 spec v1（ETH/USDC 0.05%，2022–2025）：+83.5%、APR 16.4%、max DD −25.8%</p>
+<aside>v6 分三層：訊號（EMA 90 到 120）、F 引擎（四個帳戶決定部署多少比例）、LP ladder（正負 20% 的谷形流動性）。本週改的是 refill、exit/stop、rebuild、執行四個環節，另外也試了 F 引擎本身和 ladder 形狀。</aside>
+</section>

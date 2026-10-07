@@ -1,0 +1,118 @@
+{
+  "voice_id": "fQj4gJSexpu8RDE2Ii5m",
+  "model_id": "eleven_multilingual_v2",
+  "scenes": [
+    {
+      "id": "s01_karpathy",
+      "visual": "Title card 'v6 研究週報 2026-10-07'. Then a quote card: 'Karpathy, 2026-10-02' with four stacked tiers that light up one by one: 1 文字（ASD-STE100）→ 2 圖 → 3 HTML 網頁 → 4 解說影片（3b1b 風格 + ElevenLabs 配音）. Tier 4 gets highlighted and grows. End on the line '這支影片就是第 4 層'.",
+      "lines": [
+        "前幾天看到 Karpathy 的一篇貼文。",
+        "他說，以後我們會花更多時間去理解 AI 產出的東西，而產出的形式有好幾層。",
+        "第一層是文字，他建議用航太維修手冊的受控英文 ASD-STE100 來寫，比較好讀。",
+        "第二層是圖，第三層是可以互動的 HTML 網頁。",
+        "他最看好的是第四層：針對任何主題，量身做一支 3b1b 風格的解說影片，再用 ElevenLabs 配音。",
+        "所以這次的研究週報，就照他的建議，做成這支影片。"
+      ]
+    },
+    {
+      "id": "s02_thesis",
+      "visual": "Big statement on the accent blue: '9 類變化 → 2 類有用'. Nine small grey squares appear, then two turn blue labelled 'refill 時機' and 'swap routing'. Then a seesaw: ETH up / BTC down, flipping.",
+      "lines": [
+        "先講結論。這週三天跑了一百一十二個實驗，改動可以分成九類。",
+        "真正有用的只有兩類：refill 的時機，以及 swap 的路徑。",
+        "其他規則大多是 ETH 變好、BTC 變差，或反過來，換個池子或換段時間就不成立。"
+      ]
+    },
+    {
+      "id": "s03_context",
+      "visual": "Pipeline of three boxes with arrows: '① 訊號 EMA 90–120' → '② F 引擎：部署比例 F' → '③ LP ladder ±20% 谷形'. Draw the valley-shaped liquidity profile (thick at the edges, thin in the middle) as bars around a price marker. Then four tags pop under the pipeline: refill, exit/stop, rebuild, 執行.",
+      "lines": [
+        "先複習 v6 怎麼運作。",
+        "訊號是 EMA 九十到一百二十，F 引擎用四個帳戶決定要部署多少比例。",
+        "部署出去的錢，在 Uniswap v3 上做正負百分之二十、邊緣厚中間薄的谷形 LP。",
+        "這週動的地方是：跌破 EMA 後的 refill、出場和止損、出界後的 rebuild，還有 swap 的執行方式。"
+      ]
+    },
+    {
+      "id": "s04_week",
+      "visual": "Horizontal stacked bar chart growing from the left, one row per category (grey = dev 淘汰, orange = 換時段或池子後失敗, blue = 通過): fee-tier 9/3/22, refill 18/2/3, F 引擎 16/0/0, rebuild 12/0/2, exit/stop 5/3/0, macro 1/1/4, ladder 0/5/0, routing 1/0/1 (+1 未判), 閒置資金 1/0/1. Totals at the right.",
+      "lines": [
+        "這是九類各自的結果。灰色是開發階段就淘汰，橘色是換段時間或換池子之後失敗，藍色是通過。",
+        "F 引擎、rebuild、止損、ladder 形狀，幾乎全軍覆沒。",
+        "fee-tier 分組通過最多，但大多是同幾個發現的重新組合。"
+      ]
+    },
+    {
+      "id": "s05_refill",
+      "visual": "Animated price path dropping below a dashed EMA line over 14 days, with daily low wicks. A counter 'v6 refill 天數' ticks on every day. Then replay with the v6.75 rule: days that make a new intraday low get an orange ✕ and the counter skips them; other days get a blue dot (10 counted, 4 skipped). Then numbers: '2021 ETH CAGR 7.0% → 21.4%' and 'mainnet ETH +1.5～2.1 pts，BTC +0.06（雜訊）'.",
+      "lines": [
+        "第一個有用的，是 refill 的時機。",
+        "原本跌破 EMA 之後，每天都算一天 refill，越跌越往下補。",
+        "v6.75 改成：當天如果創了新低，那天就不算，要等止跌才繼續補，避免接刀。",
+        "二〇二一年 ETH 的年化報酬從百分之七變成二十一點四。",
+        "放到七個池子的全歷史，mainnet 兩個 ETH 池多一點五到二點一個百分點，BTC 只多零點零六，算雜訊。",
+        "同一類裡，用外部訊號控制 refill 的，像 funding、gas、成交量，全都沒用。"
+      ]
+    },
+    {
+      "id": "s06_routing",
+      "visual": "Two pool boxes 'WBTC 0.3%' and 'WBTC/ETH 0.05%'; a swap arrow first goes through the 0.3% box (fee label 0.3%), then re-routes through the 0.05% box (fee label 0.05%). Number: 'WBTC CAGR 17.3% → 18.2%'. Then two grey cards: 'macro：rebuild ×2，gas $34k > 收益 $13.6k' and 'fee-tier：全歷史只贏 3/7 池'.",
+      "lines": [
+        "第二個有用的，是 swap 的路徑。",
+        "rebuild 時的換幣改走手續費更低的池子，WBTC 的年化從十七點三提高到十八點二。",
+        "另外兩類只算半有用。macro 事件規則讓 rebuild 次數翻倍，gas 比賺到的還多。",
+        "fee-tier 分組在兩個池子上很亮眼，但其實就是 ETH 一套、WBTC 一套，換成七個池子只贏三個。"
+      ]
+    },
+    {
+      "id": "s07_nohelp",
+      "visual": "Four orange-edged cards appear one by one with a one-line reason each: 'F 引擎：16 個全淘汰', 'rebuild：ETH 好、WBTC 手續費少一半', 'exit/stop：拿掉 lower stop，2021 −24.6%', 'ladder：加寬 = 加 beta'. A big '43 → 0' at the end.",
+      "lines": [
+        "沒用的有四類，加起來四十三個實驗。",
+        "F 引擎的任何疊加都會砍到 EMA 下方的分段部署，而那正是 v6 賺錢的地方。",
+        "重新置中對 ETH 有利，但 WBTC 的手續費少一半。",
+        "拿掉止損，二〇二一年崩盤時從正四點五變成負二十四點六。",
+        "把 ladder 加寬或做成單邊，只是加大 beta。"
+      ]
+    },
+    {
+      "id": "s08_fullhist",
+      "visual": "Line chart drawing left to right, 2021-05 to 2026-09, weekly net value in $k on $100k: blue v6.75 (ends 212.6), grey spec v1 (ends 197.7), light grey hold ETH (ends 75.8). Use the data in curve_eth_mainnet.json. Then a compact 7-dot scoreboard: 5 blue (win) 2 orange (lose).",
+      "lines": [
+        "這是 mainnet ETH 池的全歷史淨值。",
+        "藍線是 v6.75，灰線是基準 spec v1，最淡的是單純持有 ETH。",
+        "七個池子贏了五個，但真正有差的只有 mainnet 的 ETH 池。"
+      ]
+    },
+    {
+      "id": "s09_lessons",
+      "visual": "Four numbered lessons stacked, each appearing with a short icon animation: 01 seesaw ETH/BTC, 02 five arrows merging into one 'no-new-low', 03 gas meter rising with rebuild count, 04 signal source switch 'pool price → Binance close'.",
+      "lines": [
+        "四個跨類別的教訓。",
+        "第一，一個資產變好，另一個通常就變差。",
+        "第二，所有通過的變體，其實都是同一個發現。",
+        "第三，rebuild 越多，gas 越吃掉收益。",
+        "第四，訊號來源比規則細節重要。"
+      ]
+    },
+    {
+      "id": "s10_impact",
+      "visual": "Three big numbers side by side: '−15' (舊 v6 落後 spec v1), '7 池' (全歷史判定), '1 條' (no-new-low). Each with a one-line caption.",
+      "lines": [
+        "對策略的影響有三件事。",
+        "基準換成 spec v1，舊 v6 用池價當訊號，落後十五個百分點。",
+        "判定改成七個池子的全歷史。",
+        "而這週值得留下的規則，只有一條。"
+      ]
+    },
+    {
+      "id": "s11_summary",
+      "visual": "Closing card: left '有用：refill 時機、swap routing' in blue, right '沒用：F 引擎、rebuild、stop、ladder、外部訊號' in orange, bottom line 'v6 的優勢在 EMA 下方的分段補回'. Fade out.",
+      "lines": [
+        "總結。v6 的優勢在 EMA 下方的分段補回。",
+        "真正有用的改動，都是讓補回更準，而不是改變它。",
+        "下一步，用九月十七日之後的新資料，驗證 no-new-low。"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+<section id="appendix" data-transition="fade" style="background:#F4F1EA;color:#16202B;font-family:'Noto Sans TC', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:36px">
+<h2 style="font-size:56px;font-weight:700">Appendix：spec v1 基準上的全歷史結果（7 池）</h2>
+<table style="width:1664px;font-size:26px;color:#16202B">
+<tr><th style="width:12%;text-align:left">EXP</th><th style="width:40%;text-align:left">變化</th><th style="width:14%;text-align:center">贏的池數</th><th style="width:12%;text-align:center">判定</th><th style="width:22%;text-align:left">rebuild 次數</th></tr>
+<tr><td>156</td><td>EXP-140（round 4 最佳）改用 spec v1 跑</td><td style="text-align:center">3/7</td><td style="text-align:center;color:#B5601F">fail</td><td>翻倍</td></tr>
+<tr><td>157</td><td>v6.75 no-new-low 單獨</td><td style="text-align:center">5/7</td><td style="text-align:center;color:#2B5BB8">pass</td><td>與 spec v1 相同</td></tr>
+<tr><td>158</td><td>+ 跨資產 refill</td><td style="text-align:center">4/7</td><td style="text-align:center;color:#2B5BB8">pass</td><td>不多於 spec v1</td></tr>
+<tr><td>159</td><td>+ 跨資產 refill + macro restore</td><td style="text-align:center">4/7</td><td style="text-align:center;color:#2B5BB8">pass</td><td>翻倍</td></tr>
+<tr><td>160</td><td>+ macro restore</td><td style="text-align:center">5/7</td><td style="text-align:center;color:#2B5BB8">pass</td><td>翻倍</td></tr>
+<tr><td>161</td><td>+ intraday stop</td><td style="text-align:center">3/7</td><td style="text-align:center;color:#B5601F">fail</td><td>—</td></tr>
+<tr><td>162</td><td>+ 兩天確認才 exit</td><td style="text-align:center">1/7</td><td style="text-align:center;color:#B5601F">fail</td><td>—</td></tr>
+<tr><td>163</td><td>fee tier：0.3% 用 v6.75，0.05% 用 159 的規則</td><td style="text-align:center">5/7</td><td style="text-align:center;color:#2B5BB8">pass</td><td>翻倍</td></tr>
+<tr><td>164</td><td>+ 上緣加寬</td><td style="text-align:center">2/7</td><td style="text-align:center;color:#B5601F">fail</td><td>—</td></tr>
+</table>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5B6B7C">判定門檻：CAGR 高於 spec v1、Calmar ≥ spec v1、max DD 深不超過 3 pts，在多數池成立且 ETH、BTC 池都有。原始數據：result/v6_validate/*-opt-AGAGBGCGDGEGFGGGH-specv1-*</p>
+<aside>附錄：spec v1 基準上 9 個變體的全歷史結果。5 個 pass 全部帶 v6.75 的 no-new-low，加上其他規則都沒有更好；159、160、163 的 rebuild 次數翻倍，gas 未計。</aside>
+</section>

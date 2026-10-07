@@ -1,0 +1,22 @@
+<section id="impact" data-transition="fade" style="background:#F4F1EA;color:#16202B;font-family:'Noto Sans TC', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<h2 style="font-size:64px;font-weight:700">對策略的影響：三件事變了</h2>
+<div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:28px">
+<div style="background:#FFFFFF;border:2px solid #D5D9DE;border-radius:16px;padding:40px;display:flex;flex-direction:column;gap:20px">
+<p style="font-size:72px;font-weight:900;color:#2B5BB8;font-family:'IBM Plex Mono', 'Courier New', monospace">−15</p>
+<h3 style="font-size:36px;font-weight:700">基準換成 spec v1</h3>
+<p style="font-size:28px;line-height:1.5;color:#3E4C5A">舊 v6 用池價當訊號，在 sheet 期間落後 spec v1 15 pts，主因是 2023-03 USDC depeg。之後的實驗都跑 SPEC=v1。</p>
+</div>
+<div style="background:#FFFFFF;border:2px solid #D5D9DE;border-radius:16px;padding:40px;display:flex;flex-direction:column;gap:20px">
+<p style="font-size:72px;font-weight:900;color:#2B5BB8;font-family:'IBM Plex Mono', 'Courier New', monospace">7 池</p>
+<h3 style="font-size:36px;font-weight:700">改用全歷史判定</h3>
+<p style="font-size:28px;line-height:1.5;color:#3E4C5A">不再切 in／out-of-sample。每個池用全部資料連續跑，要在多數池贏，ETH 和 BTC 都要有。</p>
+</div>
+<div style="background:#FFFFFF;border:2px solid #D5D9DE;border-radius:16px;padding:40px;display:flex;flex-direction:column;gap:20px">
+<p style="font-size:72px;font-weight:900;color:#2B5BB8;font-family:'IBM Plex Mono', 'Courier New', monospace">1 條</p>
+<h3 style="font-size:36px;font-weight:700">一條規則值得留下</h3>
+<p style="font-size:28px;line-height:1.5;color:#3E4C5A">no-new-low refill 是唯一一致的改進，ETH 上有效；等 2026-09-17 之後的 forward window 確認。</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5B6B7C">另一個發現：放到 BTC/ETH 池時，F 只在 ETH 和 BTC 之間移動、不會轉成 USD，用 USD 算幾乎等於持有 BTC，沒有熊市保護。</p>
+<aside>對策略的影響有三件事。第一，基準換成 spec v1，舊 v6 用池價當訊號，落後 15 個百分點，主要是 2023 年 3 月 USDC 脫鉤。第二，改用 7 池全歷史判定，不再切樣本內外。第三，這週只有 no-new-low refill 這一條規則值得留下，還要等 forward window 確認。</aside>
+</section>
