@@ -1,9 +1,9 @@
 # EXP-170: EXP-168's refill-low lower edge + ETH share fixed at 50% (v6.155)
 
-- Jira: QUAN-___
-- Status: pre-registered
+- Jira: QUAN-1076
+- Status: fail
 - Level: improvement (over spec v1 on ETH/USDC, over v6 on WBTC/ETH; then the seven-pool bar)
-- Pre-registration commit: ______ · Result commit: ______
+- Pre-registration commit: ac4a870 · Result commit: ______
 - Scope: Dino, 2026-10-07, /goal "不斷的抽換v6裡面的概念，加上+-20的動態調整，直到找到總績效比v6好的策略" (keep swapping v6's
   concepts, with a dynamic ±20%, until a strategy beats v6 overall). Batch 1 = EXP-169..172, pre-registered together.
 
@@ -29,6 +29,20 @@ Variant `GN`: `WIDTH_SIGNAL = "refill_low"` (EXP-168) + `SHARE_ABOVE_EMA = 0.5` 
 
 ## Result
 
+Stage 1: run `opt-AGMGNGOGP` on `0x88e6` with `SPEC=v1` and on `0x4585` with `BINANCE_WARM=1` (values in BTC), 2 workers
+(2026-10-07; raw runs in the main checkout's `result/v6_validate/0x88e6-opt-AGMGNGOGP-specv1-*`, `0x4585-opt-AGMGNGOGP-*`).
+`A` reproduces spec v1 (+97.7%) and v6 on `0x4585` (-1.40%). v6.75 alone (EXP-157 `GA`, same `0x88e6` window): +112.6% /
+15.17% CAGR / -23.5% / 0.645.
+
+| pool | baseline total / CAGR / max DD / Calmar | this | rebuilds | win |
+|---|---|---|---|---|
+| ETH/USDC `0x88e6` (spec v1) | +97.7% / 13.55% / -22.9% / 0.591 | +94.3% / 13.17% / -18.0% / 0.733 | 179 → 186 | lose |
+| WBTC/ETH `0x4585` (v6, BTC) | -1.40% / -0.29% / -32.7% / <0 | -1.06% / -0.22% / -27.7% / <0 | 100 → 107 | **win** |
+
+Verdict: **fail** at stage 1 (1/2): ETH CAGR 0.38 pt below spec v1 (Calmar 0.733 vs 0.591, max DD 4.9 pts shallower).
+
 ## Deviations
 
 - The batch was chosen after EXP-165..168 (same two pools): EXP-168 was the closest width rule, so every variant here keeps it.
+- The pre-registration commit `ac4a870` was made before the runs; its push failed on GitHub 500 errors and went through one
+  minute after the stage-1 runs started (retry loop).
