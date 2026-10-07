@@ -1,7 +1,7 @@
 # v6 weekly 2026-10-07: explainer video
 
 The video is made with Manim (3b1b style) and an edge-tts voice-over (`zh-TW-YunJheNeural`, rate −10%). The script is
-`../narration.json`: 11 scenes, and each scene's `lines` are both the narration and the burned-in subtitles. The chart
+`../narration.json`: 13 scenes, and each scene's `lines` are both the narration and the burned-in subtitles. The chart
 in s08 is drawn from `../curve_eth_mainnet.json`.
 
 ## Files
@@ -10,7 +10,7 @@ in s08 is drawn from `../curve_eth_mainnet.json`.
 |---|---|
 | `tts.py` | Makes one mp3 per narration line (cached by a hash of voice, rate and text). It measures each clip with ffprobe and writes `timings.json` (per-line `start` / `dur`, per-scene `total`). Gaps: 2.5 s title card before s01, 0.4 s at the start of each scene, 0.5 s between lines, 1.0 s at the end of each scene. |
 | `estimate_timings.py` | Writes `estimated_timings.json` in the same format, at 0.2 s per character and with no audio. Use it to check the layout without generating speech. |
-| `weekly.py` | Scenes `S01`..`S11`. `$V6_TIMINGS` names the timings file. Each narration line is one beat: its subtitle is on screen from `start` to `start+dur`, and the beat's animations are fitted into that window. Scenes render without sound. |
+| `weekly.py` | One scene class per narration scene, named after the id prefix in upper case (`s03b_edge` → `S03B`). The scene list in `build.sh` and `assemble.py` comes from the timings file. `$V6_TIMINGS` names the timings file. Each narration line is one beat: its subtitle is on screen from `start` to `start+dur`, and the beat's animations are fitted into that window. Scenes render without sound. |
 | `assemble.py` | Joins the scene mp4s and places every clip at (rendered length of the earlier scenes + `start`), so A/V drift cannot build up. It then muxes to H.264/yuv420p + AAC and exports a thumbnail. |
 | `build.sh` | Runs the whole pipeline. |
 

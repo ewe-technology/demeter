@@ -2,7 +2,7 @@
 # Build the v6 weekly explainer.
 #   ./build.sh real high   # edge-tts clips (cached) + 1080p30 final -> Desktop mp4 + png
 #   ./build.sh est low     # estimated timings, silent, 480p15 smoke test (no API calls)
-# Optional 3rd arg: a single scene to (re)render, e.g. S05 (assembly still uses all 11).
+# Optional 3rd arg: a single scene to (re)render, e.g. S05 (assembly still uses every scene).
 set -euo pipefail
 MODE=${1:-real}
 QUAL=${2:-high}
@@ -26,7 +26,8 @@ else
 fi
 
 MEDIA="$OUT/media-$MODE"
-for S in S01 S02 S03 S04 S05 S06 S07 S08 S09 S10 S11; do
+SCENES=$("$PY" -c "import json,sys; print(' '.join(s['id'].split('_')[0].upper() for s in json.load(open(sys.argv[1]))['scenes']))" "$TIM")
+for S in $SCENES; do
   if [ -n "$ONLY" ] && [ "$S" != "$ONLY" ]; then continue; fi
   V6_TIMINGS="$TIM" "$PY" -m manim render "${FLAGS[@]}" --disable_caching --media_dir "$MEDIA" \
     -o "$S.mp4" "$HERE/weekly.py" "$S" >"$OUT/render-$S.log" 2>&1 || { tail -30 "$OUT/render-$S.log"; exit 1; }

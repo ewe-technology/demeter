@@ -13,7 +13,11 @@ import sys
 import tempfile
 from pathlib import Path
 
-SCENES = [f"S{k:02d}" for k in range(1, 12)]
+
+
+def scene_class(sid):
+    """Scene id -> Manim class name in weekly.py (s03b_edge -> S03B)."""
+    return sid.split("_")[0].upper()
 
 
 def probe(path):
@@ -29,7 +33,8 @@ def run(cmd):
 def main():
     timings = json.loads(Path(sys.argv[1]).read_text())
     vdir, out = Path(sys.argv[2]), Path(sys.argv[3])
-    vids = [vdir / f"{s}.mp4" for s in SCENES]
+    names = [scene_class(sc["id"]) for sc in timings["scenes"]]
+    vids = [vdir / f"{n}.mp4" for n in names]
     durs = [probe(v) for v in vids]
     total = sum(durs)
     tmp = Path(tempfile.mkdtemp(prefix="v6weekly_"))
@@ -40,7 +45,7 @@ def main():
     run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", str(video)])
 
     clips, offset = [], 0.0
-    for sc, d, sid in zip(timings["scenes"], durs, SCENES):
+    for sc, d, sid in zip(timings["scenes"], durs, names):
         for ln in sc["lines"]:
             if ln.get("audio"):
                 clips.append((ln["audio"], offset + ln["start"]))
