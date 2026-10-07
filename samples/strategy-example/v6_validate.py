@@ -344,7 +344,19 @@ OPT = {"A": Variant("A_v6"),
        "EN": Variant("EN_nolow_route_macro_vol", {"REFILL_NO_NEW_LOW": True, "SWAP_ROUTE": "pool", "MACRO_EVENTS": "csv", "MACRO_RESTORE": True,
                                                   "REFILL_VOL_CONFIRM": True, "EXTRA": "pool"}),   # EXP-152: one rule for both pools
        "EO": Variant("EO_onesided_above_ema", {"SHARE_ABOVE_EMA": Decimal("1.0")}),   # EXP-153: one-sided ETH ladder above EMA100
-       "EP": Variant("EP_widetop_above_ema", {"WIDE_TOP_ABOVE_EMA": Decimal("0.40")})}   # EXP-154: +40% / -20% above EMA100
+       "EP": Variant("EP_widetop_above_ema", {"WIDE_TOP_ABOVE_EMA": Decimal("0.40")}),   # EXP-154: +40% / -20% above EMA100
+       # EXP-157..164 (v6.142..149): first /goal batch on the spec v1 baseline (SPEC=v1), full-history rule on 7 pools
+       "GA": Variant("GA_nolow", {"REFILL_NO_NEW_LOW": True}),   # EXP-157: v6.75 re-judged
+       "GB": Variant("GB_nolow_xasset", {"REFILL_NO_NEW_LOW": True, "REFILL_GATE": "xasset", "EXTRA": "pool"}),   # EXP-158
+       "GC": Variant("GC_nolow_xasset_macro", {"REFILL_NO_NEW_LOW": True, "REFILL_GATE": "xasset", "EXTRA": "pool",
+                                               "MACRO_EVENTS": "csv", "MACRO_RESTORE": True}),   # EXP-159
+       "GD": Variant("GD_nolow_macro", {"REFILL_NO_NEW_LOW": True, "MACRO_EVENTS": "csv", "MACRO_RESTORE": True}),   # EXP-160
+       "GE": Variant("GE_nolow_istop", {"REFILL_NO_NEW_LOW": True, "INTRADAY_STOP": True}),   # EXP-161
+       "GF": Variant("GF_nolow_exit2", {"REFILL_NO_NEW_LOW": True, "EXIT_CONFIRM": 2}),   # EXP-162
+       "GG": Variant("GG_tier_nolow_nlxmacro", {"TIER": {"hi": {"REFILL_NO_NEW_LOW": True},
+                                                         "lo": {"REFILL_NO_NEW_LOW": True, "REFILL_GATE": "xasset", "EXTRA": "pool",
+                                                                "MACRO_EVENTS": "csv", "MACRO_RESTORE": True}}}),   # EXP-163
+       "GH": Variant("GH_nolow_widetop", {"REFILL_NO_NEW_LOW": True, "WIDE_TOP_ABOVE_EMA": Decimal("0.40")})}   # EXP-164
 # EXP-082..: daily non-price inputs (samples/fetch_deribit_dvol.py, fetch_binance_funding.py, fetch_binance_daily.py)
 DVOL_CSV = "../deribit_dvol_daily.csv"
 FUND_LONG_CSV = {"ETHUSDT": "../binance_funding_ETHUSDT_long.csv", "BTCUSDT": "../binance_funding_BTCUSDT_long.csv"}
