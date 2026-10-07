@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 
 import gamma_ig_gap_bands_defense_v6 as V
-from demeter import TokenInfo, MarketInfo, ChainType
+from demeter import TokenInfo, MarketInfo, ChainType, Actuator, AccountStatus
 from demeter.uniswap import UniV3Pool
 from market_v2 import UniLpMarketV2
 from math_const import ZERO, ONE
@@ -568,6 +568,27 @@ def _net_metrics(values, *args, **kwargs):
 
 V.performance_metrics_for_dca = _net_metrics
 V.RemixDaoDcaWeekStratStrategy = Checked
+
+
+class _LeanStatusList(list):
+    """Keeps only timestamp and net value of each minute's AccountStatus: run_test reads net_value (and the price columns
+    the actuator adds itself), never the per-minute balances or market status, which held several GB per full-history
+    worker (2026-10-07). LEAN_STATUS=0 restores demeter's full list."""
+
+    def append(self, status):
+        super().append(AccountStatus(timestamp=status.timestamp, net_value=status.net_value))
+
+
+def _status_list_get(self):
+    return self.__dict__["_account_status_list"]
+
+
+def _status_list_set(self, value):
+    self.__dict__["_account_status_list"] = _LeanStatusList(value)
+
+
+if os.environ.get("LEAN_STATUS", "1") != "0":
+    Actuator._account_status_list = property(_status_list_get, _status_list_set)
 
 
 def tokens(pool: str | None = None):

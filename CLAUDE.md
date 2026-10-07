@@ -164,7 +164,10 @@ Run (from `samples/strategy-example`, `PYTHONPATH=../..`):
 - `demeter/uniswap/core.py:167` casts ticks to `int` before `Decimal` (numpy int64 otherwise raises). Keep it.
 - Several processes loading the same data range at once can crash on demeter's `~/.demeter` cache
   (`pickle EOFError`) before any backtest runs: rerun that segment alone.
-- A continuous ETH run takes ~8 min and several GB per worker; yearly segments take ~2 min.
+- A continuous ETH run takes ~8 min and several GB per worker; yearly segments take ~2 min. `v6_validate.py` keeps only
+  timestamp + net value of demeter's per-minute AccountStatus (`LEAN_STATUS`, default on; identical results, 2022 yearly run
+  4.4 → 2.7 GB parent + worker). The machine has 51 GB and other sessions share it: at most ~6 full-history workers at once
+  (three invocations of two workers were OOM-killed on 2026-10-06; Dino paused a 2 x 3-worker batch on 2026-10-07).
 - `git fetch` here only fetches `master` and `feat/dino-v6-opt` (narrow refspec in the local config); fetch any
   other branch by name.
 - Pushing needs the `dinohuang102` GitHub account (write access to `ewe-technology/demeter`): run `gh auth switch -u dinohuang102` before pushing (a 403 means the wrong account is active) and leave it active.
