@@ -1,7 +1,7 @@
 # EXP-174: v6.75 + +40% upper reach while F = 1 + refill-low lower edge while refilling (v6.159)
 
 - Jira: QUAN-1080
-- Status: pre-registered
+- Status: fail
 - Level: improvement (over spec v1; v6 on `0x4585`)
 - Pre-registration commit: 783ad2a · Result commit: ______
 - Scope: Dino, 2026-10-07, /goal "不斷的抽換v6裡面的概念，加上+-20的動態調整，直到找到總績效比v6好的策略". Batch 2 = EXP-173..175,
@@ -28,6 +28,25 @@ Variant `GR`: `REFILL_NO_NEW_LOW = True` + `WIDTH_SIGNAL = "full_widetop_rl"`: F
 - Gas is reported, not charged.
 
 ## Result
+
+One invocation per pool, `opt:A,GQ,GR,GS`, one pool at a time, 2 workers (2026-10-08; raw runs in the main checkout's
+`result/v6_validate/*-opt-AGQGRGS-*`), seven pools with `SPEC=v1` and `0x4585` with `BINANCE_WARM=1` (values in BTC). `A`
+reproduces EXP-157's spec v1 numbers on every pool and v6's -1.40% on `0x4585`.
+
+| pool | baseline total / CAGR / max DD / Calmar | this | rebuilds | win |
+|---|---|---|---|---|
+| ETH mainnet 0.05% `0x88e6` | +97.7% / 13.55% / -22.9% / 0.591 | +123.5% / 16.16% / -25.1% / 0.645 | 179 → 172 | **win** |
+| ETH mainnet 0.3% `0x8ad5` | +100.0% / 13.78% / -21.0% / 0.657 | +123.3% / 16.15% / -24.0% / 0.671 | 178 → 169 | lose |
+| ETH Base 0.05% `0xd0b5` | +54.9% / 16.96% / -34.7% / 0.489 | +62.1% / 18.86% / -36.7% / 0.514 | 84 → 83 | **win** |
+| ETH Arbitrum 0.05% `0xc696` | +65.7% / 26.88% / -31.4% / 0.856 | +50.2% / 21.12% / -33.3% / 0.635 | 64 → 63 | lose |
+| ETH Base 0.3% `0x6c56` | +29.8% / 16.48% / -24.6% / 0.671 | +40.4% / 21.98% / -21.3% / 1.033 | 55 → 53 | **win** |
+| BTC mainnet WBTC 0.3% `0x99ac` | +62.2% / 10.43% / -30.1% / 0.346 | +44.0% / 7.77% / -31.3% / 0.248 | 129 → 132 | lose |
+| BTC Base cbBTC 0.05% `0xfbb6` | +44.0% / 20.46% / -16.7% / 1.224 | +39.9% / 18.69% / -16.5% / 1.133 | 49 → 51 | lose |
+| WBTC/ETH 0.05% `0x4585` (v6, BTC) | -1.4% / -0.29% / -32.7% / <0 | +3.8% / 0.78% / -31.2% / 0.025 | 100 → 105 | **win** |
+
+Verdict: **fail** — seven-pool 3/7 (ETH 3 of 5, BTC 0 of 2); median CAGR gain +1.90 pt (the highest of the batch). The
+refill-low edge took about 1 pt off GQ's drawdown on the mainnet ETH pools (26.2 → 25.1, 25.2 → 24.0), enough for `0x88e6`
+but not `0x8ad5`; both BTC pools still lose 1.8..2.7 pts CAGR.
 
 ## Deviations
 

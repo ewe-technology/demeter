@@ -1,7 +1,7 @@
 # EXP-173: v6.75 + +40% upper reach only while F = 1 (v6.158)
 
 - Jira: QUAN-1079
-- Status: pre-registered
+- Status: fail
 - Level: improvement (over spec v1; v6 on `0x4585`)
 - Pre-registration commit: 783ad2a · Result commit: ______
 - Scope: Dino, 2026-10-07, /goal "不斷的抽換v6裡面的概念，加上+-20的動態調整，直到找到總績效比v6好的策略". Batch 2 = EXP-173..175,
@@ -28,6 +28,25 @@ Variant `GQ`: `REFILL_NO_NEW_LOW = True` + `WIDTH_SIGNAL = "full_widetop"`: at a
 - Gas is reported, not charged.
 
 ## Result
+
+One invocation per pool, `opt:A,GQ,GR,GS`, one pool at a time, 2 workers (2026-10-08; raw runs in the main checkout's
+`result/v6_validate/*-opt-AGQGRGS-*`), seven pools with `SPEC=v1` and `0x4585` with `BINANCE_WARM=1` (values in BTC). `A`
+reproduces EXP-157's spec v1 numbers on every pool and v6's -1.40% on `0x4585`.
+
+| pool | baseline total / CAGR / max DD / Calmar | this | rebuilds | win |
+|---|---|---|---|---|
+| ETH mainnet 0.05% `0x88e6` | +97.7% / 13.55% / -22.9% / 0.591 | +130.4% / 16.83% / -26.2% / 0.642 | 179 → 166 | lose |
+| ETH mainnet 0.3% `0x8ad5` | +100.0% / 13.78% / -21.0% / 0.657 | +130.2% / 16.81% / -25.2% / 0.667 | 178 → 163 | lose |
+| ETH Base 0.05% `0xd0b5` | +54.9% / 16.96% / -34.7% / 0.489 | +58.5% / 17.91% / -36.9% / 0.485 | 84 → 81 | lose |
+| ETH Arbitrum 0.05% `0xc696` | +65.7% / 26.88% / -31.4% / 0.856 | +50.1% / 21.08% / -33.5% / 0.629 | 64 → 62 | lose |
+| ETH Base 0.3% `0x6c56` | +29.8% / 16.48% / -24.6% / 0.671 | +36.7% / 20.06% / -21.3% / 0.941 | 55 → 51 | **win** |
+| BTC mainnet WBTC 0.3% `0x99ac` | +62.2% / 10.43% / -30.1% / 0.346 | +45.6% / 8.01% / -31.5% / 0.254 | 129 → 126 | lose |
+| BTC Base cbBTC 0.05% `0xfbb6` | +44.0% / 20.46% / -16.7% / 1.224 | +39.6% / 18.55% / -15.3% / 1.215 | 49 → 48 | lose |
+| WBTC/ETH 0.05% `0x4585` (v6, BTC) | -1.4% / -0.29% / -32.7% / <0 | +5.9% / 1.19% / -30.2% / 0.039 | 100 → 98 | **win** |
+
+Verdict: **fail** — seven-pool 1/7 (ETH 1 of 5, BTC 0 of 2); median CAGR gain +0.96 pt. Restricting the +40% top to F = 1 did
+not fix EXP-164: mainnet ETH CAGR +3.0 pts but max DD still 3.3 / 4.2 pts deeper (the slack is 3), and both BTC pools lose
+2.4 / 1.9 pts. It is the best WBTC/ETH result of any variant so far (+1.5 pt CAGR, shallower DD).
 
 ## Deviations
 

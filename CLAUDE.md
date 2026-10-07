@@ -67,6 +67,13 @@ signals lose inside v6. Widths from v6's own state also **fail**: EXP-167 (0.10 
 WBTC/ETH (+0.9 pt); EXP-168 (lower edge at the refill low while refilling, v6.153) ETH 12.9%, Calmar equal, loses both. Five
 width rules lost; the fixed ±20% stays. `0x4585` runs need `BINANCE_WARM=1` (otherwise KeyError on the day before the data).
 
+/goal 2026-10-07/08 ("不斷的抽換v6裡面的概念，加上+-20的動態調整，直到找到總績效比v6好的策略", EXP-169..175,
+`experiments/FINDINGS-2026-10-08-goal-dynamic-width.md`): **EXP-175 v6.160 passes** (fee tier: v6.75 + refill-low lower edge on
+0.3% pools, v6.75 on cheaper pools; seven-pool 4/7 with BTC, WBTC/ETH win), but the pass is v6.75's (identical on 0.05% pools;
+BTC and WBTC/ETH wins +0.06 / +0.04 pt) and it scores below v6.75 alone (5/7): the width helps Base 0.3% only. EXP-173/174 (+40%
+top while F = 1) give the largest ETH and WBTC/ETH gains but deeper mainnet DD and lose both BTC/USD pools; no width change has
+raised CAGR on a BTC/USD pool.
+
 ## Handoff 2026-10-06 (two sessions closed; a new session starts here)
 
 Done since round 4, all committed, Jira and dashboard in sync:
