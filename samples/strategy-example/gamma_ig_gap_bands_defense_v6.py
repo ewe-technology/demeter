@@ -188,6 +188,11 @@ WIDTH_VOL = False
 WIDE_TOP_ABOVE_EMA: Decimal | None = None
 WIDTH_VOL_K, WIDTH_VOL_DAYS = 1.0, 30
 WIDTH_VOL_MIN, WIDTH_VOL_MAX, WIDTH_VOL_GRID = 0.10, 0.30, 0.05
+# EXP-165 / 166: the same per-build half-width hook as EXP-030 (same clamp and grid), fed by another signal:
+# "dvol" = Deribit ETH DVOL / 100 x sqrt(30 / 365) (the implied one-month 1-sigma move, ETH-quoted pools only),
+# "er30" = 0.10 + 0.40 x Kaufman efficiency ratio of the last 30 daily closes (trend -> wide, chop -> narrow). None = v6.
+WIDTH_SIGNAL: str | None = None
+DVOL_CSV = "../deribit_dvol_daily.csv"
 # EXP-044 (v6.31): the ladder is rebuilt after a range exit only when the price is outside it at EXIT_CONFIRM consecutive
 # daily checks (the one-sided ladder earns no fees meanwhile; a close back inside cancels the exit). 1 = v6.
 EXIT_CONFIRM = 1
@@ -655,6 +660,12 @@ def daily_ema_frame(minute_price: pd.Series) -> pd.DataFrame:
     arm = sum((close > emas[n]).astype(float) for n in EMA_SPANS) / len(EMA_SPANS)   # EXP-029
     sigma = np.log(close).diff().rolling(WIDTH_VOL_DAYS, min_periods=WIDTH_VOL_DAYS).std()   # EXP-030
     out = pd.DataFrame({"close": close, "ema": emas[EMA_SPAN], "F": fractions, "arm": arm, "sigma": sigma})
+    if WIDTH_SIGNAL == "dvol":   # EXP-165
+        dv = pd.read_csv(DVOL_CSV, parse_dates=["date"]).set_index("date")["ETH"].sort_index()
+        out["width_sig"] = (dv / 100 * math.sqrt(30 / 365)).reindex(close.index).ffill()
+    elif WIDTH_SIGNAL == "er30":   # EXP-166
+        path30 = close.diff().abs().rolling(30, min_periods=30).sum()
+        out["width_sig"] = 0.10 + 0.40 * (close - close.shift(30)).abs() / path30
     if ACCOUNT_TRANCHES:   # EXP-063
         for key, vals in states.items():
             out[key] = vals
@@ -1121,13 +1132,14 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
     def resolve_skew(self, timestamp: datetime) -> None:
         """EXP-013: pick the reaches of the ladder built at `timestamp` from the s rule's trend sign (last completed
         daily close vs EMA100); the state then stays for the life of that ladder."""
-        if WIDTH_VOL and self.daily_ema is not None:   # EXP-030
+        if (WIDTH_VOL or WIDTH_SIGNAL) and self.daily_ema is not None:   # EXP-030, EXP-165 / 166
+            col = "width_sig" if WIDTH_SIGNAL else "sigma"
             try:
-                sigma = float(daily_row_for(self.daily_ema, timestamp)[1]["sigma"])
+                sigma = float(daily_row_for(self.daily_ema, timestamp)[1][col])
             except KeyError:
                 sigma = float("nan")
-            width = 0.20 if math.isnan(sigma) else min(max(WIDTH_VOL_K * sigma * math.sqrt(WIDTH_VOL_DAYS), WIDTH_VOL_MIN),
-                                                       WIDTH_VOL_MAX)
+            raw = sigma if WIDTH_SIGNAL else WIDTH_VOL_K * sigma * math.sqrt(WIDTH_VOL_DAYS)
+            width = 0.20 if math.isnan(sigma) else min(max(raw, WIDTH_VOL_MIN), WIDTH_VOL_MAX)
             width = round(round(width / WIDTH_VOL_GRID) * WIDTH_VOL_GRID, 4)
             self.skew_state = f"w{width}"
             if self.skew_state not in self.shape_configs:
