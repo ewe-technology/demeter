@@ -1,0 +1,28 @@
+<section id="stall" data-transition="fade" style="background:#FFF6E8;color:#2D2A32;font-family:'Noto Sans TC', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;gap:48px">
+<h2 style="font-size:64px;font-weight:900">機器人在做什麼？</h2>
+<div style="display:flex;gap:72px;align-items:center">
+<div style="position:relative;width:640px;height:520px;background:#FFFFFF;border-radius:32px">
+<svg aria-label="左邊一支溫度計，右邊一個攤位：天氣好時攤上 ETH 罐比較滿，天氣差時比較空" width="640" height="520" viewBox="0 0 640 520">
+<rect x="70" y="60" width="44" height="320" rx="22" fill="#F1EBE1" stroke="#2D2A32" stroke-width="5"/>
+<circle cx="92" cy="410" r="44" fill="#E9853A" stroke="#2D2A32" stroke-width="5"/>
+<rect x="80" y="200" width="24" height="200" fill="#E9853A"/>
+<line x1="114" y1="200" x2="150" y2="200" stroke="#2D2A32" stroke-width="5"/>
+<rect x="220" y="230" width="360" height="200" rx="18" fill="#F3DDB8"/>
+<path d="M200 120 L600 120 L580 200 L220 200 Z" fill="#3A6BD6"/>
+<path d="M280 120 L340 120 L335 200 L285 200 Z" fill="#FFF6E8"/><path d="M400 120 L460 120 L465 200 L405 200 Z" fill="#FFF6E8"/>
+<rect x="270" y="260" width="110" height="140" rx="24" fill="#DCE7FB" stroke="#3A6BD6" stroke-width="6"/>
+<rect x="270" y="300" width="110" height="100" rx="20" fill="#3A6BD6"/>
+<rect x="420" y="260" width="110" height="140" rx="24" fill="#FDE6D2" stroke="#E9853A" stroke-width="6"/>
+<rect x="420" y="350" width="110" height="50" rx="20" fill="#E9853A"/>
+</svg>
+<p style="position:absolute;left:30px;top:470px;width:180px;font-size:26px;text-align:center;color:#5A5560">溫度計</p>
+<p style="position:absolute;left:270px;top:440px;width:110px;font-size:28px;font-weight:700;text-align:center;color:#3A6BD6">ETH</p>
+<p style="position:absolute;left:420px;top:440px;width:110px;font-size:28px;font-weight:700;text-align:center;color:#B8601E">美元</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:36px">
+<p style="font-size:40px;line-height:1.5">我們在市場擺一個<b>換錢攤</b>：有人來換 ETH 和美元，我們收一點點手續費。</p>
+<p style="font-size:40px;line-height:1.5">機器人看一支<b>溫度計</b>：天氣好就多帶 ETH 出門，天氣變差就少帶，換成美元放口袋。</p>
+</div>
+</div>
+<aside>對照：換錢攤＝Uniswap v3 的 LP 部位；手續費＝LP fee；溫度計＝EMA 90–120；「帶多少 ETH 出門」＝F 引擎決定的部署比例 F。</aside>
+</section>

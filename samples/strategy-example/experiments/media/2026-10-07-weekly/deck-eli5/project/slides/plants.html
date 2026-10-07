@@ -1,0 +1,27 @@
+<section id="plants" data-transition="fade" style="background:#FFF6E8;color:#2D2A32;font-family:'Noto Sans TC', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;gap:44px">
+<h2 style="font-size:64px;font-weight:900">ETH 和 BTC 像兩盆不一樣的植物</h2>
+<div style="display:flex;gap:72px;align-items:center">
+<div style="position:relative;width:700px;height:480px;background:#FFFFFF;border-radius:32px">
+<svg aria-label="兩盆植物：藍色花盆是 ETH，橘色花盆是 BTC，葉子形狀不同" width="700" height="480" viewBox="0 0 700 480">
+<path d="M110 300 L290 300 L270 420 L130 420 Z" fill="#3A6BD6"/>
+<line x1="200" y1="300" x2="200" y2="150" stroke="#2D2A32" stroke-width="8"/>
+<ellipse cx="150" cy="200" rx="56" ry="26" fill="#7FA36B" transform="rotate(-25 150 200)"/>
+<ellipse cx="250" cy="170" rx="56" ry="26" fill="#7FA36B" transform="rotate(25 250 170)"/>
+<ellipse cx="200" cy="120" rx="30" ry="48" fill="#7FA36B"/>
+<path d="M410 300 L590 300 L570 420 L430 420 Z" fill="#E9853A"/>
+<line x1="500" y1="300" x2="500" y2="190" stroke="#2D2A32" stroke-width="8"/>
+<circle cx="500" cy="160" r="54" fill="#7FA36B"/>
+<circle cx="455" cy="215" r="34" fill="#7FA36B"/>
+<circle cx="545" cy="215" r="34" fill="#7FA36B"/>
+</svg>
+<p style="position:absolute;left:100px;top:426px;width:200px;font-size:30px;font-weight:700;text-align:center;color:#3A6BD6">ETH</p>
+<p style="position:absolute;left:400px;top:426px;width:200px;font-size:30px;font-weight:700;text-align:center;color:#B8601E">BTC</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:32px">
+<p style="font-size:38px;line-height:1.5">很多招數對 ETH 好，對 BTC 反而不好，像兩盆植物要的水不一樣。</p>
+<p style="font-size:38px;line-height:1.5"><b style="color:#3A6BD6">ETH 喜歡</b>常常把攤子搬到價格旁邊。<br><b style="color:#B8601E">BTC 喜歡</b>少搬動，跌得兇就早點收攤。</p>
+<p style="font-size:30px;line-height:1.5;color:#5A5560">找到 6 招只對其中一盆有用。下次要分開照顧、分開檢查，才知道是不是真的有用。</p>
+</div>
+</div>
+<aside>對照：ETH-only＝跨資產確認 refill（EXP-158）、每週重新置中（EXP-065）、上緣加寬（EXP-154/164）；WBTC-only＝intraday stop（EXP-161）、成交量確認 refill（EXP-087）、不設 lower stop（EXP-066）。原因：谷形 ladder 流動性在邊緣，0.3% WBTC 池每單位風險手續費高得多（fee/LVR 3.49 vs 1.23），重新置中會讓 WBTC 手續費少一半。6 條都還沒單獨通過。</aside>
+</section>
