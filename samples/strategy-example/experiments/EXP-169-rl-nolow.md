@@ -3,7 +3,7 @@
 - Jira: QUAN-1075
 - Status: fail
 - Level: improvement (over spec v1 on ETH/USDC, over v6 on WBTC/ETH; then the seven-pool bar)
-- Pre-registration commit: ac4a870 · Result commit: ______
+- Pre-registration commit: ac4a870 · Result commit: b3cb089
 - Scope: Dino, 2026-10-07, /goal "不斷的抽換v6裡面的概念，加上+-20的動態調整，直到找到總績效比v6好的策略" (keep swapping v6's
   concepts, with a dynamic ±20%, until a strategy beats v6 overall). Batch 1 = EXP-169..172, pre-registered together.
 
