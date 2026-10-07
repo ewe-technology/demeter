@@ -63,7 +63,9 @@ Single-pool scan 2026-10-07 (`experiments/FINDINGS-2026-10-07-single-pool.md`, s
 strategy families (hold, 50/50, static / full-range LP, EMA / SMA200 / 84-day momentum, vol target, mean reversion) beat neither
 spec v1 on ETH/USDC `0x88e6` nor v6 on WBTC/ETH `0x4585` (in BTC, where only staying in BTC wins). Dynamic ±20%: EXP-165 (DVOL
 width, v6.150) and EXP-166 (ER30 width, v6.151) both **fail** (ETH CAGR 11.2% / 9.6% vs 13.55%); with EXP-030 three width
-signals lose inside v6. `0x4585` runs need `BINANCE_WARM=1` (otherwise KeyError on the day before the data).
+signals lose inside v6. Widths from v6's own state also **fail**: EXP-167 (0.10 + 0.20 x F, v6.152) ETH 10.3%, wins only
+WBTC/ETH (+0.9 pt); EXP-168 (lower edge at the refill low while refilling, v6.153) ETH 12.9%, Calmar equal, loses both. Five
+width rules lost; the fixed ±20% stays. `0x4585` runs need `BINANCE_WARM=1` (otherwise KeyError on the day before the data).
 
 ## Handoff 2026-10-06 (two sessions closed; a new session starts here)
 

@@ -52,11 +52,20 @@ in v6 went to demeter on v6 itself:
 | EXP-165 v6.150 | DVOL/100 x sqrt(30/365), 10..30% | 11.20% / -24.8% / 0.451 | not run (ETH DVOL only) | fail |
 | EXP-166 v6.151 | 0.10 + 0.40 x ER30, 10..30% | 9.58% / -31.8% / 0.301 | -1.42% / -34.9% | fail |
 
-With EXP-030 (realized vol, fail) that is three width signals that lose inside v6. The fixed ±20% stays.
+Then two widths from v6's own state (Dino: "試試看跟著 refill 階段或 F 變寬度"):
+
+| EXP | width rule | ETH/USDC | WBTC/ETH | verdict |
+|---|---|---|---|---|
+| EXP-167 v6.152 | 0.10 + 0.20 x F, 10..30% | 10.33% / -24.5% / 0.422 | **0.57%** / -33.1% (win) | fail 1/2 |
+| EXP-168 v6.153 | while 0 < F < 1, lower edge at the refill low (10..30%) | 12.93% / -21.8% / 0.592 | -0.69% / -33.6% | fail 0/2 |
+
+With EXP-030 (realized vol, fail) that is five width rules that lose inside v6, from market indicators and from v6's own state.
+The closest is EXP-168 on ETH (CAGR -0.6 pt, Calmar equal, max DD 1.1 pts shallower; 7 more rebuilds on each pool). The fixed
+±20% stays.
 
 ## Next
 
-- Not tried and still structural: a width tied to v6's own state (e.g. the refill stage or F) rather than to a market
-  indicator; an asymmetric ladder below EMA100 only (EXP-153/154/164 tried it above EMA100).
+- Width is done: five rules, none wins on ETH/USDC. Not tried: an asymmetric ladder below EMA100 only (EXP-153/154/164 tried
+  it above EMA100).
 - WBTC/ETH: no strategy here protects BTC value while ETH falls against BTC other than staying in BTC; the open idea is
   Handoff item 4 in CLAUDE.md (USDC-pool F decides coin vs USD, the coin part LPs in BTC/ETH).
