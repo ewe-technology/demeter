@@ -27,10 +27,15 @@ Verdicts, each fixed before its run (commit of this file):
   H3a  w30, w50 in 0x99ac: both must meet 1-3, and each must have a median excess >= -10% over the five rally
        windows (50/50 hold above +50% in H2: starts 2023-01, 2023-04, 2023-07, 2023-10, 2024-01).
   H3b  usdt_w20, +/-20% in 0x9Db9 (WBTC/USDT 0.3%): meets 1-3.
+  H3c  asymmetric ranges in 0x99ac, excess against holding the first position's WBTC share: skew_up [p/1.10, p 1.33],
+       skew_down [p/1.33, p 1.10], one_up [p/1.01, p 1.40], one_down [p/1.40, p 1.01]. Each is judged on its own
+       by 1-3 plus the rally median >= -10%; the *_down versions are the controls for the direction of the skew.
+       Same hourly out-of-range re-centre for all; the excess without gas is listed, not judged.
 
 Run from samples/strategy-example (minute CSVs in ../real-data/<pool>/):
   PYTHONPATH=../.. python pool_lp_windows.py --set h2
   PYTHONPATH=../.. python pool_lp_windows.py --set h3ab
+  PYTHONPATH=../.. python pool_lp_windows.py --set h3c
   PYTHONPATH=../.. python pool_lp_windows.py --test        # w10, 2022-01-01 .. 2022-01-10, for timing
 """
 import argparse
@@ -88,6 +93,8 @@ def version(name: str, width: float, up: float = 0.0, pool: str = USDC_POOL, quo
 SETS = {
     "h2": [version("w10", 0.10), version("w20", 0.20)],
     "h3ab": [version("w30", 0.30), version("w50", 0.50), version("usdt_w20", 0.20, pool=USDT_POOL, quote=usdt)],
+    "h3c": [version("skew_up", 0.10, up=0.33), version("skew_down", 0.33, up=0.10),
+            version("one_up", 0.01, up=0.40), version("one_down", 0.40, up=0.01)],
 }
 
 
@@ -162,7 +169,7 @@ def run(cfg: Config30, start: date, end: date) -> dict:
     gas = float(paid.iloc[-1]) - impact if len(paid) else 0.0
     return {"width": cfg.name, "start": start, "end": end, "net": r, "wbtc_share": share, "hold": hold,
             "hold5050": 0.5 * (price.iloc[-1] / price.iloc[0] - 1), "excess": r - hold,
-            "excess_free_swaps": r - hold + (swap_fee + impact) / INITIAL,
+            "excess_free_swaps": r - hold + (swap_fee + impact) / INITIAL, "excess_no_gas": r - hold + gas / INITIAL,
             "swap_fee": swap_fee, "impact": impact, "gas": gas, "recentres": int((ev["kind"] == "recentre").sum()),
             "maxDD": float((net / net.cummax() - 1).min()), "secs": round(time.time() - started)}
 
@@ -199,7 +206,7 @@ def main():
     pd.set_option("display.max_columns", 30)
     print(t.to_string(index=False, float_format=lambda x: f"{x:.4f}"))
     for w, g in t.groupby("width", sort=False):
-        rally = a.set == "h3ab" and not w.startswith("usdt")
+        rally = a.set in ("h3ab", "h3c") and not w.startswith("usdt")
         print(f"{w}: median excess {g['excess'].median():.4f}, positive {(g['excess'] > 0).sum()}/16, {verdict(g, rally)}")
 
 
