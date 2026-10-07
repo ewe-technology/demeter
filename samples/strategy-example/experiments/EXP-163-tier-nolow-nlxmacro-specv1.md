@@ -1,9 +1,9 @@
 # EXP-163: fee tier: v6.75 on 0.3% pools; v6.75 + cross-asset refill + macro restore on cheaper pools on spec v1 (v6.148)
 
-- Jira: QUAN-___
+- Jira: QUAN-1050
 - Status: pre-registered
 - Level: improvement (over spec v1)
-- Pre-registration commit: ______ · Result commit: ______
+- Pre-registration commit: c90d19c · Result commit: ______
 - Scope: Dino, 2026-10-07, /goal "再繼續不斷的開發uni策略，找到五個打敗基準的策略" (keep developing Uniswap strategies until five
   beat the baseline). First batch on the spec v1 baseline (EXP-156): EXP-157..164, pre-registered together, one invocation per
   pool with `A` and all eight variants.
