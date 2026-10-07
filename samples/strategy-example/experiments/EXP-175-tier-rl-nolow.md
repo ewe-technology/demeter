@@ -1,9 +1,9 @@
 # EXP-175: fee tier: v6.75 + refill-low lower edge on 0.3% pools; v6.75 on cheaper pools (v6.160)
 
-- Jira: QUAN-___
+- Jira: QUAN-1081
 - Status: pre-registered
 - Level: improvement (over spec v1; v6 on `0x4585`)
-- Pre-registration commit: ______ · Result commit: ______
+- Pre-registration commit: 783ad2a · Result commit: ______
 - Scope: Dino, 2026-10-07, /goal "不斷的抽換v6裡面的概念，加上+-20的動態調整，直到找到總績效比v6好的策略". Batch 2 = EXP-173..175,
   pre-registered together after batch 1 (EXP-169..172) failed.
 
