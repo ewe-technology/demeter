@@ -21,7 +21,8 @@
 - **濾網的 BTC 價格繼續用換算價（第 15.2 節）。** 和 BTC/穩定幣池的直接報價比，收盤差超過 0.5% 的天數只佔 0.76%，低於事先定的 1%。但濾網判斷只要有 4 天不同，4 年報酬就差 14 pt，再次說明報酬對轉折日很敏感。
 - **主網收尾（第 15.3～15.6 節）**：BTC 改走 USDC→USDT→WBTC 一年約多 0.3～0.4%，但不改變 C 和 A 的差距；BTC/穩定幣 LP 2025 年是正的、2026 年翻負，依事先的條件停止；wstETH 折價 5% 時，大多數時點沒有損失，但如果剛好碰上濾網出場，最多虧 5.7 pt，比收益層近兩年的增益還多。
 - **D 版的 2026 樣本外一致，停泊緩衝採用「全部出場時才停泊」（第 15.7、15.8 節）。** D ±0.5% 比 C 多 +0.7 pt（不計 gas）、+0.6 pt（$100k），方向成立，但增益約只剩樣本內的五分之一。停泊部位只在全部出場時才放，$100k 分 3 份在 2024–2025 多 +1.1 pt、2026 多 +0.1 pt，20 gwei 時多 +0.6 pt，讓 $100k 在高 gas 下也回到贏 A。
-- **建議的上線版本**：基準濾網改成 3 份分散時間（UTC 00、08、16 時），ETH 以 wstETH 持有，全部出場時才停泊 USDC/USDT（部分出場的資金先持有 USDC，第 15.8 節）；主網上資金至少 $100k，$1M 以上可以用 6 份。資金較小時在交易所執行 A 版。D 版放到紙上交易觀察，不直接採用。2026 樣本外之後，$100k 的增益只剩每年約 1 pt，而且 gas 高時會翻負，所以 $100k 上線前要先確認當時的 gas 水準；$1M 以上的結論不變。
+- **Arbitrum（第 15.9、15.10 節）：小資金終於可行。** $10k 分 3 份時，Arbitrum C 版比 A 交易所多 +3.1 pt，依事先登記的判定為一致；主網同樣情況是 −3.6 pt。$100k 兩條鏈差不多（價格衝擊設上限時 +2.7 對 +2.3）。$1M 在兩條鏈上，按池子流動性計算的價格衝擊都讓鏈上版本輸給交易所，這個結果偏悲觀。Arbitrum 的 WBTC/USDC LP 未通過。
+- **建議的上線版本**：基準濾網改成 3 份分散時間（UTC 00、08、16 時），ETH 以 wstETH 持有，全部出場時才停泊 USDC/USDT（部分出場的資金先持有 USDC，第 15.8 節）；主網上資金至少 $100k，$1M 以上可以用 6 份。資金較小時在 Arbitrum 執行 C 版，或在交易所執行 A 版。D 版放到紙上交易觀察，不直接採用。2026 樣本外之後，$100k 的增益只剩每年約 1 pt，而且 gas 高時會翻負，所以 $100k 上線前要先確認當時的 gas 水準；$1M 以上的結論不變。
 
 ---
 
@@ -167,7 +168,7 @@ $10k 時 D 版的最大回撤也從 −34.5% 惡化到 −38.0%，因為重新�
    - 三種區間的排序（±0.5% > ±1% > ±2%）和「窄區間分到較多手續費」一致，但窄區間也最容易被高估；
    - WBTC/cbBTC 那一半的貢獻很小（年化 1–2%，而且只持有半年多）。
    建議放到紙上交易觀察，不直接採用。
-5. **主網上資金小於 $100k 時不要做任何一層**：$10k 時短期間所有版本都比基準差。
+5. **主網上資金小於 $100k 時不要做任何一層**：$10k 時短期間所有版本都比基準差。改到 Arbitrum 就可行（第 15.9 節）。
 6. **wstETH 的脫鉤風險**：2022/6 的 stETH 折價在資料開始之前；2022-11 約 −3.3% 的折價現在有算進去（第 12 節）。合成的 −5% 折價最多虧 5.7 pt，前提是濾網剛好在折價期間出場（第 15.6 節）。出場時池子變薄的影響還沒算。
 
 ### 不採用的
@@ -546,9 +547,9 @@ C 版在 $100k 時各份數的總報酬：
 - **$10k 只在 1 gwei 左右有正的**：C 分 1 份 +4.4、3 份 +2.9；2～3 gwei 以上改在交易所執行 A 版。
 - 完整期間方向相同：$100k 分 3 份在 20 gwei 時仍比 A 多 +20.0 pt，分 6 份剩 +11.9 pt。
 
-## 15. 2026 樣本外與主網收尾（`preregistration.py`）
+## 15. 2026 樣本外、主網收尾與 Arbitrum（`preregistration.py`）
 
-S3 補上 2025 年底到 2026-09-30 的資料之後，跑了事先登記的主網測試（第 1、2、3、5、6、7 項；第 4 項是 Arbitrum，等資料）和換幣路徑的重算。候選和判定條件在看到新資料之前就寫進 `preregistration.py`，並 commit 成 `25f81c5`。結果出來之後，沒有改過任何條件。
+S3 補上 2025 年底到 2026-09-30 的資料之後，跑完事先登記的 7 項測試（第 4 項和第 3 項的一部分在 Arbitrum 上），以及換幣路徑的重算。候選和判定條件在看到新資料之前就寫進 `preregistration.py`，並 commit 成 `25f81c5`。結果出來之後，沒有改過任何條件。
 
 ### 15.1 收益層的樣本外：2026-01-01 ~ 2026-09-30（`cost_matrix.py --holdout`）
 
@@ -716,6 +717,58 @@ D 比 C 多的 pt（所有 offset 的中位數）：
 
 第 15.1 節裡 $100k 分 3 份在 20 gwei 會輸 A 鏈上 0.2 pt。加上這條規則後，大約變成多 0.4 pt，回到正的。
 
+### 15.9 Arbitrum（`arbitrum_check.py`）
+
+事先登記的第 4 項：同一套規則和參數在 Arbitrum 上跑，不在 Arbitrum 的資料上重新挑選。期間是 2024-11-22 ~ 2026-09-30，從 WBTC/cbBTC 池開池的隔天開始。預先登記定了池子、期間、版本、份數、本金，還有兩個原則：換幣要用池子當下的流動性計價，以及要算一次進出的跨鏈橋。下面這些細節沒有定，在第一次執行前寫進程式說明：
+
+- **濾網和估值**：兩條鏈都用主網換算的價格，所以兩條鏈只差在執行成本，訊號完全一樣。
+- **換幣成本**：池子手續費加上價格衝擊。價格衝擊用 N / (L·√P) 計算，L 和 P 取交易前最後一筆成交後的池子狀態，假設附近的流動性是固定的。
+- **路線**：ETH 走 USDC→WETH；wstETH 走 USDC→WETH→wstETH；BTC 每次在「經過 WETH」和「直接走 BTC/穩定幣池」之間挑最便宜的；停泊時有一半的金額要經過 USDC/USDT 換幣。
+- **Arbitrum 的 gas**：每次 swap $0.05，每次 LP 操作 $0.20。另外跑一組 10 倍的敏感度。主網沿用 cost matrix 的 gas。
+- **跨鏈橋**：只算 Arbitrum，進出各 $10。
+
+主網也用同一套成本模型跑同一段期間，兩條鏈才能逐項比較。A 交易所兩邊都是每筆 10 bps、不計 gas。
+
+**判定：一致。** 預先登記的說法是「$10k 分 3 份時，Arbitrum 的 C 版贏過 A 交易所」，結果中位數多 +3.1 pt，最差的 offset 也比 A 交易所好。
+
+**價格衝擊的極端值（事後發現）**：Arbitrum 的 wstETH/WETH 池有 22 個小時，一筆 $100k 的交易算出超過 500 bps，最高 16,229 bps。那些時候池子在現價附近幾乎沒有流動性，線性公式就不成立了：實際成交時價格會推進到下一段流動性，或由聚合器改走別的池子。用原始模型時，Arbitrum C 版在 $100k、$1M 會出現極端的 offset（$1M 分 1 份最差 −448%）。所以另外跑了一組「每一跳的價格衝擊最多 100 bps」當敏感度（`--cap 100`）。$10k 的判定在兩種版本下都一樣。
+
+比 A 交易所多的 pt（中位數，3 份，價格衝擊上限 100 bps）：
+
+| 本金 | Arbitrum C | 主網 C | Arbitrum A 鏈上 | 主網 A 鏈上 |
+|---|---|---|---|---|
+| $10k | **+3.1** | −3.6 | +1.5 | −0.6 |
+| $100k | **+2.7** | +2.3 | +1.1 | +0.7 |
+| $1M | −1.2 | −2.3 | −2.2 | −3.8 |
+
+沒有上限的原始模型：$10k 一樣；$100k 的 Arbitrum C 是 +0.6；$1M 的 Arbitrum C 是 −23.7。
+
+| 一筆 $100k 的換幣成本（手續費 + 價格衝擊，中位數） | 主網 | Arbitrum |
+|---|---|---|
+| ETH/USDC | 9.2 bps | 8.4 bps |
+| WBTC/WETH | 9.6 bps | 7.5 bps |
+| wstETH/WETH | 1.0 bps | 1.4 bps（p90 3.8） |
+| USDC/USDT | 1.0 bps | 1.1 bps |
+| 直接的 BTC/穩定幣池 | WBTC/USDT 0.05% 16.3 bps | WBTC/USDC 0.05% 20.1 bps |
+
+同一段期間，wstETH 匯率兩邊都漲約 5.1%；停泊收益主網 +2.1%、Arbitrum +1.3%。
+
+- **小資金在 Arbitrum 可行**：$10k 時 gas 只有幾美元，再加上 $20 的跨鏈橋，C 版仍比 A 交易所多約 3 pt，主網同樣情況是 −3.6 pt。gas 再貴 10 倍，Arbitrum C 版分 3 份仍多 +0.2 pt。
+- **$100k 兩條鏈差不多**，Arbitrum 略好。主網的優勢是停泊收益比較高。
+- **$1M 在兩條鏈上都輸給交易所**：價格衝擊跟交易金額成正比，$1M 一次全換進單一池子，成本很高。實際上聚合器會把大單拆到多個池子，所以這個結果偏悲觀。不過它也說明，之前每筆固定 10 bps 的假設，對 $1M 是低估了。A 交易所每筆 10 bps 對 $1M 可能也太樂觀。
+- 這段期間只有約 22 個月，而且有 9 個月是 2026 年已經用過好幾次的資料。
+
+### 15.10 Arbitrum 的 BTC/穩定幣 LP 診斷（`btc_stable_lp.py --chain arbitrum`）
+
+事先登記第 3 項的 Arbitrum 部分：WBTC/USDC 0.05%，從 2023-07-01 起，做法跟第 15.5 節一樣。池子 2023-06-28 才開，所以 30 天波動率的暖身最早只能從開池那天開始，2023 年 7 月前幾週因此略過。
+
+| 濾網開啟的日子，LP 比現貨多賺（年化） | 2023（106 天） | 2024（292 天） | 2025（223 天） | 2026（77 天） |
+|---|---|---|---|---|
+| ±10% | −31.7% | −14.2% | +0.7% | −1.4% |
+| ±20% | −15.0% | −7.7% | +0.6% | −2.4% |
+
+**判定：未通過。** 只有 2025 年是正的，比主網的 WBTC/USDT 還差。BTC/穩定幣 LP 在兩條鏈上都停止。
+
 ## 附錄：如何重現
 
 在 backtest 機器的 `~/demeter-joy/samples/strategy-example` 下執行（需要先有 `spot_btc_eth_gate.py` 的價格快取）：
@@ -742,6 +795,8 @@ PYTHONPATH=../.. python btc_stable_lp.py              # 第 15.5 節，約 1 分
 PYTHONPATH=../.. python depeg_stress.py               # 第 15.6 節，2,569 組，約 10 秒
 PYTHONPATH=../.. python holdout_extra.py --d          # 第 15.7 節（先跑 yield_layer.py --sleeves --holdout）
 PYTHONPATH=../.. python holdout_extra.py --park       # 第 15.8 節，另外加 --gwei 10、--gwei 20
+PYTHONPATH=../.. python arbitrum_check.py             # 第 15.9 節，864 組，約 2 分鐘；另外加 --cap 100
+PYTHONPATH=../.. python btc_stable_lp.py --chain arbitrum   # 第 15.10 節，約 2 分鐘
 ```
 
-結果檔：`result/yield-layer/`（`data_quality.csv`、`sleeves*.csv`、`sleeve_*.csv`、`events_*.csv`、`combine.csv`；舊匯率的結果是 `combine_before_causal.csv`）、`result/basket/2a_*.csv`、`result/exposure/exposure*.csv` 、`result/cost-matrix/{runs,summary}.csv`，以及第 15 節的 `result/cost-matrix/{runs,summary,verdict}_holdout*.csv`、`result/gate-price/{by_year,daily,base_rule}.csv`、`result/cost-matrix/*_btcdirect.csv`、`result/btc-stable-lp/` 和 `result/depeg/{runs,summary}.csv` 和 `result/holdout-extra/`。
+結果檔：`result/yield-layer/`（`data_quality.csv`、`sleeves*.csv`、`sleeve_*.csv`、`events_*.csv`、`combine.csv`；舊匯率的結果是 `combine_before_causal.csv`）、`result/basket/2a_*.csv`、`result/exposure/exposure*.csv` 、`result/cost-matrix/{runs,summary}.csv`，以及第 15 節的 `result/cost-matrix/{runs,summary,verdict}_holdout*.csv`、`result/gate-price/{by_year,daily,base_rule}.csv`、`result/cost-matrix/*_btcdirect.csv`、`result/btc-stable-lp/` 和 `result/depeg/{runs,summary}.csv`、`result/holdout-extra/` 和 `result/arbitrum/`。
