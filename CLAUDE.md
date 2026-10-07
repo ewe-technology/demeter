@@ -59,6 +59,12 @@ Arbitrum ETH 0.05% lose on Calmar for every variant, and the BTC wins are mostly
 157 / 158 rebuild no more than spec v1; 159 / 160 / 163 double the rebuilds (mainnet gas ~$200k vs $122k on $100k, not charged).
 Batches now run one pool at a time with two workers (memory, see Gotchas).
 
+Single-pool scan 2026-10-07 (`experiments/FINDINGS-2026-10-07-single-pool.md`, screen `experiments/single_pool_scan.py`): 19 other
+strategy families (hold, 50/50, static / full-range LP, EMA / SMA200 / 84-day momentum, vol target, mean reversion) beat neither
+spec v1 on ETH/USDC `0x88e6` nor v6 on WBTC/ETH `0x4585` (in BTC, where only staying in BTC wins). Dynamic ±20%: EXP-165 (DVOL
+width, v6.150) and EXP-166 (ER30 width, v6.151) both **fail** (ETH CAGR 11.2% / 9.6% vs 13.55%); with EXP-030 three width
+signals lose inside v6. `0x4585` runs need `BINANCE_WARM=1` (otherwise KeyError on the day before the data).
+
 ## Handoff 2026-10-06 (two sessions closed; a new session starts here)
 
 Done since round 4, all committed, Jira and dashboard in sync:
