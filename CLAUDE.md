@@ -50,6 +50,15 @@ EXP-156 (v6.126 = EXP-140 on spec v1, QUAN-1041): **fail**. Sheet window: +97.6%
 ETH 0.3% pools, where the WBTC-fitted 0.3% half applies). About a third of its old gain was compensating the pool-price signal;
 its macro restore doubles rebuilds ($34k more mainnet gas on $100k over 2022-25, more than its $13.6k gain; gas not charged).
 
+/goal 2026-10-07 ("找到五個打敗基準的策略"), batch 1 EXP-157..164 (v6.142..149, `SPEC=v1`, full-history 7 pools, judged with
+`experiments/judge_full.py`): **5 pass** — EXP-157 v6.75 alone (5/7), 158 + cross-asset (4/7), 159 + cross-asset + macro (4/7),
+160 + macro (5/7), 163 fee tier v6.75 on 0.3% / 159's rule on 0.05% (5/7); fail: 161 + intraday stop (3/7, a WBTC-only rule),
+162 + two-day exit (1/7), 164 + wide top (2/7, DD > 3 pts deeper on mainnet ETH, loses BTC). Read the passes as one finding: all
+five carry v6.75's no-new-low refill; the ETH gain is real on mainnet (+1.5..3.6 pts CAGR on both mainnet pools) but Base and
+Arbitrum ETH 0.05% lose on Calmar for every variant, and the BTC wins are mostly within noise (+0.06 pt CAGR for v6.75 on WBTC).
+157 / 158 rebuild no more than spec v1; 159 / 160 / 163 double the rebuilds (mainnet gas ~$200k vs $122k on $100k, not charged).
+Batches now run one pool at a time with two workers (memory, see Gotchas).
+
 ## Handoff 2026-10-06 (two sessions closed; a new session starts here)
 
 Done since round 4, all committed, Jira and dashboard in sync:

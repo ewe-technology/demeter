@@ -1,7 +1,7 @@
 # EXP-161: v6.75 + intraday lower stop on every pool on spec v1 (v6.146)
 
 - Jira: QUAN-1048
-- Status: pre-registered
+- Status: fail
 - Level: improvement (over spec v1)
 - Pre-registration commit: c90d19c · Result commit: ______
 - Scope: Dino, 2026-10-07, /goal "再繼續不斷的開發uni策略，找到五個打敗基準的策略" (keep developing Uniswap strategies until five
@@ -32,8 +32,22 @@ Variant `GE`: REFILL_NO_NEW_LOW + INTRADAY_STOP (the 0.8 x centre stop reads the
 
 ## Result
 
-Verdict:
+Run `opt-AGAGBGCGDGEGFGGGH` with `SPEC=v1`, one pool at a time, 2 workers (2026-10-07; raw runs in the main checkout's `result/v6_validate/*-opt-AGAGBGCGDGEGFGGGH-specv1-*`). `A` reproduces EXP-156's spec v1 numbers on every pool.
+
+| pool (to 2026-09-17; Arbitrum to 2025-07-23) | spec v1 total / CAGR / max DD / Calmar | this | rebuilds | win |
+|---|---|---|---|---|
+| ETH mainnet 0.05% `0x88e6` from 2021-05-06 | +97.7% / 13.55% / -22.9% / 0.591 | +83.3% / 11.95% / -23.8% / 0.502 | 179 → 187 | lose |
+| ETH mainnet 0.3% `0x8ad5` from 2021-05-06 | +100.0% / 13.78% / -21.0% / 0.657 | +70.3% / 10.43% / -21.6% / 0.483 | 178 → 185 | lose |
+| ETH Base 0.05% `0xd0b5` from 2023-12-01 | +54.9% / 16.96% / -34.7% / 0.489 | +40.1% / 12.82% / -36.3% / 0.353 | 84 → 89 | lose |
+| ETH Arbitrum 0.05% `0xc696` from 2023-06-09 | +65.7% / 26.88% / -31.4% / 0.856 | +49.9% / 21.00% / -32.8% / 0.641 | 64 → 70 | lose |
+| ETH Base 0.3% `0x6c56` from 2025-01-01 | +29.8% / 16.48% / -24.6% / 0.671 | +30.8% / 17.04% / -24.6% / 0.694 | 55 → 54 | **win** |
+| BTC mainnet WBTC 0.3% `0x99ac` from 2021-11-02 | +62.2% / 10.43% / -30.1% / 0.346 | +81.8% / 13.05% / -26.3% / 0.495 | 129 → 129 | **win** |
+| BTC Base cbBTC 0.05% `0xfbb6` from 2024-10-01 | +44.0% / 20.46% / -16.7% / 1.224 | +44.8% / 20.80% / -16.7% / 1.244 | 49 → 49 | **win** |
+
+Verdict: **fail** — wins 3/7 (ETH 1 of 5, BTC 2 of 2), median CAGR gain -1.60 pt.
+
+Reading: The intraday stop is a WBTC rule: WBTC 0.3% +2.6 pts CAGR and DD -26.3% vs -30.1%, but it loses every ETH 0.05% pool and mainnet ETH 0.3% by 1.6-5.9 pts CAGR (early exits on wicks that ETH recovers from).
 
 ## Deviations
 
-None.
+- The batch was started on 2026-10-07 with two pool invocations of three workers, stopped by Dino (memory) before any result, and rerun from scratch one pool at a time with two workers; `v6_validate.py` gained `LEAN_STATUS` (identical numbers, `fddd2c4`) in between. The aborted partial outputs were deleted unread.

@@ -1,7 +1,7 @@
 # EXP-162: v6.75 + two-day EMA exit confirmation on every pool on spec v1 (v6.147)
 
 - Jira: QUAN-1049
-- Status: pre-registered
+- Status: fail
 - Level: improvement (over spec v1)
 - Pre-registration commit: c90d19c · Result commit: ______
 - Scope: Dino, 2026-10-07, /goal "再繼續不斷的開發uni策略，找到五個打敗基準的策略" (keep developing Uniswap strategies until five
@@ -32,8 +32,22 @@ Variant `GF`: REFILL_NO_NEW_LOW + EXIT_CONFIRM = 2 (the EMA exit needs two conse
 
 ## Result
 
-Verdict:
+Run `opt-AGAGBGCGDGEGFGGGH` with `SPEC=v1`, one pool at a time, 2 workers (2026-10-07; raw runs in the main checkout's `result/v6_validate/*-opt-AGAGBGCGDGEGFGGGH-specv1-*`). `A` reproduces EXP-156's spec v1 numbers on every pool.
+
+| pool (to 2026-09-17; Arbitrum to 2025-07-23) | spec v1 total / CAGR / max DD / Calmar | this | rebuilds | win |
+|---|---|---|---|---|
+| ETH mainnet 0.05% `0x88e6` from 2021-05-06 | +97.7% / 13.55% / -22.9% / 0.591 | +94.7% / 13.22% / -23.2% / 0.569 | 179 → 173 | lose |
+| ETH mainnet 0.3% `0x8ad5` from 2021-05-06 | +100.0% / 13.78% / -21.0% / 0.657 | +102.3% / 14.03% / -21.6% / 0.651 | 178 → 169 | lose |
+| ETH Base 0.05% `0xd0b5` from 2023-12-01 | +54.9% / 16.96% / -34.7% / 0.489 | +55.1% / 16.99% / -36.2% / 0.470 | 84 → 82 | lose |
+| ETH Arbitrum 0.05% `0xc696` from 2023-06-09 | +65.7% / 26.88% / -31.4% / 0.856 | +65.0% / 26.63% / -32.2% / 0.828 | 64 → 64 | lose |
+| ETH Base 0.3% `0x6c56` from 2025-01-01 | +29.8% / 16.48% / -24.6% / 0.671 | +35.7% / 19.58% / -20.4% / 0.961 | 55 → 51 | **win** |
+| BTC mainnet WBTC 0.3% `0x99ac` from 2021-11-02 | +62.2% / 10.43% / -30.1% / 0.346 | +46.6% / 8.16% / -30.2% / 0.271 | 129 → 129 | lose |
+| BTC Base cbBTC 0.05% `0xfbb6` from 2024-10-01 | +44.0% / 20.46% / -16.7% / 1.224 | +30.5% / 14.53% / -17.5% / 0.828 | 49 → 50 | lose |
+
+Verdict: **fail** — wins 1/7 (ETH 1 of 5, BTC 0 of 2), median CAGR gain -0.25 pt.
+
+Reading: Two-day exit confirmation costs CAGR almost everywhere (BTC cbBTC -5.9 pts); only Base ETH 0.3% (2025-26, one regime) wins, by a lot (+3.1 pts, DD -20.4% vs -24.6%).
 
 ## Deviations
 
-None.
+- The batch was started on 2026-10-07 with two pool invocations of three workers, stopped by Dino (memory) before any result, and rerun from scratch one pool at a time with two workers; `v6_validate.py` gained `LEAN_STATUS` (identical numbers, `fddd2c4`) in between. The aborted partial outputs were deleted unread.
