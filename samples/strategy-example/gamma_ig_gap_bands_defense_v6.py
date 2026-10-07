@@ -192,6 +192,10 @@ WIDTH_VOL_MIN, WIDTH_VOL_MAX, WIDTH_VOL_GRID = 0.10, 0.30, 0.05
 # "dvol" = Deribit ETH DVOL / 100 x sqrt(30 / 365) (the implied one-month 1-sigma move, ETH-quoted pools only),
 # "er30" = 0.10 + 0.40 x Kaufman efficiency ratio of the last 30 daily closes (trend -> wide, chop -> narrow). None = v6.
 WIDTH_SIGNAL: str | None = None
+# EXP-167 / 168: width from v6's own engine state, judged on the last completed day like F.
+# "F" (v6.152): half-width = 0.10 + 0.20 x F, up and down (F = 1 -> 30%, F = 0.5 -> 20%), same clamp / grid as EXP-030.
+# "refill_low" (v6.153): while 0 < F < 1, the lower reach ends at the lowest refill low among accounts still refilling
+# (lower ratio = 1 - low / close, clamped / rounded as EXP-030), upper reach stays upper_ratio; otherwise v6's ladder.
 DVOL_CSV = "../deribit_dvol_daily.csv"
 # EXP-044 (v6.31): the ladder is rebuilt after a range exit only when the price is outside it at EXIT_CONFIRM consecutive
 # daily checks (the one-sided ladder earns no fees meanwhile; a close back inside cancels the exit). 1 = v6.
@@ -591,6 +595,7 @@ def daily_ema_frame(minute_price: pd.Series) -> pd.DataFrame:
     er = ((close - close.shift(ER_DAYS)).abs() / path).fillna(1.0)
     trend_ok = (er >= 1 / np.sqrt(ER_DAYS)) if ER_GATE else pd.Series(True, index=close.index)
     fractions = []
+    refill_lows = []   # EXP-168
     states = {f"{x}{j}": [] for j in range(len(EMA_SPANS)) for x in ("dep", "ctr")}   # EXP-063
     ex = None
     if EXTRA is not None:   # EXP-082..086: daily context, aligned to the closes
@@ -629,6 +634,8 @@ def daily_ema_frame(minute_price: pd.Series) -> pd.DataFrame:
         elif F_BINARY == "all":   # EXP-080
             f = 1.0 if min(deps) >= 1.0 else 0.0
         fractions.append(f)
+        lows = [a.low for _, a in accounts if a.deployed < 1 and a.low is not None]   # EXP-168
+        refill_lows.append(min(lows) if lows else float("nan"))
         if ACCOUNT_TRANCHES:
             for j, (_, a) in enumerate([x for x in accounts if x[0] == "ema"]):
                 states[f"dep{j}"].append(a.deployed)
@@ -660,6 +667,10 @@ def daily_ema_frame(minute_price: pd.Series) -> pd.DataFrame:
     arm = sum((close > emas[n]).astype(float) for n in EMA_SPANS) / len(EMA_SPANS)   # EXP-029
     sigma = np.log(close).diff().rolling(WIDTH_VOL_DAYS, min_periods=WIDTH_VOL_DAYS).std()   # EXP-030
     out = pd.DataFrame({"close": close, "ema": emas[EMA_SPAN], "F": fractions, "arm": arm, "sigma": sigma})
+    if WIDTH_SIGNAL == "F":   # EXP-167: F after every F override above
+        out["width_sig"] = 0.10 + 0.20 * out["F"]
+    if WIDTH_SIGNAL == "refill_low":   # EXP-168
+        out["rlow"] = refill_lows
     if WIDTH_SIGNAL == "dvol":   # EXP-165
         dv = pd.read_csv(DVOL_CSV, parse_dates=["date"]).set_index("date")["ETH"].sort_index()
         out["width_sig"] = (dv / 100 * math.sqrt(30 / 365)).reindex(close.index).ffill()
@@ -1132,7 +1143,23 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
     def resolve_skew(self, timestamp: datetime) -> None:
         """EXP-013: pick the reaches of the ladder built at `timestamp` from the s rule's trend sign (last completed
         daily close vs EMA100); the state then stays for the life of that ladder."""
-        if (WIDTH_VOL or WIDTH_SIGNAL) and self.daily_ema is not None:   # EXP-030, EXP-165 / 166
+        if WIDTH_SIGNAL == "refill_low" and self.daily_ema is not None:   # EXP-168
+            try:
+                row = daily_row_for(self.daily_ema, timestamp)[1]
+                f, close, low = float(row["F"]), float(row["close"]), float(row["rlow"])
+            except KeyError:
+                f, close, low = 1.0, float("nan"), float("nan")
+            if 0 < f < 1 and low == low and close == close:
+                down = min(max(1 - low / close, WIDTH_VOL_MIN), WIDTH_VOL_MAX)
+                down = round(round(down / WIDTH_VOL_GRID) * WIDTH_VOL_GRID, 4)
+                self.skew_state = f"d{down}"
+                if self.skew_state not in self.shape_configs:
+                    self.shape_configs[self.skew_state] = self._config(self.upper_ratio, Decimal(str(down)))
+            else:
+                self.skew_state = "flat"
+            self.width_builds[self.skew_state] = self.width_builds.get(self.skew_state, 0) + 1
+            return
+        if (WIDTH_VOL or WIDTH_SIGNAL) and self.daily_ema is not None:   # EXP-030, EXP-165 / 166 / 167
             col = "width_sig" if WIDTH_SIGNAL else "sigma"
             try:
                 sigma = float(daily_row_for(self.daily_ema, timestamp)[1][col])
