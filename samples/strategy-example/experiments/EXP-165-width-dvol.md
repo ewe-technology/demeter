@@ -1,9 +1,9 @@
 # EXP-165: ladder half-width from ETH implied vol (Deribit DVOL one-month move) instead of fixed ±20% (v6.150)
 
-- Jira: QUAN-___
-- Status: pre-registered
+- Jira: QUAN-1071
+- Status: fail
 - Level: improvement (over spec v1)
-- Pre-registration commit: ______ · Result commit: ______
+- Pre-registration commit: 4edc502 · Result commit: ______
 - Scope: Dino, 2026-10-07: "先針對單一pool eth/usdc and wbtc/eth 看各自有沒其他策略可以有更好的報酬", then "試著看能不能找到什麼
   指標或訊號讓+-20%變成動態的" (find an indicator or signal that makes the ±20% dynamic). Single-pool question: judged on the
   ETH/USDC pool he named, not the seven-pool bar.
@@ -31,6 +31,20 @@ is searched: sqrt(30/365) is the one-month horizon, clamp and grid are EXP-030's
 - Gas is reported, not charged.
 
 ## Result
+
+Run `opt-AGIGJ` with `SPEC=v1`, 2 workers (2026-10-07; raw run in the main checkout's
+`result/v6_validate/0x88e6-opt-AGIGJ-specv1-2021-05-06-2026-09-17*`). `A` reproduces EXP-156's spec v1 numbers (+97.7%).
+
+| pool | spec v1 total / CAGR / max DD / Calmar | this | rebuilds | win |
+|---|---|---|---|---|
+| ETH mainnet 0.05% `0x88e6` 2021-05-06..2026-09-17 | +97.7% / 13.55% / -22.9% / 0.591 | +76.8% / 11.20% / -24.8% / 0.451 | 179 → 178 | lose |
+
+Widths built: 10% x6, 15% x29, 20% x67, 25% x20, 30% x56 (mean ~22%). LP fees $85.0k vs $101.5k; gas $121k vs $122k.
+
+Verdict: **fail** — CAGR -2.35 pt, Calmar 0.451 vs 0.591, max DD 1.9 pts deeper.
+
+Reading (a likely mechanism, not tested): DVOL widens the ladder after a sell-off (implied vol is highest at the lows), which is exactly when v6's staged refill
+wants a tight ladder to buy back; fees fall 16% and the refill gains less. A forward-looking vol does not fix EXP-030's problem.
 
 ## Deviations
 
