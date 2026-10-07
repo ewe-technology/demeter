@@ -3,7 +3,7 @@
 - Jira: QUAN-1074
 - Status: fail
 - Level: improvement (over spec v1 on ETH/USDC, over v6 on WBTC/ETH)
-- Pre-registration commit: 4621cb7 · Result commit: ______
+- Pre-registration commit: 4621cb7 · Result commit: 42e213b
 - Scope: as EXP-167 (Dino, 2026-10-07: width that follows the refill stage or F).
 
 ## Hypothesis

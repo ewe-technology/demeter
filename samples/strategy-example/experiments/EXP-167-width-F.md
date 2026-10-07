@@ -3,7 +3,7 @@
 - Jira: QUAN-1073
 - Status: fail
 - Level: improvement (over spec v1 on ETH/USDC, over v6 on WBTC/ETH)
-- Pre-registration commit: 4621cb7 · Result commit: ______
+- Pre-registration commit: 4621cb7 · Result commit: 42e213b
 - Scope: Dino, 2026-10-07: "好，試試看跟著 refill 階段或 F 變寬度" (try a width that follows the refill stage or F), after
   EXP-165 / 166 (market-indicator widths) failed. Same single pools as EXP-166.
 
