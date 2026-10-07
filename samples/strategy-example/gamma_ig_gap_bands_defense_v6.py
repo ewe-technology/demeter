@@ -196,6 +196,8 @@ WIDTH_SIGNAL: str | None = None
 # "F" (v6.152): half-width = 0.10 + 0.20 x F, up and down (F = 1 -> 30%, F = 0.5 -> 20%), same clamp / grid as EXP-030.
 # "refill_low" (v6.153): while 0 < F < 1, the lower reach ends at the lowest refill low among accounts still refilling
 # (lower ratio = 1 - low / close, clamped / rounded as EXP-030), upper reach stays upper_ratio; otherwise v6's ladder.
+# "full_widetop" (EXP-173, v6.158): at F = 1 the upper reach is +40% (EXP-154's), else v6's ladder.
+# "full_widetop_rl" (EXP-174, v6.159): "full_widetop" at F = 1, "refill_low" while 0 < F < 1, v6's ladder at F = 0.
 DVOL_CSV = "../deribit_dvol_daily.csv"
 # EXP-044 (v6.31): the ladder is rebuilt after a range exit only when the price is outside it at EXIT_CONFIRM consecutive
 # daily checks (the one-sided ladder earns no fees meanwhile; a close back inside cancels the exit). 1 = v6.
@@ -669,7 +671,7 @@ def daily_ema_frame(minute_price: pd.Series) -> pd.DataFrame:
     out = pd.DataFrame({"close": close, "ema": emas[EMA_SPAN], "F": fractions, "arm": arm, "sigma": sigma})
     if WIDTH_SIGNAL == "F":   # EXP-167: F after every F override above
         out["width_sig"] = 0.10 + 0.20 * out["F"]
-    if WIDTH_SIGNAL == "refill_low":   # EXP-168
+    if WIDTH_SIGNAL in ("refill_low", "full_widetop_rl"):   # EXP-168 / 174
         out["rlow"] = refill_lows
     if WIDTH_SIGNAL == "dvol":   # EXP-165
         dv = pd.read_csv(DVOL_CSV, parse_dates=["date"]).set_index("date")["ETH"].sort_index()
@@ -1143,7 +1145,22 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
     def resolve_skew(self, timestamp: datetime) -> None:
         """EXP-013: pick the reaches of the ladder built at `timestamp` from the s rule's trend sign (last completed
         daily close vs EMA100); the state then stays for the life of that ladder."""
-        if WIDTH_SIGNAL == "refill_low" and self.daily_ema is not None:   # EXP-168
+        if WIDTH_SIGNAL in ("full_widetop", "full_widetop_rl") and self.daily_ema is not None:   # EXP-173 / 174
+            try:
+                f = float(daily_row_for(self.daily_ema, timestamp)[1]["F"])
+            except KeyError:
+                f = 0.0
+            if f >= 1.0:   # all four accounts fully deployed: EXP-154's +40% top, v6's lower reach
+                self.skew_state = "widetop"
+                if self.skew_state not in self.shape_configs:
+                    self.shape_configs[self.skew_state] = self._config(Decimal("0.40"), self.lower_ratio)
+                self.width_builds[self.skew_state] = self.width_builds.get(self.skew_state, 0) + 1
+                return
+            if WIDTH_SIGNAL == "full_widetop":
+                self.skew_state = "flat"
+                self.width_builds[self.skew_state] = self.width_builds.get(self.skew_state, 0) + 1
+                return
+        if WIDTH_SIGNAL in ("refill_low", "full_widetop_rl") and self.daily_ema is not None:   # EXP-168 / 174
             try:
                 row = daily_row_for(self.daily_ema, timestamp)[1]
                 f, close, low = float(row["F"]), float(row["close"]), float(row["rlow"])

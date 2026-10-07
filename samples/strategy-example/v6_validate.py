@@ -366,7 +366,12 @@ OPT = {"A": Variant("A_v6"),
        "GN": Variant("GN_rl_share50", {"WIDTH_SIGNAL": "refill_low", "SHARE_ABOVE_EMA": Decimal("0.5")}),   # EXP-170
        "GO": Variant("GO_rl_nostop", {"WIDTH_SIGNAL": "refill_low", "NO_LOWER_STOP": True}),   # EXP-171
        "GP": Variant("GP_rl_nolow_share50", {"WIDTH_SIGNAL": "refill_low", "REFILL_NO_NEW_LOW": True,
-                                             "SHARE_ABOVE_EMA": Decimal("0.5")})}   # EXP-172   # EXP-168: refilling -> lower edge at the refill low   # EXP-166: half-width = 0.10 + 0.40 x ER30, 10..30%
+                                             "SHARE_ABOVE_EMA": Decimal("0.5")}),   # EXP-172
+       # /goal batch 2 (EXP-173..175): v6.75 + a width from v6's state
+       "GQ": Variant("GQ_nolow_fulltop", {"REFILL_NO_NEW_LOW": True, "WIDTH_SIGNAL": "full_widetop"}),   # EXP-173
+       "GR": Variant("GR_nolow_fulltop_rl", {"REFILL_NO_NEW_LOW": True, "WIDTH_SIGNAL": "full_widetop_rl"}),   # EXP-174
+       "GS": Variant("GS_tier_rl_nolow", {"TIER": {"hi": {"REFILL_NO_NEW_LOW": True, "WIDTH_SIGNAL": "refill_low"},
+                                                  "lo": {"REFILL_NO_NEW_LOW": True}}})}   # EXP-175   # EXP-168: refilling -> lower edge at the refill low   # EXP-166: half-width = 0.10 + 0.40 x ER30, 10..30%
 # EXP-082..: daily non-price inputs (samples/fetch_deribit_dvol.py, fetch_binance_funding.py, fetch_binance_daily.py)
 DVOL_CSV = "../deribit_dvol_daily.csv"
 FUND_LONG_CSV = {"ETHUSDT": "../binance_funding_ETHUSDT_long.csv", "BTCUSDT": "../binance_funding_BTCUSDT_long.csv"}
