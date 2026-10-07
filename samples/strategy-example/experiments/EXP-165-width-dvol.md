@@ -3,7 +3,7 @@
 - Jira: QUAN-1071
 - Status: fail
 - Level: improvement (over spec v1)
-- Pre-registration commit: 4edc502 · Result commit: ______
+- Pre-registration commit: 4edc502 · Result commit: f867495
 - Scope: Dino, 2026-10-07: "先針對單一pool eth/usdc and wbtc/eth 看各自有沒其他策略可以有更好的報酬", then "試著看能不能找到什麼
   指標或訊號讓+-20%變成動態的" (find an indicator or signal that makes the ±20% dynamic). Single-pool question: judged on the
   ETH/USDC pool he named, not the seven-pool bar.

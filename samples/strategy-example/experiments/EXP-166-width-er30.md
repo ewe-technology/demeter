@@ -3,7 +3,7 @@
 - Jira: QUAN-1072
 - Status: fail
 - Level: improvement (over spec v1 on ETH/USDC, over v6 on WBTC/ETH)
-- Pre-registration commit: 4edc502 · Result commit: ______
+- Pre-registration commit: 4edc502 · Result commit: f867495
 - Scope: as EXP-165 (Dino, 2026-10-07: make the ±20% dynamic, single pools ETH/USDC and WBTC/ETH).
 
 ## Hypothesis
