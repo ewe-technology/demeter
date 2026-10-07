@@ -72,7 +72,7 @@ class RecordingLP(SleeveLP):
 
 def run(s: PoolSleeve) -> tuple[str, pd.DataFrame, pd.DataFrame, float]:
     started = time.time()
-    data, _ = load_market(KEY, s.pool(), s.address, s.start, s.end, "1h")
+    data, _ = load_market(KEY, s.pool(), s.address, s.start, s.end, "1h", s.chain)
     market = UniLpMarket(KEY, s.pool())
     market.data = data
     actuator = Actuator()

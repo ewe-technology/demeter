@@ -47,8 +47,10 @@ def simulate(weights: pd.DataFrame, values: pd.DataFrame, start: str = IN_SAMPLE
     weights: target value share per sleeve (its columns), from each timestamp on; the rest goes to cash.
     values: hourly USD value of one unit of every sleeve in `weights`, plus a "cash" column.
     cost_bps: one number for every sleeve or {sleeve: bps}, paid on the notional moved into or out of that sleeve;
-        a sleeve's bps may also be a function of the trade time, for a route that changes over the years.
-    cash_cost_bps: paid on the notional moved into or out of cash (a parking LP takes a swap to enter and leave).
+        a sleeve's bps may also be a function f(trade time, notional moved), for a route that changes over the
+        years or a price impact that grows with the trade.
+    cash_cost_bps: paid on the notional moved into or out of cash (a parking LP takes a swap to enter and leave);
+        a number, or a function f(trade time, notional moved) like a sleeve's.
     threshold: None trades whenever the target changes; a number trades when any share drifted further than that.
     gas: {sleeve: f(kind, t) -> USD} for the sleeves (cash included) that live on chain; the others pay none.
         Entering or leaving one pays f("enter" / "exit"), resizing it f("recentre"), or with resize="split"
@@ -62,7 +64,7 @@ def simulate(weights: pd.DataFrame, values: pd.DataFrame, start: str = IN_SAMPLE
     sleeves = list(w.columns)
     bps = {s: cost_bps[s] if isinstance(cost_bps, dict) else cost_bps for s in sleeves}
     cost = {s: b / 10_000 for s, b in bps.items() if not callable(b)}
-    c_cash = cash_cost_bps / 10_000
+    c_cash = None if callable(cash_cost_bps) else cash_cost_bps / 10_000
     gas, lp = gas or {}, lp or {}
     q = [0.0] * len(sleeves)
     units = INITIAL / float(v["cash"].iloc[0])
@@ -79,8 +81,9 @@ def simulate(weights: pd.DataFrame, values: pd.DataFrame, start: str = IN_SAMPLE
         if go:
             moved = [abs(wi * value - hi) for wi, hi in zip(want, held)]
             cash_before, cash_after = units * pc, (1 - sum(want)) * value
-            fee = sum(m * (cost[s] if s in cost else bps[s](t) / 10_000) for m, s in zip(moved, sleeves))
-            fee += abs(cash_after - cash_before) * c_cash
+            fee = sum(m * (cost[s] if s in cost else bps[s](t, m) / 10_000) for m, s in zip(moved, sleeves))
+            cash_moved = abs(cash_after - cash_before)
+            fee += cash_moved * (c_cash if c_cash is not None else cash_cost_bps(t, cash_moved) / 10_000)
             spent = 0.0
             for name, before, after in [*zip(sleeves, held, (wi * value for wi in want)), ("cash", cash_before, cash_after)]:
                 if name not in gas or abs(after - before) <= 1:

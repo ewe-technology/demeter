@@ -301,11 +301,12 @@ class TriGate(Strategy):
                 self._place(m_stable, PARK_RANGE, None)
 
 
-def load_market(key: MarketInfo, pool: UniV3Pool, address: str, start: date, end: date, bar: str | None):
+def load_market(key: MarketInfo, pool: UniV3Pool, address: str, start: date, end: date, bar: str | None,
+                chain: str = ChainType.ethereum.name):
     """Market data resampled to `bar` (None keeps minutes), plus minute-level daily closes."""
     market = UniLpMarket(key, pool)
     market.data_path = f"../real-data/{address}"
-    market.load_data(ChainType.ethereum.name, address, start, end)
+    market.load_data(chain, address, start, end)
     daily_close = market.data["price"].astype(float).resample("1D").last()
     data = resample(market.data, bar) if bar else market.data
     del market

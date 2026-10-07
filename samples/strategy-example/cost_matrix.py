@@ -53,7 +53,7 @@ DIRECT_FROM = pd.Timestamp("2025-01-01")
 DIRECT_BPS, TWO_HOP_BPS = 6, 10
 
 
-def btc_route_bps(t: pd.Timestamp) -> float:
+def btc_route_bps(t: pd.Timestamp, notional: float = 0.0) -> float:
     return DIRECT_BPS if t >= DIRECT_FROM else TWO_HOP_BPS
 
 G = {}  # filled in main before the pool forks

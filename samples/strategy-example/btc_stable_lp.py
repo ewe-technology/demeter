@@ -10,10 +10,12 @@ preregistration.lp_verdict; no strategy is designed unless it passes. Volatility
 
 Run from samples/strategy-example (the spot price cache of spot_btc_eth_gate.py must exist):
   PYTHONPATH=../.. python btc_stable_lp.py               # the Ethereum pool
+  PYTHONPATH=../.. python btc_stable_lp.py --chain arbitrum
 """
 import argparse
 import multiprocessing
 import os
+import re
 from datetime import date, timedelta
 
 import pandas as pd
@@ -21,8 +23,9 @@ import pandas as pd
 import preregistration as prereg
 import spot_robustness as sr
 from spot_btc_eth_gate import load_prices
-from tri_btc_eth_gate import usdt, wbtc
+from tri_btc_eth_gate import usdc, usdt, wbtc
 from vol_lp_check import PoolSleeve, daily_excess, run, summarise
+from yield_layer import DATA_DIR, pool_dir
 
 RESULT_DIR = "result/btc-stable-lp"
 
@@ -32,14 +35,17 @@ def sleeves(chain: str) -> list[PoolSleeve]:
     for test in prereg.LP_TESTS:
         if test.chain != chain:
             continue
-        if chain != "ethereum":
-            raise NotImplementedError("the Arbitrum pool's tokens are not wired in yet")
-        start = date.fromisoformat(test.start) - timedelta(days=31)  # warms up the 30-day volatility
+        # warms up the 30-day volatility, but never before the pool's first file; days whose volatility cannot be
+        # known yet are left out by daily_excess
+        files = os.listdir(f"{DATA_DIR}/{pool_dir(test.pool)}")
+        first = min(date.fromisoformat(re.search(r"(\d{4}-\d\d-\d\d)\.minute", f).group(1)) for f in files)
+        start = max(date.fromisoformat(test.start) - timedelta(days=31), first)
         end = date.fromisoformat(test.end)
+        # WBTC is token0 in both: USDT token1 on Ethereum, USDC token1 on Arbitrum, valued in that stablecoin
+        stable, tag = (usdt, "wbtcusdt") if chain == "ethereum" else (usdc, "wbtcusdc_arb")
         for width in prereg.LP_WIDTHS:
-            # WBTC is token0, USDT token1; valued in USDT, about USD
-            out.append(PoolSleeve(f"wbtcusdt_lp{width:g}", test.pool, wbtc, usdt, usdt, start, end, width,
-                                  prereg.LP_CAPITAL))
+            out.append(PoolSleeve(f"{tag}_lp{width:g}", pool_dir(test.pool), wbtc, stable, stable, start, end, width,
+                                  prereg.LP_CAPITAL, chain=chain))
     return out
 
 

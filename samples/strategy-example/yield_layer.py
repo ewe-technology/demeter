@@ -77,6 +77,7 @@ class Sleeve:
     width: float
     initial: float  # in quote, about the size the sleeve has in a $100k portfolio
     guard: Decimal | None = None  # stay out while |price - 1| >= guard
+    chain: str = "ethereum"  # the address must have the case of its data folder
 
     @property
     def base(self) -> TokenInfo:
@@ -101,8 +102,13 @@ def build_sleeves() -> list[Sleeve]:
 
 # ---- data quality ----
 
+def pool_dir(address: str) -> str:
+    """The data folder of a pool: folders keep the address's checksum case, which a lowercase address lacks."""
+    return next(d for d in os.listdir(DATA_DIR) if d.lower() == address.lower())
+
+
 def read_minutes(address: str, cols=("timestamp", "closeTick", "inAmount0", "inAmount1")) -> pd.DataFrame:
-    files = sorted(glob.glob(f"{DATA_DIR}/{address}/*.minute.csv"))
+    files = sorted(glob.glob(f"{DATA_DIR}/{pool_dir(address)}/*.minute.csv"))
     df = pd.concat((pd.read_csv(f, usecols=list(cols)) for f in files), ignore_index=True)
     df["timestamp"] = pd.to_datetime(df["timestamp"])
     for c in cols[1:]:  # 18-decimal amounts overflow int64 and load as str
@@ -142,7 +148,7 @@ def quality():
 RATIO_MEDIAN_OF = 21  # traded minutes behind the causal ratio, fixed before the run
 
 
-def wsteth_ratio(index: pd.DatetimeIndex, method: str = "causal") -> pd.Series:
+def wsteth_ratio(index: pd.DatetimeIndex, method: str = "causal", address: str = WSTETH_POOL) -> pd.Series:
     """
     WETH per wstETH on `index`, using only the trades before each timestamp (a price at t is what was known at t,
     the same as the spot prices):
@@ -155,7 +161,7 @@ def wsteth_ratio(index: pd.DatetimeIndex, method: str = "causal") -> pd.Series:
     Across hours without trades the ratio stays at its last value, so the staking yield of a long gap (the pool
     barely traded from 2022-08 to 2023-06) arrives in one step when trading resumes.
     """
-    df = read_minutes(WSTETH_POOL)
+    df = read_minutes(address)
     traded = df[(df["inAmount0"] > 0) | (df["inAmount1"] > 0)]
     minute = 1.0001 ** traded["closeTick"]
     if method == "centred":
@@ -210,7 +216,7 @@ class SleeveLP(Strategy):
 
 def run_sleeve(s: Sleeve, bar: str | None, start: date, end: date) -> tuple[str, pd.DataFrame, list, float]:
     started = time.time()
-    data, _ = load_market(KEY, s.pool(), s.address, start, end, bar)
+    data, _ = load_market(KEY, s.pool(), s.address, start, end, bar, s.chain)
     market = UniLpMarket(KEY, s.pool())
     market.data = data
     actuator = Actuator()
