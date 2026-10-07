@@ -3,7 +3,7 @@
 - Jira: QUAN-1081
 - Status: pass
 - Level: improvement (over spec v1; v6 on `0x4585`)
-- Pre-registration commit: 783ad2a · Result commit: ______
+- Pre-registration commit: 783ad2a · Result commit: f3d8317
 - Scope: Dino, 2026-10-07, /goal "不斷的抽換v6裡面的概念，加上+-20的動態調整，直到找到總績效比v6好的策略". Batch 2 = EXP-173..175,
   pre-registered together after batch 1 (EXP-169..172) failed.
 
