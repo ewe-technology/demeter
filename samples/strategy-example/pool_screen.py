@@ -104,7 +104,7 @@ def screen(name: str, eth_usd: pd.Series) -> pd.DataFrame:
     t["ratio_100k"] = t["fee_100k"] / t["loss"]
     t["volume_musd_day"] = e["volume_usd"].groupby(e.index.year).sum() / e.groupby(e.index.year).size() * 1440 / 1e6
     t["trade_days"] = trade_days.reindex(t.index).fillna(0).astype(int)
-    t["full_year"] = [df.index[0] <= pd.Timestamp(f"{y}-01-01") for y in t.index]
+    t["full_year"] = [df.index[0].normalize() <= pd.Timestamp(f"{y}-01-01") for y in t.index]  # data on Jan 1
     t["counts"] = t["full_year"] & (t["trade_days"] >= MIN_TRADE_DAYS)
     t.insert(0, "pool", name)
     return t.rename_axis("year").reset_index()
