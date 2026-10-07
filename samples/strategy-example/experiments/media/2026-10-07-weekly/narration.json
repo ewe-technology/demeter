@@ -1,6 +1,6 @@
 {
-  "voice_id": "fQj4gJSexpu8RDE2Ii5m",
-  "model_id": "eleven_multilingual_v2",
+  "tts_engine": "edge-tts",
+  "voice": "zh-TW-YunJheNeural",
   "scenes": [
     {
       "id": "s01_karpathy",
@@ -11,7 +11,8 @@
         "第一層是文字，他建議用航太維修手冊的受控英文 ASD-STE100 來寫，比較好讀。",
         "第二層是圖，第三層是可以互動的 HTML 網頁。",
         "他最看好的是第四層：針對任何主題，量身做一支 3b1b 風格的解說影片，再用 ElevenLabs 配音。",
-        "所以這次的研究週報，就照他的建議，做成這支影片。"
+        "他也說，沒有付費的配音服務，可以請 AI 幫你找免費的替代方案。",
+        "所以這次的研究週報，就照他的建議做成這支影片，配音用的是微軟的免費語音。"
       ]
     },
     {
