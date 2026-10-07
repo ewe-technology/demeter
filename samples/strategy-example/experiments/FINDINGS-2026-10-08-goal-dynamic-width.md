@@ -22,11 +22,12 @@ win on WBTC/ETH `0x4585` against v6. Batch 1 screened on `0x88e6` + `0x4585` fir
   where v6.75 alone scores 5/7. Not better than v6.75; a candidate for the forward window at most.
 - **The refill-low edge is a drawdown tool.** With share 50% it made max DD shallower on all seven pools (EXP-172, 1..6 pts),
   but cost CAGR where the trend carried the return (L2 0.05% ETH, both BTC pools).
-- **A wider top in strong trends is an ETH return tool.** EXP-173/174 add 2.4..5.5 pts CAGR on mainnet and Base ETH and give
-  the best WBTC/ETH results so far (+1.5 / +1.1 pts), but max DD on mainnet ETH is 2..4 pts deeper and both BTC/USD pools
-  lose about 2 pts CAGR. Arbitrum ETH loses 5.8 pts with every wide-top variant.
-- **BTC/USD pools reject every width change tried** (EXP-030, 164, 172..175): seven variants, none raises CAGR on `0x99ac` or
-  `0xfbb6`. Only v6.75's refill rule wins there, by +0.06 pt.
+- **A wider top in strong trends is an ETH return tool.** EXP-173/174 add 2.4..3.3 pts CAGR on mainnet ETH, 3.6..5.5 on Base
+  0.3% and 1.0..1.9 on Base 0.05%, and give the best WBTC/ETH results so far (+1.5 / +1.1 pts); but max DD on mainnet ETH is
+  2.2..4.2 pts deeper, both BTC/USD pools lose 1.8..2.7 pts CAGR and Arbitrum ETH loses 5.8 pts.
+- **BTC/USD pools reject every width change tried on them** (EXP-030, 164, 172, 173, 174 and EXP-175's 0.3% tier): none
+  raised CAGR on `0x99ac` or `0xfbb6` (EXP-172's loss also carries its 50% share). Only v6.75's refill rule wins there, by
+  +0.06 pt.
 
 ## Next
 
