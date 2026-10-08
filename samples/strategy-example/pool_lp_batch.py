@@ -98,6 +98,7 @@ GATE_SOURCE = {"99ac": "99ac", "88e6": "99ac", "c696": "99ac", "0e48": "99ac", "
 class ConfigX(Config30):
     pool_key: str = "99ac"
     ema: int = 100
+    gate_src: str = ""  # the pool whose gate switches this config; "" = GATE_SOURCE[pool_key]
 
     def pool(self) -> UniV3Pool:
         p = POOLS[self.pool_key]
@@ -210,7 +211,7 @@ def run(c: ConfigX, start: date, end: date) -> dict:
     actuator.broker.add_market(market)
     actuator.broker.set_balance(p.quote, Decimal(c.initial))
     actuator.set_price(pd.DataFrame({base.name: price, p.quote.name: 1.0}, index=price.index), p.quote)
-    strategy = GatedPool(c, gate(GATE_SOURCE[c.pool_key], c.ema)) if c.gated else RangePool(c)
+    strategy = GatedPool(c, gate(c.gate_src or GATE_SOURCE[c.pool_key], c.ema)) if c.gated else RangePool(c)
     actuator.strategy = strategy
     actuator.run(print_result=False)
 
