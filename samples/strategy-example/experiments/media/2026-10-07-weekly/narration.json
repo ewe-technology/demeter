@@ -129,6 +129,22 @@
         "總結。v6 賺的是時機，有效的改動都在讓 EMA 下方的補回更準，而且 ETH 和 WBTC 要的節奏不同。",
         "下一步，用九月十七日之後的新資料驗證 no-new-low，並把 ETH 和 WBTC 的規則分開預先登記再驗證。"
       ]
+    },
+    {
+      "id": "s12_appendix",
+      "visual": "Appendix: every version of EXP-052..164 from appendix_versions.csv (same folder), one page per category in the CSV order (fee_tier, refill, f_engine, rebuild, exit_stop, macro, ladder, routing, then idle and baseline together on the last page); the first line plays over a short title card, then one line per page. Each page: header '附錄 · <category name> · <n> 個' (names: fee-tier 分組, refill 時機, F 引擎結構, rebuild／置中, exit／stop, macro 事件, ladder 形狀, swap routing, 閒置資金, 基準重跑) and a list of rows 'EXP 號（no EXP- prefix） · version · label_zh · result', result colored: dev 淘汰 grey, holdout 通過 / 全歷史通過 blue, holdout 失敗 / 全歷史失敗 orange, 待判 grey (map from the status column: dropped-at-dev, holdout-pass, holdout-fail, pass, fail, dev-done). Use up to 3 columns for long pages (fee-tier 34 rows); text must stay readable at 1080p (>= 24 px) and above the subtitle band. A small legend on every page: '高費＝0.3% 池、低費＝0.05% 池'. Each page stays on screen while its narration line plays (minimum 4 s; if the line is shorter, hold the page silently). Show every row from the CSV exactly as written.",
+      "lines": [
+        "附錄：本週所有版本，依九類列出。",
+        "fee-tier 分組，三十四個版本。",
+        "refill 時機，二十三個版本。",
+        "F 引擎結構，十六個版本。",
+        "rebuild 和重新置中，十四個版本。",
+        "exit 和 stop，八個版本。",
+        "macro 事件，六個版本。",
+        "ladder 形狀，五個版本。",
+        "swap routing，三個版本。",
+        "閒置資金兩個，另外一個是基準重跑。"
+      ]
     }
   ]
 }

@@ -1,0 +1,35 @@
+<section id="best" data-transition="fade" style="background:#F4F1EA;color:#16202B;font-family:'Noto Sans TC', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:28px">
+<h2 style="font-size:56px;font-weight:700">兩個池各自最好的策略（全歷史，依 CAGR）</h2>
+<div style="display:flex;gap:32px;align-items:start">
+<div style="width:816px;display:flex;flex-direction:column;gap:12px">
+<h3 style="font-size:32px;font-weight:700">ETH/USDC 0x88e6（2021-05～2026-09，USD）</h3>
+<p style="font-size:24px;color:#5B6B7C">基準 spec v1：CAGR 13.55%、max DD −22.9%、rebuild 179</p>
+<table style="width:816px;font-size:24px;color:#16202B;padding:4px 8px">
+<tr><th style="width:9%;text-align:left">EXP</th><th style="width:41%;text-align:left">策略</th><th style="width:13%;text-align:right">CAGR</th><th style="width:13%;text-align:right">max DD</th><th style="width:11%;text-align:right">rebuild</th><th style="width:13%;text-align:right">7 池</th></tr>
+<tr><td>159</td><td>v6.75＋跨資產＋macro</td><td style="text-align:right">17.12%</td><td style="text-align:right">−24.3%</td><td style="text-align:right;color:#B5601F">319</td><td style="text-align:right">4/7 過</td></tr>
+<tr><td>158</td><td>v6.75＋跨資產 refill</td><td style="text-align:right">16.87%</td><td style="text-align:right">−24.1%</td><td style="text-align:right">165</td><td style="text-align:right">4/7 過</td></tr>
+<tr><td>173</td><td>v6.75＋滿倉上緣 +40%</td><td style="text-align:right">16.83%</td><td style="text-align:right">−26.2%</td><td style="text-align:right">166</td><td style="text-align:right">1/7 敗</td></tr>
+</table>
+</div>
+<div style="width:816px;display:flex;flex-direction:column;gap:12px">
+<h3 style="font-size:32px;font-weight:700">WBTC/ETH 0x4585（2021-11～2026-09，BTC）</h3>
+<p style="font-size:24px;color:#5B6B7C">基準 v6：CAGR −0.29%、max DD −32.7%、rebuild 100；持有 BTC＝0%</p>
+<table style="width:816px;font-size:24px;color:#16202B;padding:4px 8px">
+<tr><th style="width:9%;text-align:left">EXP</th><th style="width:50%;text-align:left">策略</th><th style="width:14%;text-align:right">CAGR</th><th style="width:14%;text-align:right">max DD</th><th style="width:13%;text-align:right">rebuild</th></tr>
+<tr><td>140</td><td>0.05% 規則：v6.75＋跨資產＋macro</td><td style="text-align:right">1.49%</td><td style="text-align:right">−33.7%</td><td style="text-align:right;color:#B5601F">181</td></tr>
+<tr><td>173</td><td>v6.75＋滿倉上緣 +40%</td><td style="text-align:right">1.19%</td><td style="text-align:right">−30.2%</td><td style="text-align:right">98</td></tr>
+<tr><td>174</td><td>173＋補倉時下緣＝refill low</td><td style="text-align:right">0.78%</td><td style="text-align:right">−31.2%</td><td style="text-align:right">105</td></tr>
+</table>
+</div>
+</div>
+<div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:8px 32px;background:#FFFFFF;border-radius:12px;padding:20px 28px">
+<p style="font-size:24px;line-height:1.4"><b>v6.75</b>：補倉當天創新低就不補，等低點守住</p>
+<p style="font-size:24px;line-height:1.4"><b>跨資產</b>：另一資產也要從出場後低點回升 ≥ 5% 才補下一段</p>
+<p style="font-size:24px;line-height:1.4"><b>macro</b>：FOMC／CPI 前 30 分鐘撤 ladder，2 小時後原 tick 放回</p>
+<p style="font-size:24px;line-height:1.4"><b>滿倉上緣 +40%</b>：F＝1 時重建，上緣 +20%→+40%，下緣不變</p>
+<p style="font-size:24px;line-height:1.4"><b>refill low 下緣</b>：0＜F＜1 時，下緣設在出場後最低收盤價</p>
+<p style="font-size:24px;line-height:1.4;color:#B5601F">兩池第一名的 rebuild 約是基準的 1.8 倍；gas 只記錄、沒扣</p>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5B6B7C">出處：EXP-158/159/173/174 結果表；0x4585 的 EXP-140 規則是比較用的跑次（result/v6_validate/0x4585-opt-ACADOEBAIAK）。WBTC/ETH 池的 F 只在 ETH 和 BTC 之間移動，沒有熊市保護。</p>
+<aside>這頁是兩個池各自的前三名。ETH 池第一名是 v6.75 加跨資產 refill 加 macro，CAGR 17.12%，但 rebuild 319 次，是基準的 1.8 倍，gas 沒扣；第二名只加跨資產 refill，rebuild 反而比基準少。WBTC/ETH 池用 BTC 計價，第一名同樣是這套規則，年化 1.49%，基準 v6 是負 0.29%，持有 BTC 是 0；同樣 rebuild 多了八成。</aside>
+</section>

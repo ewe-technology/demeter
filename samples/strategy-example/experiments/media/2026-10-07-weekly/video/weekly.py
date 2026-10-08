@@ -762,3 +762,89 @@ class S11(Narrated):
         self.say(1, (None, 0.3), ([FadeIn(nxt[0], shift=UP * 0.15)], 0.7), (None, 1.5),
                  ([FadeIn(nxt[1], shift=UP * 0.15)], 0.7))
         self.finish(fade=0.8)
+
+
+class S12(Narrated):
+    """Appendix: every row of ../appendix_versions.csv, one page per category."""
+    SID = "s12_appendix"
+    PAGES = [["fee_tier"], ["refill"], ["f_engine"], ["rebuild"], ["exit_stop"], ["macro"],
+             ["ladder"], ["routing"], ["idle", "baseline"]]
+    NAMES = {"fee_tier": "fee-tier 分組", "refill": "refill 時機", "f_engine": "F 引擎結構",
+             "rebuild": "rebuild／置中", "exit_stop": "exit／stop", "macro": "macro 事件",
+             "ladder": "ladder 形狀", "routing": "swap routing", "idle": "閒置資金", "baseline": "基準重跑"}
+    RESULT = {"dropped-at-dev": ("dev 淘汰", C_GREY), "holdout-pass": ("holdout 通過", C_BLUE),
+              "pass": ("全歷史通過", C_BLUE), "holdout-fail": ("holdout 失敗", C_ORANGE),
+              "fail": ("全歷史失敗", C_ORANGE), "dev-done": ("待判", C_GREY)}
+    SIZE = 15                   # ~27 px em at 1080p
+    TOP, BOTTOM = 2.7, -2.95    # row band; one-line subtitles start below -3.2
+    MAX_PER_COL = 17
+
+    @staticmethod
+    def load():
+        import csv
+        return list(csv.DictReader((HERE.parent / "appendix_versions.csv").open(encoding="utf-8")))
+
+    def row(self, r, widths=None):
+        res, col = self.RESULT[r["status"]]
+        return [T(r["exp"].replace("EXP-", "", 1), self.SIZE, C_YEL), T(r["version"], self.SIZE, C_LIGHT),
+                T(r["label_zh"], self.SIZE, C_WHITE), T(res, self.SIZE, col, weight=BOLD)]
+
+    def lay_rows(self, cells):
+        """Aligned columns 'exp · version · label_zh · result'; returns rows (left edge at x=0) and width."""
+        widths = [max(c[k].width for c in cells) for k in range(4)]
+        gap, sep_w = 0.12, T("·", self.SIZE).width
+        out = []
+        for c in cells:
+            x, g = 0.0, VGroup()
+            for k, m in enumerate(c):
+                m.move_to([x + m.width / 2, 0, 0])
+                g.add(m)
+                x += widths[k]
+                if k < 3:
+                    g.add(T("·", self.SIZE, C_DIM).move_to([x + gap + sep_w / 2, 0, 0]))
+                    x += 2 * gap + sep_w
+            out.append(g)
+        return out, x
+
+    def page(self, cats, rows):
+        groups = [(c, [r for r in rows if r["category"] == c]) for c in cats]
+        h = T("附錄 · " + " ＋ ".join(f"{self.NAMES[c]} · {len(s)} 個" for c, s in groups), 30, C_WHITE,
+              weight=BOLD).move_to([0, 3.5, 0])
+        legend = T("高費＝0.3% 池、低費＝0.05% 池", 14, C_GREY).move_to([0, 3.07, 0])
+        flat = [r for _, s in groups for r in s]
+        lines, width = self.lay_rows([self.row(r) for r in flat])
+        # items: (mobject, is_heading); a heading per category only on mixed pages
+        items, k = [], 0
+        for c, s in groups:
+            if len(groups) > 1:
+                items.append((T(f"{self.NAMES[c]} · {len(s)} 個", 20, C_LIGHT, weight=BOLD), True))
+            for _ in s:
+                items.append((lines[k], False)); k += 1
+        ncol = -(-len(items) // self.MAX_PER_COL)
+        per = -(-len(items) // ncol)
+        step = min(0.44, (self.TOP - self.BOTTOM) / max(per - 1, 1))
+        colgap = 0.8
+        total_w = ncol * width + (ncol - 1) * colgap
+        body = VGroup()
+        for j, (m, _) in enumerate(items):
+            col, idx = divmod(j, per)
+            x0 = -total_w / 2 + col * (width + colgap)
+            m.move_to([x0 + m.width / 2, self.TOP - idx * step, 0])
+            body.add(m)
+        # short pages: centre the list vertically in the row band
+        span = (per - 1) * step
+        body.shift(DOWN * ((self.TOP - self.BOTTOM) - span) / 2)
+        return VGroup(h, legend, body)
+
+    def construct(self):
+        rows = self.load()
+        t1 = T("附錄", 72, C_WHITE, weight=BOLD)
+        t2 = T(f"本週所有版本 · 九類 · {len(rows)} 個", 32, C_GREY)
+        tc = VGroup(t1, t2).arrange(DOWN, buff=0.35).shift(UP * 0.4)
+        self.say(0, ([Write(t1)], 1.0), ([FadeIn(t2, shift=UP * 0.15)], 0.6))
+        cur = tc
+        for i, cats in enumerate(self.PAGES):
+            pg = self.page(cats, rows)
+            self.say(i + 1, ([FadeOut(cur), FadeIn(pg)], 0.5))
+            cur = pg
+        self.finish(fade=0.8)
