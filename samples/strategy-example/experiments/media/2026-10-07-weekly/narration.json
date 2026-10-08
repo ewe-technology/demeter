@@ -104,6 +104,16 @@
       ]
     },
     {
+      "id": "s08b_best",
+      "visual": "Two side-by-side ranked lists (copy every number verbatim from deck slide ../deck/project/slides/best.html). Left 'ETH/USDC 0x88e6 · USD' with baseline line 'spec v1：CAGR 13.55%、DD −22.9%、rebuild 179' and rows: '159 · v6.75＋跨資產＋macro · 17.12% · −24.3% · rebuild 319', '158 · v6.75＋跨資產 refill · 16.87% · −24.1% · rebuild 165', '173 · v6.75＋滿倉上緣 +40% · 16.83% · −26.2% · rebuild 166'. Right 'WBTC/ETH 0x4585 · BTC 計價' with baseline 'v6：CAGR −0.29%、DD −32.7%、rebuild 100；持有 BTC＝0%' and rows: '140 · 0.05% 規則：v6.75＋跨資產＋macro · 1.49% · −33.7% · rebuild 181', '173 · v6.75＋滿倉上緣 +40% · 1.19% · −30.2% · rebuild 98', '174 · 173＋補倉時下緣＝refill low · 0.78% · −31.2% · rebuild 105'. Rows appear one by one. On the last line the two #1 rebuild numbers (319, 181) turn orange with a tag 'rebuild ≈ 基準 1.8 倍 · gas 沒扣'.",
+      "lines": [
+        "再看兩個池子各自最好的策略。",
+        "ETH 池的前三名是：v6.75 加跨資產確認加 macro，年化十七點一二；只加跨資產確認，十六點八七；滿倉時上緣放寬到四成，十六點八三。",
+        "WBTC 對 ETH 的池子用 BTC 計價，第一名同樣是那套組合，年化一點四九，基準 v6 是負零點二九，持有 BTC 是零。",
+        "要注意，兩個池子的第一名，rebuild 次數都是基準的一點八倍左右，回測沒有扣 gas。"
+      ]
+    },
+    {
       "id": "s09_lessons",
       "visual": "Four numbered lessons stacked, each appearing with a short icon animation: 01 'ETH 和 WBTC 要分開設計' seesaw, 02 '通用的只有一條' arrows merging into 'no-new-low', 03 'rebuild 翻倍：gas $204k vs $122k（全歷史）' gas meter, 04 '訊號來源比規則細節重要' switch 'pool price → Binance close'.",
       "lines": [

@@ -662,6 +662,58 @@ class S08(Narrated):
         self.finish()
 
 
+class S08B(Narrated):
+    """Best strategy per pool (numbers verbatim from deck slide best.html)."""
+    SID = "s08b_best"
+    LEFT = ("ETH/USDC 0x88e6 · USD", ["spec v1：CAGR 13.55%、DD −22.9%、rebuild 179"],
+            [("159", "v6.75＋跨資產＋macro", "17.12%", "−24.3%", "319"),
+             ("158", "v6.75＋跨資產 refill", "16.87%", "−24.1%", "165"),
+             ("173", "v6.75＋滿倉上緣 +40%", "16.83%", "−26.2%", "166")])
+    RIGHT = ("WBTC/ETH 0x4585 · BTC 計價", ["v6：CAGR −0.29%、DD −32.7%、rebuild 100", "持有 BTC＝0%"],
+             [("140", "0.05% 規則：v6.75＋跨資產＋macro", "1.49%", "−33.7%", "181"),
+              ("173", "v6.75＋滿倉上緣 +40%", "1.19%", "−30.2%", "98"),
+              ("174", "173＋補倉時下緣＝refill low", "0.78%", "−31.2%", "105")])
+
+    def column(self, spec, x, color):
+        title, base, rows = spec
+        t = T(title, 28, color, weight=BOLD).move_to([x, 2.68, 0])
+        b = VGroup(*[T(s, 19, C_GREY) for s in base]).arrange(DOWN, buff=0.08).move_to([x, 2.1, 0])
+        cards, rebuilds = [], []
+        for k, (exp, name, cagr, dd, rb) in enumerate(rows):
+            y = 1.15 - k * 1.12
+            box = RoundedRectangle(corner_radius=0.12, width=6.6, height=0.98, stroke_color=C_GREY, stroke_width=2.5,
+                                   fill_color=CARD, fill_opacity=1).move_to([x, y, 0])
+            top = VGroup(T(exp, 24, C_YEL, weight=BOLD), T("·", 24, C_DIM), T(name, 24, C_WHITE)).arrange(RIGHT, buff=0.15)
+            rbn = T(rb, 24, C_LIGHT, weight=BOLD)
+            bot = VGroup(T(cagr, 26, color, weight=BOLD), T("·", 24, C_DIM), T(dd, 24, C_LIGHT), T("·", 24, C_DIM),
+                         T("rebuild", 22, C_LIGHT), rbn).arrange(RIGHT, buff=0.15)
+            rbn.shift(LEFT * 0.03)
+            txt = VGroup(top, bot).arrange(DOWN, buff=0.12)
+            if txt.width > 6.3:
+                txt.scale_to_fit_width(6.3)
+            txt.move_to(box)
+            cards.append(VGroup(box, txt))
+            rebuilds.append(rbn)
+        return t, b, cards, rebuilds
+
+    def construct(self):
+        h = T("兩個池各自最好的策略（全歷史，依 CAGR）", 32, C_WHITE, weight=BOLD).to_edge(UP, buff=0.35)
+        lt, lb, lc, lr = self.column(self.LEFT, -3.45, C_BLUE)
+        rt, rb, rc, rr = self.column(self.RIGHT, 3.45, C_BLUE)
+        self.say(0, ([Write(h)], 1.0), ([FadeIn(lt), FadeIn(rt)], 0.6), ([FadeIn(lb), FadeIn(rb)], 0.6))
+        self.say(1, (None, 0.8), ([FadeIn(lc[0], shift=UP * 0.15)], 0.6), (None, 2.2),
+                 ([FadeIn(lc[1], shift=UP * 0.15)], 0.6), (None, 1.0), ([FadeIn(lc[2], shift=UP * 0.15)], 0.6))
+        self.say(2, (None, 1.0), ([FadeIn(rc[0], shift=UP * 0.15)], 0.6), (None, 1.2),
+                 ([FadeIn(rc[1], shift=UP * 0.15)], 0.5), (None, 0.3), ([FadeIn(rc[2], shift=UP * 0.15)], 0.5))
+        tag = card("rebuild ≈ 基準 1.8 倍 · gas 沒扣", None, C_ORANGE, w=6.2, h=0.62, tsize=26).move_to([0, -2.2, 0])
+        self.say(3, (None, 0.8),
+                 ([lr[0].animate.set_color(C_ORANGE), rr[0].animate.set_color(C_ORANGE),
+                   lc[0][0].animate.set_stroke(C_ORANGE), rc[0][0].animate.set_stroke(C_ORANGE)], 0.7),
+                 ([Indicate(lr[0], color=C_ORANGE, scale_factor=1.4), Indicate(rr[0], color=C_ORANGE, scale_factor=1.4)], 0.8),
+                 ([FadeIn(tag, shift=UP * 0.15)], 0.6))
+        self.finish()
+
+
 class S09(Narrated):
     SID = "s09_lessons"
 
