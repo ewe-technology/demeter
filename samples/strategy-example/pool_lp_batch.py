@@ -187,7 +187,14 @@ def run(c: ConfigX, start: date, end: date) -> dict:
     started = time.time()
     p = POOLS[c.pool_key]
     base = p.token1 if p.quote == p.token0 else p.token0
-    data, _ = load_market(KEY, c.pool(), p.address, start, end, None, chain=p.chain)
+    for attempt in range(5):  # another worker may be writing the same Demeter cache file
+        try:
+            data, _ = load_market(KEY, c.pool(), p.address, start, end, None, chain=p.chain)
+            break
+        except (EOFError, OSError, ValueError):
+            if attempt == 4:
+                raise
+            time.sleep(30)
     price = data["price"].astype(float)  # base in quote
     market = UniLpMarket(KEY, c.pool())
     market.data = data
