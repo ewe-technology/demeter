@@ -1,39 +1,20 @@
 <section id="appx1" data-transition="fade" style="background:#F4F1EA;color:#16202B;font-family:'Noto Sans TC', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:24px">
-<h2 style="font-size:52px;font-weight:700">附錄 1/5：fee-tier 分組</h2>
-<div style="display:flex;gap:32px;align-items:start">
-<table style="width:816px;font-size:24px;color:#16202B;padding:4px 8px">
-<tr><th style="width:10%;text-align:left">EXP</th><th style="width:13%;text-align:left">版本</th><th style="width:58%;text-align:left">改了什麼</th><th style="width:19%;text-align:left">結果</th></tr>
+<h2 style="font-size:52px;font-weight:700">附錄 1/11：fee-tier 分組</h2>
+<table style="width:1664px;font-size:24px;color:#16202B;padding:4px 10px">
+<tr><th style="width:6%;text-align:left">EXP</th><th style="width:8%;text-align:left">版本</th><th style="width:73%;text-align:left">策略邏輯（白話）</th><th style="width:13%;text-align:left">結果</th></tr>
 <tr style="background:#E3EBF8"><td></td><td></td><td>fee-tier 分組 · 34 個</td><td></td></tr>
-<tr><td>102</td><td>v6.89</td><td>高費影線錨；低費收紅refill</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>103</td><td>v6.90</td><td>高費日內stop；低費v6.75</td><td style="color:#2B5BB8">holdout 通過</td></tr>
-<tr><td>104</td><td>v6.91</td><td>高費量確認；低費v6.75</td><td style="color:#2B5BB8">holdout 通過</td></tr>
-<tr><td>110</td><td>v6.97</td><td>高費影線錨；低費v6.75</td><td style="color:#B5601F">holdout 失敗</td></tr>
-<tr><td>111</td><td>v6.98</td><td>v6.91＋低費兩日出場確認</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>112</td><td>v6.99</td><td>高費stop+量確認；低費v6.75</td><td style="color:#2B5BB8">holdout 通過</td></tr>
-<tr><td>113</td><td>v6.100</td><td>v6.91＋低費ETH占比70%</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>114</td><td>v6.101</td><td>v6.91＋高費拿掉下方stop</td><td style="color:#2B5BB8">holdout 通過</td></tr>
-<tr><td>115</td><td>v6.102</td><td>v6.90＋高費帳戶分層</td><td style="color:#2B5BB8">holdout 通過</td></tr>
-<tr><td>116</td><td>v6.103</td><td>v6.90＋低費ETH占比70%</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>118</td><td>v6.105</td><td>v6.91＋高費帳戶分層</td><td style="color:#2B5BB8">holdout 通過</td></tr>
-<tr><td>119</td><td>v6.106</td><td>高費無stop+分層；低費v6.75</td><td style="color:#2B5BB8">holdout 通過</td></tr>
+<tr><td>102</td><td>v6.89</td><td>高費池：補倉起算低點改用盤中最低價；低費池：當天收紅才補倉</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>103</td><td>v6.90</td><td>高費池：盤中一跌破就觸發下方停損；低費池：創新低那天不補倉</td><td style="color:#2B5BB8">holdout 通過</td></tr>
+<tr><td>104</td><td>v6.91</td><td>高費池：成交量確認才補倉；低費池：創新低那天不補倉</td><td style="color:#2B5BB8">holdout 通過</td></tr>
+<tr><td>110</td><td>v6.97</td><td>高費池：補倉起算低點改用盤中最低價；低費池：創新低那天不補倉</td><td style="color:#B5601F">holdout 失敗</td></tr>
+<tr><td>111</td><td>v6.98</td><td>高費池：成交量確認才補倉；低費池：創新低那天不補倉＋跑出區間連兩天才重擺</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>112</td><td>v6.99</td><td>高費池：盤中跌破就停損＋成交量確認才補倉；低費池：創新低那天不補倉</td><td style="color:#2B5BB8">holdout 通過</td></tr>
+<tr><td>113</td><td>v6.100</td><td>高費池：成交量確認才補倉；低費池：創新低那天不補倉＋ETH占比固定70%</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>114</td><td>v6.101</td><td>高費池：拿掉下方停損＋成交量確認才補倉；低費池：創新低那天不補倉</td><td style="color:#2B5BB8">holdout 通過</td></tr>
+<tr><td>115</td><td>v6.102</td><td>高費池：盤中跌破就停損＋四條均線各擺一段區間；低費池：創新低那天不補倉</td><td style="color:#2B5BB8">holdout 通過</td></tr>
+<tr><td>116</td><td>v6.103</td><td>高費池：盤中跌破就停損；低費池：創新低那天不補倉＋ETH占比固定70%</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>118</td><td>v6.105</td><td>高費池：成交量確認才補倉＋四條均線各擺一段區間；低費池：創新低那天不補倉</td><td style="color:#2B5BB8">holdout 通過</td></tr>
 </table>
-<table style="width:816px;font-size:24px;color:#16202B;padding:4px 8px">
-<tr><th style="width:10%;text-align:left">EXP</th><th style="width:13%;text-align:left">版本</th><th style="width:58%;text-align:left">改了什麼</th><th style="width:19%;text-align:left">結果</th></tr>
-<tr><td>120</td><td>v6.107</td><td>v6.99＋低費macro</td><td style="color:#2B5BB8">holdout 通過</td></tr>
-<tr><td>121</td><td>v6.108</td><td>v6.99＋高費帳戶分層</td><td style="color:#2B5BB8">holdout 通過</td></tr>
-<tr><td>124</td><td>v6.111</td><td>v6.99＋高費routing</td><td style="color:#2B5BB8">holdout 通過</td></tr>
-<tr><td>125</td><td>v6.112</td><td>v6.101＋高費routing</td><td style="color:#2B5BB8">holdout 通過</td></tr>
-<tr><td>127</td><td>v6.114</td><td>v6.111＋低費收紅refill</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>129</td><td>v6.115</td><td>v6.111＋低費廣度上限</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>130</td><td>v6.116</td><td>v6.111＋低費跨資產refill</td><td style="color:#2B5BB8">holdout 通過</td></tr>
-<tr><td>131</td><td>v6.117</td><td>v6.111＋低費funding上限</td><td style="color:#B5601F">holdout 失敗</td></tr>
-<tr><td>132</td><td>v6.118</td><td>v6.111＋低費強收盤refill</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>134</td><td>v6.120</td><td>v6.111＋低費F升即重建</td><td style="color:#2B5BB8">holdout 通過</td></tr>
-<tr><td>136</td><td>v6.122</td><td>v6.111＋低費ETH占比翻轉重建</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>138</td><td>v6.124</td><td>v6.111＋低費F升/翻轉重建</td><td style="color:#2B5BB8">holdout 通過</td></tr>
-<tr><td>139</td><td>v6.125</td><td>v6.116＋低費F升重建</td><td style="color:#2B5BB8">holdout 通過</td></tr>
-</table>
-</div>
-<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5B6B7C">EXP-052..164（EXP-155 撤回）。高費＝0.3% 池、低費＝0.05% 池；「v6.xx＋」＝在該版本上再改。「通過」在 EXP-152 以前指 holdout，之後指 7 池全歷史。</p>
-<aside>附錄 1：本週每個版本改了什麼、結果如何，依 9 類排列。來源：registry.csv 與各 EXP 檔。</aside>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5B6B7C">補倉＝跌破均線後分段放回 LP；高費池＝0.3%、低費池＝0.05%；通過＝EXP-152 前指 holdout、之後指 7 池全歷史</p>
+<aside>附錄 1：本週每個版本的策略邏輯（白話）與結果，依 9 類排列。來源：registry.csv 與各 EXP 檔。</aside>
 </section>

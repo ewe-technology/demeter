@@ -1,113 +1,113 @@
-exp,version,category,status,label_zh
-EXP-102,v6.89,fee_tier,dropped-at-dev,高費影線錨；低費收紅refill
-EXP-103,v6.90,fee_tier,holdout-pass,高費日內stop；低費v6.75
-EXP-104,v6.91,fee_tier,holdout-pass,高費量確認；低費v6.75
-EXP-110,v6.97,fee_tier,holdout-fail,高費影線錨；低費v6.75
-EXP-111,v6.98,fee_tier,dropped-at-dev,v6.91＋低費兩日出場確認
-EXP-112,v6.99,fee_tier,holdout-pass,高費stop+量確認；低費v6.75
-EXP-113,v6.100,fee_tier,dropped-at-dev,v6.91＋低費ETH占比70%
-EXP-114,v6.101,fee_tier,holdout-pass,v6.91＋高費拿掉下方stop
-EXP-115,v6.102,fee_tier,holdout-pass,v6.90＋高費帳戶分層
-EXP-116,v6.103,fee_tier,dropped-at-dev,v6.90＋低費ETH占比70%
-EXP-118,v6.105,fee_tier,holdout-pass,v6.91＋高費帳戶分層
-EXP-119,v6.106,fee_tier,holdout-pass,高費無stop+分層；低費v6.75
-EXP-120,v6.107,fee_tier,holdout-pass,v6.99＋低費macro
-EXP-121,v6.108,fee_tier,holdout-pass,v6.99＋高費帳戶分層
-EXP-124,v6.111,fee_tier,holdout-pass,v6.99＋高費routing
-EXP-125,v6.112,fee_tier,holdout-pass,v6.101＋高費routing
-EXP-127,v6.114,fee_tier,dropped-at-dev,v6.111＋低費收紅refill
-EXP-129,v6.115,fee_tier,dropped-at-dev,v6.111＋低費廣度上限
-EXP-130,v6.116,fee_tier,holdout-pass,v6.111＋低費跨資產refill
-EXP-131,v6.117,fee_tier,holdout-fail,v6.111＋低費funding上限
-EXP-132,v6.118,fee_tier,dropped-at-dev,v6.111＋低費強收盤refill
-EXP-134,v6.120,fee_tier,holdout-pass,v6.111＋低費F升即重建
-EXP-136,v6.122,fee_tier,dropped-at-dev,v6.111＋低費ETH占比翻轉重建
-EXP-138,v6.124,fee_tier,holdout-pass,v6.111＋低費F升/翻轉重建
-EXP-139,v6.125,fee_tier,holdout-pass,v6.116＋低費F升重建
-EXP-140,v6.126,fee_tier,holdout-pass,v6.116＋低費macro
-EXP-141,v6.127,fee_tier,holdout-pass,v6.116＋高費F升重建
-EXP-143,v6.129,fee_tier,dropped-at-dev,v6.116＋低費兩日出場確認
-EXP-146,v6.132,fee_tier,holdout-fail,v6.116＋高費跨資產refill
-EXP-147,v6.133,fee_tier,holdout-pass,v6.125＋低費macro
-EXP-149,v6.135,fee_tier,holdout-pass,v6.126＋高費macro
-EXP-150,v6.136,fee_tier,holdout-pass,v6.126＋高費無新低refill
-EXP-151,v6.137,fee_tier,holdout-pass,v6.126＋低費帳戶分層
-EXP-163,v6.148,fee_tier,pass,高費v6.75；低費v6.144
-EXP-082,v6.69,refill,dropped-at-dev,DVOL下降才refill
-EXP-083,v6.70,refill,dropped-at-dev,負funding免首段等待
-EXP-084,v6.71,refill,dropped-at-dev,funding負加速/過熱煞車
-EXP-086,v6.73,refill,dropped-at-dev,refill需另一資產反彈
-EXP-087,v6.74,refill,dropped-at-dev,refill需成交量確認
-EXP-088,v6.75,refill,holdout-pass,refill日不得創日內新低
-EXP-090,v6.77,refill,dropped-at-dev,實現波動>隱含少一段refill
-EXP-092,v6.79,refill,dropped-at-dev,gas暴增後3天不refill
-EXP-093,v6.80,refill,dropped-at-dev,穩定幣供給增長才refill
-EXP-094,v6.81,refill,dropped-at-dev,週末收盤不refill
-EXP-096,v6.83,refill,dropped-at-dev,池內淨買方才refill
-EXP-098,v6.85,refill,dropped-at-dev,refill從出場後低點起算
-EXP-099,v6.86,refill,dropped-at-dev,refill日須收紅
-EXP-100,v6.87,refill,dropped-at-dev,refill日收在上半區間
-EXP-107,v6.94,refill,dropped-at-dev,refill快速失敗後延長首段
-EXP-108,v6.95,refill,holdout-fail,流動性擁擠時不refill
-EXP-109,v6.96,refill,holdout-fail,v6.75 + 擁擠時不refill
-EXP-144,v6.130,refill,dropped-at-dev,v6.75 + 跨資產+路由
-EXP-145,v6.131,refill,dropped-at-dev,v6.75 + 跨資產路由F升重建
-EXP-148,v6.134,refill,dropped-at-dev,v6.75 + 跨資產路由macro
-EXP-152,v6.138,refill,dropped-at-dev,v6.75 + 路由macro量確認
-EXP-157,v6.142,refill,pass,v6.75 於spec v1重判
-EXP-158,v6.143,refill,pass,v6.75 + 跨資產refill
-EXP-053,v6.40,f_engine,dropped-at-dev,下跌波動目標縮F
-EXP-054,v6.41,f_engine,dropped-at-dev,EMA出場加盤整閘門
-EXP-064,v6.51,f_engine,dropped-at-dev,CPPI淨值底線縮F
-EXP-067,v6.54,f_engine,dropped-at-dev,僅EMA上方才分段refill
-EXP-068,v6.55,f_engine,dropped-at-dev,回到EMA即全額部署
-EXP-069,v6.56,f_engine,dropped-at-dev,拿掉帳戶上方重建
-EXP-076,v6.63,f_engine,dropped-at-dev,單一EMA100帳戶
-EXP-077,v6.64,f_engine,dropped-at-dev,F取最低帳戶
-EXP-078,v6.65,f_engine,dropped-at-dev,F取最高帳戶
-EXP-079,v6.66,f_engine,dropped-at-dev,任一帳戶部署即滿梯
-EXP-080,v6.67,f_engine,dropped-at-dev,全部帳戶滿倉才滿梯
-EXP-081,v6.68,f_engine,dropped-at-dev,refill首段即全額
-EXP-085,v6.72,f_engine,dropped-at-dev,funding過熱F上限50%
-EXP-089,v6.76,f_engine,dropped-at-dev,引擎用日TWAP價
-EXP-091,v6.78,f_engine,dropped-at-dev,F上限取兩資產F均值
-EXP-105,v6.92,f_engine,dropped-at-dev,流動性擁擠時F上限50%
-EXP-055,v6.42,rebuild,dropped-at-dev,跟隨F原地縮放各帶
-EXP-057,v6.44,rebuild,dropped-at-dev,出區間重建不換幣
-EXP-058,v6.45,rebuild,dropped-at-dev,內半區原地縮放否則重置
-EXP-061,v6.48,rebuild,dropped-at-dev,F升加新層、F降縮帶
-EXP-062,v6.49,rebuild,dropped-at-dev,F降原地縮、F升重置
-EXP-065,v6.52,rebuild,dropped-at-dev,每週定時全重置
-EXP-070,v6.57,rebuild,dropped-at-dev,每週重置+ETH占比50%
-EXP-071,v6.58,rebuild,dropped-at-dev,僅EMA100上方每週重置
-EXP-072,v6.59,rebuild,dropped-at-dev,EMA100下原地縮放
-EXP-074,v6.61,rebuild,dropped-at-dev,拿掉出區間重建
-EXP-075,v6.62,rebuild,dropped-at-dev,下方出區間不重建
-EXP-135,v6.121,rebuild,dropped-at-dev,v6.75 + 路由+翻轉重建
-EXP-137,v6.123,rebuild,holdout-pass,v6.75 + 路由+F升重建
-EXP-142,v6.128,rebuild,holdout-pass,v6.75 + 路由macro升重建
-EXP-056,v6.43,exit_stop,dropped-at-dev,每小時檢查出區間
-EXP-066,v6.53,exit_stop,holdout-fail,拿掉帳戶下方stop
-EXP-095,v6.82,exit_stop,dropped-at-dev,成交量高於常態才EMA出場
-EXP-097,v6.84,exit_stop,dropped-at-dev,全天低於EMA才出場
-EXP-101,v6.88,exit_stop,dropped-at-dev,下方stop改用日內低點
-EXP-106,v6.93,exit_stop,dropped-at-dev,v6.75 + 兩日出區間確認
-EXP-161,v6.146,exit_stop,fail,v6.75 + 日內下方stop
-EXP-162,v6.147,exit_stop,fail,v6.75 + 兩日EMA出場確認
-EXP-059,v6.46,macro,dropped-at-dev,FOMC/CPI前後撤梯
-EXP-060,v6.47,macro,holdout-fail,FOMC/CPI暫停後精確還原
-EXP-122,v6.109,macro,holdout-pass,v6.75 + macro暫停還原
-EXP-126,v6.113,macro,holdout-pass,v6.75 + macro+路由
-EXP-159,v6.144,macro,pass,v6.75 + 跨資產+macro
-EXP-160,v6.145,macro,pass,v6.75 + macro暫停還原
-EXP-063,v6.50,ladder,holdout-fail,每個EMA帳戶獨立子梯
-EXP-073,v6.60,ladder,holdout-fail,ETH占比固定70%
-EXP-153,v6.139,ladder,fail,EMA100上方ETH占比100%
-EXP-154,v6.140,ladder,fail,EMA100上方+40%/-20%梯
-EXP-164,v6.149,ladder,fail,v6.75 + +40%/-20%梯
-EXP-117,v6.104,routing,dropped-at-dev,0.3%池LP；swap走0.05%
-EXP-123,v6.110,routing,holdout-pass,v6.75 + routing
-EXP-128,v6.104r,routing,dev-done,v6.104 Base獨立重判
-EXP-052,v6.39,idle,holdout-pass,閒置資金放USDC/USDT LP
-EXP-133,v6.119,idle,dropped-at-dev,閒置資金基差交易賺funding
-EXP-156,v6.126,baseline,fail,spec v1基準重跑v6.126
+exp,version,category,status,label_zh,plain_zh
+EXP-102,v6.89,fee_tier,dropped-at-dev,高費影線錨；低費收紅refill,高費池：補倉起算低點改用盤中最低價；低費池：當天收紅才補倉
+EXP-103,v6.90,fee_tier,holdout-pass,高費日內stop；低費v6.75,高費池：盤中一跌破就觸發下方停損；低費池：創新低那天不補倉
+EXP-104,v6.91,fee_tier,holdout-pass,高費量確認；低費v6.75,高費池：成交量確認才補倉；低費池：創新低那天不補倉
+EXP-110,v6.97,fee_tier,holdout-fail,高費影線錨；低費v6.75,高費池：補倉起算低點改用盤中最低價；低費池：創新低那天不補倉
+EXP-111,v6.98,fee_tier,dropped-at-dev,v6.91＋低費兩日出區間確認,高費池：成交量確認才補倉；低費池：創新低那天不補倉＋跑出區間連兩天才重擺
+EXP-112,v6.99,fee_tier,holdout-pass,高費stop+量確認；低費v6.75,高費池：盤中跌破就停損＋成交量確認才補倉；低費池：創新低那天不補倉
+EXP-113,v6.100,fee_tier,dropped-at-dev,v6.91＋低費ETH占比70%,高費池：成交量確認才補倉；低費池：創新低那天不補倉＋ETH占比固定70%
+EXP-114,v6.101,fee_tier,holdout-pass,v6.91＋高費拿掉下方stop,高費池：拿掉下方停損＋成交量確認才補倉；低費池：創新低那天不補倉
+EXP-115,v6.102,fee_tier,holdout-pass,v6.90＋高費帳戶分層,高費池：盤中跌破就停損＋四條均線各擺一段區間；低費池：創新低那天不補倉
+EXP-116,v6.103,fee_tier,dropped-at-dev,v6.90＋低費ETH占比70%,高費池：盤中跌破就停損；低費池：創新低那天不補倉＋ETH占比固定70%
+EXP-118,v6.105,fee_tier,holdout-pass,v6.91＋高費帳戶分層,高費池：成交量確認才補倉＋四條均線各擺一段區間；低費池：創新低那天不補倉
+EXP-119,v6.106,fee_tier,holdout-pass,高費無stop+分層；低費v6.75,高費池：拿掉下方停損＋四條均線各擺一段區間；低費池：創新低那天不補倉
+EXP-120,v6.107,fee_tier,holdout-pass,v6.99＋低費macro,高費池：盤中停損＋量確認才補倉；低費池：創新低不補倉＋FOMC／CPI前後撤區間
+EXP-121,v6.108,fee_tier,holdout-pass,v6.99＋高費帳戶分層,高費池：盤中停損＋量確認補倉＋四條均線各擺一段區間；低費池：創新低不補倉
+EXP-124,v6.111,fee_tier,holdout-pass,v6.99＋高費routing,高費池：盤中停損＋量確認補倉＋換幣走較便宜池子；低費池：創新低那天不補倉
+EXP-125,v6.112,fee_tier,holdout-pass,v6.101＋高費routing,高費池：拿掉下方停損＋換幣改走較便宜的池子；低費池：創新低那天不補倉
+EXP-127,v6.114,fee_tier,dropped-at-dev,v6.111＋低費收紅refill,高費池：盤中停損＋量確認補倉＋換幣走便宜池；低費池：創新低不補倉＋收紅才補
+EXP-129,v6.115,fee_tier,dropped-at-dev,v6.111＋低費廣度上限,高費池：盤中停損＋量確認補倉＋換幣走便宜池；低費池：創新低不補倉＋部署比例不超過兩幣平均
+EXP-130,v6.116,fee_tier,holdout-pass,v6.111＋低費跨資產refill,高費池：盤中停損＋量確認補倉＋換幣走便宜池；低費池：創新低不補倉＋另一個幣也反彈才補
+EXP-131,v6.117,fee_tier,holdout-fail,v6.111＋低費funding上限,高費池：盤中停損＋量確認補倉＋換幣走便宜池；低費池：創新低不補倉＋資金費率過熱時部署上限50%
+EXP-132,v6.118,fee_tier,dropped-at-dev,v6.111＋低費強收盤refill,高費池：盤中停損＋量確認補倉＋換幣走便宜池；低費池：創新低不補倉＋收在當日上半段才補
+EXP-134,v6.120,fee_tier,holdout-pass,v6.111＋低費F升即重建,高費池：盤中停損＋量確認補倉＋換幣走便宜池；低費池：創新低不補倉＋部署比例一升就重擺
+EXP-136,v6.122,fee_tier,dropped-at-dev,v6.111＋低費ETH占比翻轉重建,高費池：盤中停損＋量確認補倉＋換幣走便宜池；低費池：創新低不補倉＋ETH占比切換就重擺
+EXP-138,v6.124,fee_tier,holdout-pass,v6.111＋低費F升/翻轉重建,高費池：盤中停損＋量確認補倉＋換幣走便宜池；低費池：創新低不補倉＋部署升或占比切換就重擺
+EXP-139,v6.125,fee_tier,holdout-pass,v6.116＋低費F升重建,高費池：盤中停損＋量確認補倉＋換幣走便宜池；低費池：不創新低且另一個幣反彈才補＋部署升就重擺
+EXP-140,v6.126,fee_tier,holdout-pass,v6.116＋低費macro,高費池：盤中停損＋量確認＋走便宜池；低費池：不創新低且另一個幣反彈才補＋FOMC／CPI撤區間
+EXP-141,v6.127,fee_tier,holdout-pass,v6.116＋高費F升重建,高費池：盤中停損＋量確認＋走便宜池＋部署升就重擺；低費池：不創新低且另一個幣反彈才補倉
+EXP-143,v6.129,fee_tier,dropped-at-dev,v6.116＋低費兩日出區間確認,高費池：盤中停損＋量確認＋走便宜池；低費池：不創新低且另一個幣反彈才補＋跑出區間連兩天才重擺
+EXP-146,v6.132,fee_tier,holdout-fail,v6.116＋高費跨資產refill,兩種池都要另一個幣也反彈才補倉；高費池另加盤中停損＋量確認＋走便宜池，低費池另加創新低不補
+EXP-147,v6.133,fee_tier,holdout-pass,v6.125＋低費macro,高費池：盤中停損＋量確認＋走便宜池；低費池：不新低且另一個幣反彈才補＋部署升重擺＋避FOMC／CPI
+EXP-149,v6.135,fee_tier,holdout-pass,v6.126＋高費macro,兩種池都避開FOMC／CPI；高費池加盤中停損＋量確認＋走便宜池，低費池加不創新低且另一個幣反彈才補
+EXP-150,v6.136,fee_tier,holdout-pass,v6.126＋高費無新低refill,兩種池都創新低不補；高費池加盤中停損＋量確認＋走便宜池，低費池加另一個幣反彈才補＋避FOMC／CPI
+EXP-151,v6.137,fee_tier,holdout-pass,v6.126＋低費帳戶分層,高費池：盤中停損＋量確認＋走便宜池；低費池：不新低且另一個幣反彈才補＋避FOMC／CPI＋均線分段擺
+EXP-163,v6.148,fee_tier,pass,高費v6.75；低費v6.144,高費池：創新低那天不補倉；低費池：不創新低且另一個幣也反彈才補倉＋FOMC／CPI前後撤區間
+EXP-082,v6.69,refill,dropped-at-dev,DVOL下降才refill,跌破均線出場後，DVOL近3天均值低於前3天均值才允許分段補倉
+EXP-083,v6.70,refill,dropped-at-dev,負funding免首段等待,資金費率7天均值為負時，補倉第一段不必等連續3天確認，反彈5%就直接放回
+EXP-084,v6.71,refill,dropped-at-dev,funding負加速/過熱煞車,資金費率7天均值為負時第一段補倉不用等3天，費率過熱時暫停後面幾段補倉
+EXP-086,v6.73,refill,dropped-at-dev,refill需另一資產反彈,跌破均線出場後，另一個幣（ETH 池看 BTC）也從低點反彈5%才補倉
+EXP-087,v6.74,refill,dropped-at-dev,refill需成交量確認,出場後要補倉時，池子近3天成交量須不低於近30天常態才放回
+EXP-088,v6.75,refill,holdout-pass,refill日不得創日內新低,跌破均線出場後分段補倉，但當天盤中創新低就不算數、不補倉
+EXP-090,v6.77,refill,dropped-at-dev,實現波動>隱含少一段refill,近7天實際波動高於隱含波動（DVOL）時，部署比例少放一段（減25%）
+EXP-092,v6.79,refill,dropped-at-dev,gas暴增後3天不refill,鏈上 gas 暴增（超過30天常態3倍）當天與之後兩天，暫停一切補倉
+EXP-093,v6.80,refill,dropped-at-dev,穩定幣供給增長才refill,穩定幣總市值比7天前增加時，才允許跌破均線後的分段補倉
+EXP-094,v6.81,refill,dropped-at-dev,週末收盤不refill,週六、週日的收盤不觸發補倉，只在平日的收盤把錢分段放回 LP
+EXP-096,v6.83,refill,dropped-at-dev,池內淨買方才refill,池內近3天交易者是淨買入幣的一方時，才允許分段補倉
+EXP-098,v6.85,refill,dropped-at-dev,refill從出場後低點起算,補倉要看的「出場後最低點」改用盤中最低價，而不是最低收盤價
+EXP-099,v6.86,refill,dropped-at-dev,refill日須收紅,補倉那天必須收紅（收盤高於開盤）才算數，否則不補倉也不累計
+EXP-100,v6.87,refill,dropped-at-dev,refill日收在上半區間,補倉那天收盤必須落在當日最高到最低區間的上半段才算數
+EXP-107,v6.94,refill,dropped-at-dev,refill快速失敗後延長首段,補倉後10天內又被迫出場的話，下次第一段補倉要連6天確認而不是3天
+EXP-108,v6.95,refill,holdout-fail,流動性擁擠時不refill,池內流動性擁擠（7日均值超過90日中位數1.5倍）時，暫停補倉
+EXP-109,v6.96,refill,holdout-fail,v6.75 + 擁擠時不refill,創新低那天不補倉，且池內流動性擁擠（超過常態1.5倍）時也暫停補倉
+EXP-144,v6.130,refill,dropped-at-dev,v6.75 + 跨資產+路由,創新低那天不補倉＋另一個幣（ETH 池看 BTC）也反彈才補倉＋換幣改走較便宜的池子
+EXP-145,v6.131,refill,dropped-at-dev,v6.75 + 跨資產路由F升重建,創新低不補倉＋另一個幣也反彈才補倉＋換幣走較便宜池子＋部署比例一升就重擺區間
+EXP-148,v6.134,refill,dropped-at-dev,v6.75 + 跨資產路由macro,創新低不補倉＋另一個幣也反彈才補倉＋換幣走較便宜池子＋FOMC／CPI前後撤區間
+EXP-152,v6.138,refill,dropped-at-dev,v6.75 + 路由macro量確認,創新低不補倉＋成交量確認才補倉＋換幣走較便宜池子＋FOMC／CPI前後撤區間
+EXP-157,v6.142,refill,pass,v6.75 於spec v1重判,跌破均線出場後分段補倉，創新低那天不補倉；改用新基準 spec v1 設定重新評估
+EXP-158,v6.143,refill,pass,v6.75 + 跨資產refill,創新低那天不補倉，且另一個幣（ETH 池看 BTC）也從低點反彈5%才補倉
+EXP-053,v6.40,f_engine,dropped-at-dev,下跌波動目標縮F,收盤在100日均線下時，近14天波動越大就把部署比例縮得越小
+EXP-054,v6.41,f_engine,dropped-at-dev,EMA出場加盤整閘門,近30天走勢太盤整（漲跌來回、沒有方向）時，跌破均線先不出場
+EXP-064,v6.51,f_engine,dropped-at-dev,CPPI淨值底線縮F,淨值從歷史高點回落時按比例縮小部署比例，回落20%就全部撤出
+EXP-067,v6.54,f_engine,dropped-at-dev,僅EMA上方才分段refill,只有站回均線上方時才分段補倉，看跌破後就開始補倉是否真的需要
+EXP-068,v6.55,f_engine,dropped-at-dev,回到EMA即全額部署,站回均線那天直接全額部署，拿掉分段補倉看它是否真的需要
+EXP-069,v6.56,f_engine,dropped-at-dev,拿掉帳戶上方重建,拿掉「價格漲到中心價1.2倍就重新置中」這條規則，看它是否真的需要
+EXP-076,v6.63,f_engine,dropped-at-dev,單一EMA100帳戶,只用一條100日均線決定部署比例，拿掉四條均線（90–120日）的組合
+EXP-077,v6.64,f_engine,dropped-at-dev,F取最低帳戶,部署比例改取四條均線帳戶中最低的一個，而不是四個的平均
+EXP-078,v6.65,f_engine,dropped-at-dev,F取最高帳戶,部署比例改取四條均線帳戶中最高的一個，而不是四個的平均
+EXP-079,v6.66,f_engine,dropped-at-dev,任一帳戶部署即滿梯,只要任一條均線帳戶有部署，就把整個流動性區間全額放滿，否則全撤
+EXP-080,v6.67,f_engine,dropped-at-dev,全部帳戶滿倉才滿梯,四條均線帳戶都全額部署時才把區間放滿，其餘時候全部撤出
+EXP-081,v6.68,f_engine,dropped-at-dev,refill首段即全額,補倉第一段確認後就直接全額部署，拿掉後面幾段看分段是否真的需要
+EXP-085,v6.72,f_engine,dropped-at-dev,funding過熱F上限50%,資金費率過熱（近3天均值超過基準3倍）時，部署比例上限壓到50%
+EXP-089,v6.76,f_engine,dropped-at-dev,引擎用日TWAP價,均線和部署比例改用每天的平均價計算，不再用每天0點的價格
+EXP-091,v6.78,f_engine,dropped-at-dev,F上限取兩資產F均值,部署比例不得超過自己和另一個幣（ETH 池看 BTC）部署比例的平均
+EXP-105,v6.92,f_engine,dropped-at-dev,流動性擁擠時F上限50%,池內流動性擁擠（7日均值超過90日中位數1.5倍）時，部署比例上限50%
+EXP-055,v6.42,rebuild,dropped-at-dev,跟隨F原地縮放各帶,部署比例變動時，各段區間在原位置按比例加減流動性，不整個重新擺放
+EXP-057,v6.44,rebuild,dropped-at-dev,出區間重建不換幣,價格跑出區間時直接在現價重新擺放，但不先換幣調整ETH占比
+EXP-058,v6.45,rebuild,dropped-at-dev,內半區原地縮放否則重置,部署比例變動時，價格仍在區間中心附近就原地縮放，偏離太遠才整個重擺
+EXP-061,v6.48,rebuild,dropped-at-dev,F升加新層、F降縮帶,部署比例上升就在現價加擺一段新區間，下降就把各段按比例縮小
+EXP-062,v6.49,rebuild,dropped-at-dev,F降原地縮、F升重置,部署比例下降時原地按比例縮小區間，上升時才整個重新置中
+EXP-065,v6.52,rebuild,dropped-at-dev,每週定時全重置,除了原本的觸發條件外，每週日再固定把區間整個重新置中一次
+EXP-070,v6.57,rebuild,dropped-at-dev,每週重置+ETH占比50%,每週日固定把區間重新置中一次，且ETH占比不分多空固定50%
+EXP-071,v6.58,rebuild,dropped-at-dev,僅EMA100上方每週重置,只在價格高於100日均線時，每週日固定把區間重新置中一次
+EXP-072,v6.59,rebuild,dropped-at-dev,EMA100下原地縮放,價格低於100日均線時原地縮放區間，高於時才整個重新置中
+EXP-074,v6.61,rebuild,dropped-at-dev,拿掉出區間重建,拿掉價格跑出區間後的重新擺放，看這條規則是否真的需要
+EXP-075,v6.62,rebuild,dropped-at-dev,下方出區間不重建,價格往下跑出區間時不重新擺放，只有往上跑出時才重新置中
+EXP-135,v6.121,rebuild,dropped-at-dev,v6.75 + 路由+翻轉重建,創新低不補倉＋換幣走較便宜池子＋價格穿越100日均線使ETH占比切換時重擺區間
+EXP-137,v6.123,rebuild,holdout-pass,v6.75 + 路由+F升重建,創新低那天不補倉＋換幣改走較便宜的池子＋部署比例一上升就重新擺放區間
+EXP-142,v6.128,rebuild,holdout-pass,v6.75 + 路由macro升重建,創新低不補倉＋換幣走較便宜池子＋FOMC／CPI前後撤區間＋部署比例一升就重擺
+EXP-056,v6.43,exit_stop,dropped-at-dev,每小時檢查出區間,檢查價格是否跑出區間改成每小時一次，而不是每天只檢查一次
+EXP-066,v6.53,exit_stop,holdout-fail,拿掉帳戶下方stop,拿掉下方停損（跌破中心價8折就出場），看它是否真的需要
+EXP-095,v6.82,exit_stop,dropped-at-dev,成交量高於常態才EMA出場,跌破均線時，要池子近3天成交量高於近30天常態才真的出場
+EXP-097,v6.84,exit_stop,dropped-at-dev,全天低於EMA才出場,整天連盤中最高價都在均線下才出場，盤中曾站回均線就先不出場
+EXP-101,v6.88,exit_stop,dropped-at-dev,下方stop改用日內低點,下方停損改看盤中最低價，盤中一跌破中心價8折就出場
+EXP-106,v6.93,exit_stop,dropped-at-dev,v6.75 + 兩日出區間確認,創新低那天不補倉，且價格跑出區間要連續兩天才重新擺放
+EXP-161,v6.146,exit_stop,fail,v6.75 + 日內下方stop,創新低那天不補倉，且下方停損改看盤中最低價，盤中跌破8折就出場
+EXP-162,v6.147,exit_stop,fail,v6.75 + 兩日出區間確認,創新低那天不補倉，且價格跑出區間要連續兩天才重新擺放（新基準 spec v1）
+EXP-059,v6.46,macro,dropped-at-dev,FOMC/CPI前後撤梯,FOMC／CPI公布前30分鐘撤下區間，2小時後用撤出的幣原位放回
+EXP-060,v6.47,macro,holdout-fail,FOMC/CPI暫停後精確還原,FOMC／CPI公布前30分鐘撤下區間，2小時後先換幣再照原樣精確放回
+EXP-122,v6.109,macro,holdout-pass,v6.75 + macro暫停還原,創新低那天不補倉，加上FOMC／CPI公布前後暫撤區間、之後照原樣放回
+EXP-126,v6.113,macro,holdout-pass,v6.75 + macro+路由,創新低不補倉＋FOMC／CPI前後暫撤區間再原樣放回＋換幣改走較便宜的池子
+EXP-159,v6.144,macro,pass,v6.75 + 跨資產+macro,創新低不補倉＋另一個幣也反彈才補倉＋FOMC／CPI前後暫撤區間再原樣放回
+EXP-160,v6.145,macro,pass,v6.75 + macro暫停還原,創新低那天不補倉，FOMC／CPI公布前後暫撤區間再原樣放回（新基準 spec v1）
+EXP-063,v6.50,ladder,holdout-fail,每個EMA帳戶獨立子梯,四條均線帳戶各自擺一段子區間，哪個帳戶狀態變了就只重擺它那一段
+EXP-073,v6.60,ladder,holdout-fail,ETH占比固定70%,ETH占比不分多空都固定70%，拿掉依100日均線切換占比看是否需要
+EXP-153,v6.139,ladder,fail,EMA100上方ETH占比100%,價格在100日均線上方時區間全放ETH，只擺現價往上+20%那半邊
+EXP-154,v6.140,ladder,fail,EMA100上方+40%/-20%梯,價格在100日均線上方時，流動性區間改成上方+40%、下方-20%
+EXP-164,v6.149,ladder,fail,v6.75 + +40%/-20%梯,創新低那天不補倉，且價格在100日均線上方時區間改成上+40%、下-20%
+EXP-117,v6.104,routing,dropped-at-dev,0.3%池LP；swap走0.05%,LP擺在高費池，但重擺時的換幣改走較便宜的池子（低費池）以省成本
+EXP-123,v6.110,routing,holdout-pass,v6.75 + routing,跌破均線後分段補倉、創新低那天不補倉，且換幣改走較便宜的池子
+EXP-128,v6.104r,routing,dev-done,v6.104 Base獨立重判,LP擺在高費池、換幣改走較便宜的池子，單獨在 Base 池和最新資料上重新評估
+EXP-052,v6.39,idle,holdout-pass,閒置資金放USDC/USDT LP,沒部署進區間的閒置資金，拿去USDC/USDT穩定幣池做LP賺手續費
+EXP-133,v6.119,idle,dropped-at-dev,閒置資金基差交易賺funding,沒部署的閒置資金做基差交易（買現貨、空永續合約）賺資金費率
+EXP-156,v6.126,baseline,fail,spec v1基準重跑v6.126,把 EXP-140 的規則改用新基準 spec v1（幣安日收盤、固定0.1%成本）重跑

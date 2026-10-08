@@ -1,39 +1,20 @@
 <section id="appx3" data-transition="fade" style="background:#F4F1EA;color:#16202B;font-family:'Noto Sans TC', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:24px">
-<h2 style="font-size:52px;font-weight:700">附錄 3/5：refill 時機、F 引擎結構、rebuild／置中</h2>
-<div style="display:flex;gap:32px;align-items:start">
-<table style="width:816px;font-size:24px;color:#16202B;padding:4px 8px">
-<tr><th style="width:10%;text-align:left">EXP</th><th style="width:13%;text-align:left">版本</th><th style="width:58%;text-align:left">改了什麼</th><th style="width:19%;text-align:left">結果</th></tr>
-<tr><td>109</td><td>v6.96</td><td>v6.75 + 擁擠時不refill</td><td style="color:#B5601F">holdout 失敗</td></tr>
-<tr><td>144</td><td>v6.130</td><td>v6.75 + 跨資產+路由</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>145</td><td>v6.131</td><td>v6.75 + 跨資產路由F升重建</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>148</td><td>v6.134</td><td>v6.75 + 跨資產路由macro</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>152</td><td>v6.138</td><td>v6.75 + 路由macro量確認</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>157</td><td>v6.142</td><td>v6.75 於spec v1重判</td><td style="color:#2B5BB8">全歷史通過</td></tr>
-<tr><td>158</td><td>v6.143</td><td>v6.75 + 跨資產refill</td><td style="color:#2B5BB8">全歷史通過</td></tr>
-<tr style="background:#E3EBF8"><td></td><td></td><td>F 引擎結構 · 16 個</td><td></td></tr>
-<tr><td>053</td><td>v6.40</td><td>下跌波動目標縮F</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>054</td><td>v6.41</td><td>EMA出場加盤整閘門</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>064</td><td>v6.51</td><td>CPPI淨值底線縮F</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>067</td><td>v6.54</td><td>僅EMA上方才分段refill</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>068</td><td>v6.55</td><td>回到EMA即全額部署</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<h2 style="font-size:52px;font-weight:700">附錄 3/11：fee-tier 分組</h2>
+<table style="width:1664px;font-size:24px;color:#16202B;padding:4px 10px">
+<tr><th style="width:6%;text-align:left">EXP</th><th style="width:8%;text-align:left">版本</th><th style="width:73%;text-align:left">策略邏輯（白話）</th><th style="width:13%;text-align:left">結果</th></tr>
+<tr><td>138</td><td>v6.124</td><td>高費池：盤中停損＋量確認補倉＋換幣走便宜池；低費池：創新低不補倉＋部署升或占比切換就重擺</td><td style="color:#2B5BB8">holdout 通過</td></tr>
+<tr><td>139</td><td>v6.125</td><td>高費池：盤中停損＋量確認補倉＋換幣走便宜池；低費池：不創新低且另一個幣反彈才補＋部署升就重擺</td><td style="color:#2B5BB8">holdout 通過</td></tr>
+<tr><td>140</td><td>v6.126</td><td>高費池：盤中停損＋量確認＋走便宜池；低費池：不創新低且另一個幣反彈才補＋FOMC／CPI撤區間</td><td style="color:#2B5BB8">holdout 通過</td></tr>
+<tr><td>141</td><td>v6.127</td><td>高費池：盤中停損＋量確認＋走便宜池＋部署升就重擺；低費池：不創新低且另一個幣反彈才補倉</td><td style="color:#2B5BB8">holdout 通過</td></tr>
+<tr><td>143</td><td>v6.129</td><td>高費池：盤中停損＋量確認＋走便宜池；低費池：不創新低且另一個幣反彈才補＋跑出區間連兩天才重擺</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>146</td><td>v6.132</td><td>兩種池都要另一個幣也反彈才補倉；高費池另加盤中停損＋量確認＋走便宜池，低費池另加創新低不補</td><td style="color:#B5601F">holdout 失敗</td></tr>
+<tr><td>147</td><td>v6.133</td><td>高費池：盤中停損＋量確認＋走便宜池；低費池：不新低且另一個幣反彈才補＋部署升重擺＋避FOMC／CPI</td><td style="color:#2B5BB8">holdout 通過</td></tr>
+<tr><td>149</td><td>v6.135</td><td>兩種池都避開FOMC／CPI；高費池加盤中停損＋量確認＋走便宜池，低費池加不創新低且另一個幣反彈才補</td><td style="color:#2B5BB8">holdout 通過</td></tr>
+<tr><td>150</td><td>v6.136</td><td>兩種池都創新低不補；高費池加盤中停損＋量確認＋走便宜池，低費池加另一個幣反彈才補＋避FOMC／CPI</td><td style="color:#2B5BB8">holdout 通過</td></tr>
+<tr><td>151</td><td>v6.137</td><td>高費池：盤中停損＋量確認＋走便宜池；低費池：不新低且另一個幣反彈才補＋避FOMC／CPI＋均線分段擺</td><td style="color:#2B5BB8">holdout 通過</td></tr>
+<tr><td>163</td><td>v6.148</td><td>高費池：創新低那天不補倉；低費池：不創新低且另一個幣也反彈才補倉＋FOMC／CPI前後撤區間</td><td style="color:#2B5BB8">全歷史通過</td></tr>
+<tr style="background:#E3EBF8"><td></td><td></td><td>refill 時機 · 23 個</td><td></td></tr>
 </table>
-<table style="width:816px;font-size:24px;color:#16202B;padding:4px 8px">
-<tr><th style="width:10%;text-align:left">EXP</th><th style="width:13%;text-align:left">版本</th><th style="width:58%;text-align:left">改了什麼</th><th style="width:19%;text-align:left">結果</th></tr>
-<tr><td>069</td><td>v6.56</td><td>拿掉帳戶上方重建</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>076</td><td>v6.63</td><td>單一EMA100帳戶</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>077</td><td>v6.64</td><td>F取最低帳戶</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>078</td><td>v6.65</td><td>F取最高帳戶</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>079</td><td>v6.66</td><td>任一帳戶部署即滿梯</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>080</td><td>v6.67</td><td>全部帳戶滿倉才滿梯</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>081</td><td>v6.68</td><td>refill首段即全額</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>085</td><td>v6.72</td><td>funding過熱F上限50%</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>089</td><td>v6.76</td><td>引擎用日TWAP價</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>091</td><td>v6.78</td><td>F上限取兩資產F均值</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>105</td><td>v6.92</td><td>流動性擁擠時F上限50%</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr style="background:#E3EBF8"><td></td><td></td><td>rebuild／置中 · 14 個</td><td></td></tr>
-<tr><td>055</td><td>v6.42</td><td>跟隨F原地縮放各帶</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-</table>
-</div>
-<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5B6B7C">EXP-052..164（EXP-155 撤回）。高費＝0.3% 池、低費＝0.05% 池；「v6.xx＋」＝在該版本上再改。「通過」在 EXP-152 以前指 holdout，之後指 7 池全歷史。</p>
-<aside>附錄 3：本週每個版本改了什麼、結果如何，依 9 類排列。來源：registry.csv 與各 EXP 檔。</aside>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5B6B7C">補倉＝跌破均線後分段放回 LP；高費池＝0.3%、低費池＝0.05%；通過＝EXP-152 前指 holdout、之後指 7 池全歷史</p>
+<aside>附錄 3：本週每個版本的策略邏輯（白話）與結果，依 9 類排列。來源：registry.csv 與各 EXP 檔。</aside>
 </section>

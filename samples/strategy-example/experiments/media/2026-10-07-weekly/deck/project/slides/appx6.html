@@ -1,0 +1,20 @@
+<section id="appx6" data-transition="fade" style="background:#F4F1EA;color:#16202B;font-family:'Noto Sans TC', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:24px">
+<h2 style="font-size:52px;font-weight:700">附錄 6/11：F 引擎結構</h2>
+<table style="width:1664px;font-size:24px;color:#16202B;padding:4px 10px">
+<tr><th style="width:6%;text-align:left">EXP</th><th style="width:8%;text-align:left">版本</th><th style="width:73%;text-align:left">策略邏輯（白話）</th><th style="width:13%;text-align:left">結果</th></tr>
+<tr><td>053</td><td>v6.40</td><td>收盤在100日均線下時，近14天波動越大就把部署比例縮得越小</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>054</td><td>v6.41</td><td>近30天走勢太盤整（漲跌來回、沒有方向）時，跌破均線先不出場</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>064</td><td>v6.51</td><td>淨值從歷史高點回落時按比例縮小部署比例，回落20%就全部撤出</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>067</td><td>v6.54</td><td>只有站回均線上方時才分段補倉，看跌破後就開始補倉是否真的需要</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>068</td><td>v6.55</td><td>站回均線那天直接全額部署，拿掉分段補倉看它是否真的需要</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>069</td><td>v6.56</td><td>拿掉「價格漲到中心價1.2倍就重新置中」這條規則，看它是否真的需要</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>076</td><td>v6.63</td><td>只用一條100日均線決定部署比例，拿掉四條均線（90–120日）的組合</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>077</td><td>v6.64</td><td>部署比例改取四條均線帳戶中最低的一個，而不是四個的平均</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>078</td><td>v6.65</td><td>部署比例改取四條均線帳戶中最高的一個，而不是四個的平均</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>079</td><td>v6.66</td><td>只要任一條均線帳戶有部署，就把整個流動性區間全額放滿，否則全撤</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>080</td><td>v6.67</td><td>四條均線帳戶都全額部署時才把區間放滿，其餘時候全部撤出</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>081</td><td>v6.68</td><td>補倉第一段確認後就直接全額部署，拿掉後面幾段看分段是否真的需要</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+</table>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5B6B7C">補倉＝跌破均線後分段放回 LP；高費池＝0.3%、低費池＝0.05%；通過＝EXP-152 前指 holdout、之後指 7 池全歷史</p>
+<aside>附錄 6：本週每個版本的策略邏輯（白話）與結果，依 9 類排列。來源：registry.csv 與各 EXP 檔。</aside>
+</section>

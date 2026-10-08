@@ -1,31 +1,20 @@
 <section id="appx5" data-transition="fade" style="background:#F4F1EA;color:#16202B;font-family:'Noto Sans TC', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:24px">
-<h2 style="font-size:52px;font-weight:700">附錄 5/5：macro 事件、ladder 形狀、swap routing、閒置資金、基準重跑</h2>
-<div style="display:flex;gap:32px;align-items:start">
-<table style="width:816px;font-size:24px;color:#16202B;padding:4px 8px">
-<tr><th style="width:10%;text-align:left">EXP</th><th style="width:13%;text-align:left">版本</th><th style="width:58%;text-align:left">改了什麼</th><th style="width:19%;text-align:left">結果</th></tr>
-<tr><td>126</td><td>v6.113</td><td>v6.75 + macro+路由</td><td style="color:#2B5BB8">holdout 通過</td></tr>
-<tr><td>159</td><td>v6.144</td><td>v6.75 + 跨資產+macro</td><td style="color:#2B5BB8">全歷史通過</td></tr>
-<tr><td>160</td><td>v6.145</td><td>v6.75 + macro暫停還原</td><td style="color:#2B5BB8">全歷史通過</td></tr>
-<tr style="background:#E3EBF8"><td></td><td></td><td>ladder 形狀 · 5 個</td><td></td></tr>
-<tr><td>063</td><td>v6.50</td><td>每個EMA帳戶獨立子梯</td><td style="color:#B5601F">holdout 失敗</td></tr>
-<tr><td>073</td><td>v6.60</td><td>ETH占比固定70%</td><td style="color:#B5601F">holdout 失敗</td></tr>
-<tr><td>153</td><td>v6.139</td><td>EMA100上方ETH占比100%</td><td style="color:#B5601F">全歷史失敗</td></tr>
-<tr><td>154</td><td>v6.140</td><td>EMA100上方+40%/-20%梯</td><td style="color:#B5601F">全歷史失敗</td></tr>
-<tr><td>164</td><td>v6.149</td><td>v6.75 + +40%/-20%梯</td><td style="color:#B5601F">全歷史失敗</td></tr>
-<tr style="background:#E3EBF8"><td></td><td></td><td>swap routing · 3 個</td><td></td></tr>
-<tr><td>117</td><td>v6.104</td><td>0.3%池LP；swap走0.05%</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr><td>123</td><td>v6.110</td><td>v6.75 + routing</td><td style="color:#2B5BB8">holdout 通過</td></tr>
-<tr><td>128</td><td>v6.104r</td><td>v6.104 Base獨立重判</td><td style="color:#5B6B7C">待判</td></tr>
+<h2 style="font-size:52px;font-weight:700">附錄 5/11：refill 時機</h2>
+<table style="width:1664px;font-size:24px;color:#16202B;padding:4px 10px">
+<tr><th style="width:6%;text-align:left">EXP</th><th style="width:8%;text-align:left">版本</th><th style="width:73%;text-align:left">策略邏輯（白話）</th><th style="width:13%;text-align:left">結果</th></tr>
+<tr><td>099</td><td>v6.86</td><td>補倉那天必須收紅（收盤高於開盤）才算數，否則不補倉也不累計</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>100</td><td>v6.87</td><td>補倉那天收盤必須落在當日最高到最低區間的上半段才算數</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>107</td><td>v6.94</td><td>補倉後10天內又被迫出場的話，下次第一段補倉要連6天確認而不是3天</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>108</td><td>v6.95</td><td>池內流動性擁擠（7日均值超過90日中位數1.5倍）時，暫停補倉</td><td style="color:#B5601F">holdout 失敗</td></tr>
+<tr><td>109</td><td>v6.96</td><td>創新低那天不補倉，且池內流動性擁擠（超過常態1.5倍）時也暫停補倉</td><td style="color:#B5601F">holdout 失敗</td></tr>
+<tr><td>144</td><td>v6.130</td><td>創新低那天不補倉＋另一個幣（ETH 池看 BTC）也反彈才補倉＋換幣改走較便宜的池子</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>145</td><td>v6.131</td><td>創新低不補倉＋另一個幣也反彈才補倉＋換幣走較便宜池子＋部署比例一升就重擺區間</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>148</td><td>v6.134</td><td>創新低不補倉＋另一個幣也反彈才補倉＋換幣走較便宜池子＋FOMC／CPI前後撤區間</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>152</td><td>v6.138</td><td>創新低不補倉＋成交量確認才補倉＋換幣走較便宜池子＋FOMC／CPI前後撤區間</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>157</td><td>v6.142</td><td>跌破均線出場後分段補倉，創新低那天不補倉；改用新基準 spec v1 設定重新評估</td><td style="color:#2B5BB8">全歷史通過</td></tr>
+<tr><td>158</td><td>v6.143</td><td>創新低那天不補倉，且另一個幣（ETH 池看 BTC）也從低點反彈5%才補倉</td><td style="color:#2B5BB8">全歷史通過</td></tr>
+<tr style="background:#E3EBF8"><td></td><td></td><td>F 引擎結構 · 16 個</td><td></td></tr>
 </table>
-<table style="width:816px;font-size:24px;color:#16202B;padding:4px 8px">
-<tr><th style="width:10%;text-align:left">EXP</th><th style="width:13%;text-align:left">版本</th><th style="width:58%;text-align:left">改了什麼</th><th style="width:19%;text-align:left">結果</th></tr>
-<tr style="background:#E3EBF8"><td></td><td></td><td>閒置資金 · 2 個</td><td></td></tr>
-<tr><td>052</td><td>v6.39</td><td>閒置資金放USDC/USDT LP</td><td style="color:#2B5BB8">holdout 通過</td></tr>
-<tr><td>133</td><td>v6.119</td><td>閒置資金基差交易賺funding</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
-<tr style="background:#E3EBF8"><td></td><td></td><td>基準重跑 · 1 個</td><td></td></tr>
-<tr><td>156</td><td>v6.126</td><td>spec v1基準重跑v6.126</td><td style="color:#B5601F">全歷史失敗</td></tr>
-</table>
-</div>
-<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5B6B7C">EXP-052..164（EXP-155 撤回）。高費＝0.3% 池、低費＝0.05% 池；「v6.xx＋」＝在該版本上再改。「通過」在 EXP-152 以前指 holdout，之後指 7 池全歷史。</p>
-<aside>附錄 5：本週每個版本改了什麼、結果如何，依 9 類排列。來源：registry.csv 與各 EXP 檔。</aside>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5B6B7C">補倉＝跌破均線後分段放回 LP；高費池＝0.3%、低費池＝0.05%；通過＝EXP-152 前指 holdout、之後指 7 池全歷史</p>
+<aside>附錄 5：本週每個版本的策略邏輯（白話）與結果，依 9 類排列。來源：registry.csv 與各 EXP 檔。</aside>
 </section>

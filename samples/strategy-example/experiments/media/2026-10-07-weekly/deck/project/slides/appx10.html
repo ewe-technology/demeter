@@ -1,0 +1,20 @@
+<section id="appx10" data-transition="fade" style="background:#F4F1EA;color:#16202B;font-family:'Noto Sans TC', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:24px">
+<h2 style="font-size:52px;font-weight:700">附錄 10/11：ladder 形狀、swap routing、閒置資金</h2>
+<table style="width:1664px;font-size:24px;color:#16202B;padding:4px 10px">
+<tr><th style="width:6%;text-align:left">EXP</th><th style="width:8%;text-align:left">版本</th><th style="width:73%;text-align:left">策略邏輯（白話）</th><th style="width:13%;text-align:left">結果</th></tr>
+<tr><td>063</td><td>v6.50</td><td>四條均線帳戶各自擺一段子區間，哪個帳戶狀態變了就只重擺它那一段</td><td style="color:#B5601F">holdout 失敗</td></tr>
+<tr><td>073</td><td>v6.60</td><td>ETH占比不分多空都固定70%，拿掉依100日均線切換占比看是否需要</td><td style="color:#B5601F">holdout 失敗</td></tr>
+<tr><td>153</td><td>v6.139</td><td>價格在100日均線上方時區間全放ETH，只擺現價往上+20%那半邊</td><td style="color:#B5601F">全歷史失敗</td></tr>
+<tr><td>154</td><td>v6.140</td><td>價格在100日均線上方時，流動性區間改成上方+40%、下方-20%</td><td style="color:#B5601F">全歷史失敗</td></tr>
+<tr><td>164</td><td>v6.149</td><td>創新低那天不補倉，且價格在100日均線上方時區間改成上+40%、下-20%</td><td style="color:#B5601F">全歷史失敗</td></tr>
+<tr style="background:#E3EBF8"><td></td><td></td><td>swap routing · 3 個</td><td></td></tr>
+<tr><td>117</td><td>v6.104</td><td>LP擺在高費池，但重擺時的換幣改走較便宜的池子（低費池）以省成本</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>123</td><td>v6.110</td><td>跌破均線後分段補倉、創新低那天不補倉，且換幣改走較便宜的池子</td><td style="color:#2B5BB8">holdout 通過</td></tr>
+<tr><td>128</td><td>v6.104r</td><td>LP擺在高費池、換幣改走較便宜的池子，單獨在 Base 池和最新資料上重新評估</td><td style="color:#5B6B7C">待判</td></tr>
+<tr style="background:#E3EBF8"><td></td><td></td><td>閒置資金 · 2 個</td><td></td></tr>
+<tr><td>052</td><td>v6.39</td><td>沒部署進區間的閒置資金，拿去USDC/USDT穩定幣池做LP賺手續費</td><td style="color:#2B5BB8">holdout 通過</td></tr>
+<tr><td>133</td><td>v6.119</td><td>沒部署的閒置資金做基差交易（買現貨、空永續合約）賺資金費率</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+</table>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5B6B7C">補倉＝跌破均線後分段放回 LP；高費池＝0.3%、低費池＝0.05%；通過＝EXP-152 前指 holdout、之後指 7 池全歷史</p>
+<aside>附錄 10：本週每個版本的策略邏輯（白話）與結果，依 9 類排列。來源：registry.csv 與各 EXP 檔。</aside>
+</section>

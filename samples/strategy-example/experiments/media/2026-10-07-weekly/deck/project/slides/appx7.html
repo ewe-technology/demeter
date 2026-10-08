@@ -1,0 +1,20 @@
+<section id="appx7" data-transition="fade" style="background:#F4F1EA;color:#16202B;font-family:'Noto Sans TC', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:24px">
+<h2 style="font-size:52px;font-weight:700">附錄 7/11：F 引擎結構、rebuild／置中</h2>
+<table style="width:1664px;font-size:24px;color:#16202B;padding:4px 10px">
+<tr><th style="width:6%;text-align:left">EXP</th><th style="width:8%;text-align:left">版本</th><th style="width:73%;text-align:left">策略邏輯（白話）</th><th style="width:13%;text-align:left">結果</th></tr>
+<tr><td>085</td><td>v6.72</td><td>資金費率過熱（近3天均值超過基準3倍）時，部署比例上限壓到50%</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>089</td><td>v6.76</td><td>均線和部署比例改用每天的平均價計算，不再用每天0點的價格</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>091</td><td>v6.78</td><td>部署比例不得超過自己和另一個幣（ETH 池看 BTC）部署比例的平均</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>105</td><td>v6.92</td><td>池內流動性擁擠（7日均值超過90日中位數1.5倍）時，部署比例上限50%</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr style="background:#E3EBF8"><td></td><td></td><td>rebuild／置中 · 14 個</td><td></td></tr>
+<tr><td>055</td><td>v6.42</td><td>部署比例變動時，各段區間在原位置按比例加減流動性，不整個重新擺放</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>057</td><td>v6.44</td><td>價格跑出區間時直接在現價重新擺放，但不先換幣調整ETH占比</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>058</td><td>v6.45</td><td>部署比例變動時，價格仍在區間中心附近就原地縮放，偏離太遠才整個重擺</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>061</td><td>v6.48</td><td>部署比例上升就在現價加擺一段新區間，下降就把各段按比例縮小</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>062</td><td>v6.49</td><td>部署比例下降時原地按比例縮小區間，上升時才整個重新置中</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>065</td><td>v6.52</td><td>除了原本的觸發條件外，每週日再固定把區間整個重新置中一次</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+<tr><td>070</td><td>v6.57</td><td>每週日固定把區間重新置中一次，且ETH占比不分多空固定50%</td><td style="color:#5B6B7C">dev 淘汰</td></tr>
+</table>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5B6B7C">補倉＝跌破均線後分段放回 LP；高費池＝0.3%、低費池＝0.05%；通過＝EXP-152 前指 holdout、之後指 7 池全歷史</p>
+<aside>附錄 7：本週每個版本的策略邏輯（白話）與結果，依 9 類排列。來源：registry.csv 與各 EXP 檔。</aside>
+</section>

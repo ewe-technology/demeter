@@ -15,6 +15,8 @@ from pathlib import Path
 
 import edge_tts
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 HERE = Path(__file__).resolve().parent
 NARRATION = HERE.parent / "narration.json"
 LINE_GAP = 0.5    # pause between lines (s)
@@ -23,21 +25,13 @@ FIRST_HEAD = 2.5  # the first scene opens on a silent title card (s)
 SCENE_TAIL = 1.0  # silence after the last line of a scene (s)
 RATE = "-10%"     # edge-tts speaking rate (default voice speed gives only ~4:45 total)
 
-# Appendix pages (s12, lines 1..9) stay on screen at least this long, so the
-# version lists can be read: max(4 s, 1 s + 0.2 s per row on the page).
-APPENDIX = HERE.parent / "appendix_versions.csv"
-APPENDIX_PAGES = [["fee_tier"], ["refill"], ["f_engine"], ["rebuild"], ["exit_stop"], ["macro"],
-                  ["ladder"], ["routing"], ["idle", "baseline"]]
-
-
+# Appendix pages (s12): line k+1 holds for all pages of its group (appendix.py).
 def min_slot(scene_id, i):
     """Minimum time from the start of line i to the start of the next beat (s)."""
     if scene_id != "s12_appendix" or i == 0:
         return 0.0
-    import csv
-    rows = list(csv.DictReader(APPENDIX.open()))
-    n = sum(1 for r in rows if r["category"] in APPENDIX_PAGES[i - 1])
-    return max(4.0, 1.0 + 0.2 * n)
+    import appendix
+    return appendix.group_hold(i - 1)
 
 
 def duration(path):
