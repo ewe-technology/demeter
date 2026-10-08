@@ -14,7 +14,8 @@ H26  daily out-of-range check: the gate-off ladder is re-centred only at 00:00 (
        Verdict: each capital passes if (g_down_d1x - g_spot100) meets H2's 1-3.
 H27  map, descriptive: EMA {50, 100, 200} x lower p / {1.20, 1.40, 1.60} x upper p x {1.00, 1.01, 1.03}, each against
      the g_spot100 of its EMA. The 5 cells run before (H4b, H8, H13) are read from their files, 22 are new. Upper
-     p x 1.00 is off_up = 1e-6 (0 means "same as below" in Config30), so the tick spacing decides the exact edge.
+     p x 1.00 is off_up = 1e-6 (0 means "same as below" in Config30): all USDC, the upper edge at the last usable tick
+     at or below the price (RobustGated.place), re-centred like the others once the price is above p.
        Described: 20 or more of 27 cells with median > 0 is a plateau, 10 or fewer is a point.
 H28  block bootstrap, no new runs: the daily (g_down, g_spot100) returns of H4b's Jan-1 windows (2022 .. 2025) and of
      the 2025-10 window over 2026-01 .. 09, chained into 2022-01 .. 2026-09 (entry costs at each Jan 1 kept). 30-day
@@ -31,11 +32,13 @@ import dataclasses
 import multiprocessing
 import os
 from datetime import date
+from decimal import Decimal
 
 import numpy as np
 import pandas as pd
 
 import pool_lp_batch as batch
+from demeter.uniswap.helper import nearest_usable_tick
 from pool_lp_windows import GatedPool
 
 LADDER = dict(off="range", off_width=0.40, off_up=0.01)
@@ -98,6 +101,23 @@ class RobustGated(GatedPool):
             self.place(price, 0.0, "recentre", t)
         if t.minute == 0:
             self.log_weight(t, price)
+
+    def place(self, price: Decimal, width: float, kind: str, t):
+        """Upper p x 1.00 (H27): add_liquidity_by_value needs the price strictly inside, so sell the WBTC and add the
+        USDC by tick, the upper edge at the last usable tick at or below the price."""
+        c = self.cfg
+        if self.state is not False or c.off_up >= 1e-3:
+            return super().place(price, width, kind, t)
+        m = self.markets[batch.KEY]
+        btc = self.broker.get_token_balance(c.base)
+        if btc > 0:
+            m.swap(btc, c.base, c.quote)
+        sp = m.pool_info.tick_spacing
+        cur, low = m.price_to_tick(price), m.price_to_tick(price / Decimal(self.k[0]))
+        assert low < cur, "the range below the price must have lower ticks (quote is token1, as on 0x99ac)"
+        m.add_liquidity_by_tick(nearest_usable_tick(low, sp), cur // sp * sp, trim_tick=False)
+        self.bounds = (price / Decimal(self.k[0]), price * Decimal(self.k[1]))
+        self.events.append((t, kind))
 
 
 batch.GatedPool = RobustGated  # pool_lp_batch.run builds the gated strategy from this name; the workers fork after
@@ -261,7 +281,7 @@ def test():
     b = batch.run(rcfg("eq_robust", **LADDER), s, e)
     print(f"equivalence: GatedPool {a['net']:.6f} ({a['recentres']} re-centres), "
           f"RobustGated {b['net']:.6f} ({b['recentres']}) -> {'OK' if abs(a['net'] - b['net']) < 1e-9 else 'DIFFERS'}")
-    for c in (SETS["h24"][0], SETS["h25"][0], SETS["h26"][0], SETS["h27"][0]):
+    for c in (SETS["h24"][0], SETS["h25"][0], SETS["h26"][0], SETS["h27"][0], SETS["h27"][1]):
         r = batch.run(c, s, e)
         print(c.name, {k: r[k] for k in ("net", "recentres", "switches", "gas")}, flush=True)
 
