@@ -15,11 +15,13 @@ Run from samples/strategy-example:
   PYTHONPATH=../.. python pool_lp_unseen.py h15
   PYTHONPATH=../.. python pool_lp_unseen.py h16
 """
+import glob
 import multiprocessing
 import os
 import sys
 from datetime import date
 
+import numpy as np
 import pandas as pd
 
 import pool_lp_batch as batch
@@ -35,10 +37,24 @@ H16 = [batch.cfg("99ac", "g_down_10k_3gw", initial=10_000, **LADDER, **g),
        batch.cfg("99ac", "g_spot100_10k_3gw", initial=10_000, **g)]
 
 
+def eth_daily_from_2021() -> pd.Series:
+    """88e6 daily ETH close from the pool's first day: the shared cache starts in 2022, which left 2021 gas unpriced."""
+    path = f"{batch.RESULT_DIR}/eth_usd_daily_2021.csv"
+    if not os.path.exists(path):
+        p = batch.POOLS["88e6"]
+        files = sorted(glob.glob(f"../real-data/{p.address}/*.minute.csv"))
+        df = pd.concat((pd.read_csv(f, usecols=["timestamp", "closeTick"]) for f in files), ignore_index=True)
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+        tick = pd.to_numeric(df.set_index("timestamp").sort_index()["closeTick"], errors="coerce").dropna()
+        (1e12 / np.power(1.0001, tick)).resample("1D").last().ffill().rename("eth_usd").to_csv(path)
+    return pd.read_csv(path, index_col=0, parse_dates=True)["eth_usd"]
+
+
 def main():
     which = sys.argv[1]
     os.makedirs(batch.RESULT_DIR, exist_ok=True)
-    batch.eth_daily()
+    eth_daily_from_2021()
+    batch.eth_daily = eth_daily_from_2021  # read by pool_lp_batch.run; the workers fork after
     batch.gate("99ac", 100)
     if which == "h15":
         tasks = [(c, s, e) for c in H15 for s, e in H15_WINDOWS]
