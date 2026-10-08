@@ -1,0 +1,53 @@
+<!-- Content fragment for build_pnl_page.py. Prose is written per report; the five #pnl-* containers are filled
+     from the config. Drop a container (and its section) when the report has nothing for it. -->
+<header>
+  <div class="eyebrow">reports/single_pool_loop.md · H2–H16 · 2026-10-08</div>
+  <h1>單一池 LP 回測：每年的報酬、回撤與來源</h1>
+  <p class="lede">一兩句話：比了什麼、跟哪些對照組比、後半部拆了什麼。</p>
+  <div class="meta">
+    <span>池子 <b>WBTC/USDC 0.3% 主網</b></span>
+    <span>本金 <b>$100k</b></span>
+    <span>扣除 <b>swap 手續費、價格衝擊、gas</b></span>
+    <span>2026 年只算到 <b>9/30</b></span>
+  </div>
+</header>
+
+<section><div class="takeaways" id="pnl-takeaways"></div></section>
+
+<section>
+  <div class="sec-head">
+    <h2>1. 每年的報酬與最大回撤</h2>
+    <p class="note">每格上面是當年報酬，下面灰字是當年最大回撤。說明年度怎麼切、是否每年重新建倉、標籤代表什麼。</p>
+  </div>
+  <div id="pnl-tables" class="stack"></div>
+</section>
+
+<section>
+  <div class="sec-head"><h2>2. 串接起來的淨值</h2><p class="note">起點 = 1。</p></div>
+  <div class="card" id="pnl-cum"></div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <h2>3. 報酬從哪裡來、虧損從哪裡來</h2>
+    <p class="note">往右是賺、往左是賠，黑色菱形是當年實際報酬，單位是年初淨值的 %（pt）。</p>
+  </div>
+  <div id="pnl-attr" class="stack"></div>
+</section>
+
+<section>
+  <div class="sec-head"><h2>4. 比對照組多賺的部分，拆開來看</h2><p class="note">每年的差拆成幾個來源。</p></div>
+  <div id="pnl-diff" class="stack"></div>
+</section>
+
+<section>
+  <div class="sec-head"><h2>5. 拆解方法與限制</h2></div>
+  <div class="card explain">
+    <dl class="defs">
+      <dt>價格損益</dt><dd>怎麼算的。</dd>
+      <dt>手續費收入</dt><dd>怎麼算的，以及驗證的結果。</dd>
+    </dl>
+    <h3>限制</h3>
+    <ul><li>同一條價格路徑、事後挑選、近似方法的方向。</li></ul>
+  </div>
+</section>
