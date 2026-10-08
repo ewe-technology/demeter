@@ -99,6 +99,7 @@ class ConfigX(Config30):
     pool_key: str = "99ac"
     ema: int = 100
     gate_src: str = ""  # the pool whose gate switches this config; "" = GATE_SOURCE[pool_key]
+    gate_hour: int = 0  # UTC hour whose price is the daily close and when the gate switches (H20)
 
     def pool(self) -> UniV3Pool:
         p = POOLS[self.pool_key]
@@ -163,10 +164,14 @@ def raw_price_scale(p: Pool) -> tuple[bool, float]:
     return p.quote == p.token1, 10.0 ** (p.token0.decimal - p.token1.decimal)
 
 
-def gate(source: str, span: int) -> pd.Series:
-    """On day d if the source pool's base price closed day d-1 above its EMA (every file from the pool's first day)."""
+def gate(source: str, span: int, hour: int = 0) -> pd.Series:
+    """
+    On day d if the source pool's base price closed day d-1 above its EMA (every file from the pool's first day).
+    hour > 0: the day runs from that UTC hour, so the close is the last price before it and the state is indexed at
+    d + hour, when it becomes known.
+    """
     os.makedirs(RESULT_DIR, exist_ok=True)
-    path = f"{RESULT_DIR}/gate_{source}_ema{span}.csv"
+    path = f"{RESULT_DIR}/gate_{source}_ema{span}{f'_h{hour:02d}' if hour else ''}.csv"
     if not os.path.exists(path):
         p = POOLS[source]
         files = sorted(glob.glob(f"../real-data/{p.address}/*.minute.csv"))
@@ -175,7 +180,7 @@ def gate(source: str, span: int) -> pd.Series:
         tick = pd.to_numeric(df.set_index("timestamp").sort_index()["closeTick"], errors="coerce").dropna()
         quote_is_1, scale = raw_price_scale(p)
         raw = np.power(1.0001, tick) * scale
-        close = (raw if quote_is_1 else 1 / raw).resample("1D").last().ffill()
+        close = (raw if quote_is_1 else 1 / raw).resample("1D", offset=f"{hour}h").last().ffill()
         ema = close.ewm(span=span, adjust=False).mean()
         on = (close > ema).shift(1, fill_value=False)
         pd.DataFrame({"close": close, "ema": ema, "gate": on}).to_csv(path)
@@ -211,7 +216,7 @@ def run(c: ConfigX, start: date, end: date) -> dict:
     actuator.broker.add_market(market)
     actuator.broker.set_balance(p.quote, Decimal(c.initial))
     actuator.set_price(pd.DataFrame({base.name: price, p.quote.name: 1.0}, index=price.index), p.quote)
-    strategy = GatedPool(c, gate(c.gate_src or GATE_SOURCE[c.pool_key], c.ema)) if c.gated else RangePool(c)
+    strategy = GatedPool(c, gate(c.gate_src or GATE_SOURCE[c.pool_key], c.ema, c.gate_hour)) if c.gated else RangePool(c)
     actuator.strategy = strategy
     actuator.run(print_result=False)
 
