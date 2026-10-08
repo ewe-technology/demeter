@@ -35,7 +35,11 @@ the windows in time order, rally windows = the pool's 50/50 hold above +50%.
   H10  capital on 99ac: sd_33_10 and w20 at $10k and $1M. sd_33_10 scales if its $1M median excess > 0.
   H11  the gated set reproduced on 9db9, c696 and 0e48: a gated LP reproduces on a pool if it passes there.
   H6 is also run on 4585 and 2f5e, judged the same way.
+  H12  (added 2026-10-08, after H4b) g_down at $10k and $1M on 99ac, each against g_spot100 at the same capital:
+       g_down scales to a capital if (g_down - g_spot100) meets 1-3 there.
 At the end, digest.csv stacks every summary_<set>.csv.
+--only keeps some versions of a set (2026-10-08: H7, H8 and H11 run g_down and g_spot100 only, the versions H4b
+did not pass are dropped for time).
 
 Run from samples/strategy-example (minute CSVs in ../real-data/<pool>/):
   PYTHONPATH=../.. python pool_lp_batch.py --set h5_4585 [--workers 4]
@@ -145,8 +149,12 @@ SETS = {
     "h6_2f5e": skew_family("2f5e"),
     "h11_c696": gated_set("c696"),
     "h11_0e48": gated_set("0e48"),
+    "h12_cap": [cfg("99ac", f"{n}_{tag}", initial=c, gated=True, on="spot", **kw)
+                for c, tag in ((10_000, "10k"), (1_000_000, "1m"))
+                for n, kw in (("g_down", dict(off="range", off_width=0.40, off_up=0.01)), ("g_spot100", {}))],
 }
-CONTROL = {"g_up": "g_spot97", "g_sd": "g_spot26", "g_sym": "g_spot50", "g_down": "g_spot100"}
+CONTROL = {"g_up": "g_spot97", "g_sd": "g_spot26", "g_sym": "g_spot50", "g_down": "g_spot100",
+           "g_down_10k": "g_spot100_10k", "g_down_1m": "g_spot100_1m"}
 
 
 def raw_price_scale(p: Pool) -> tuple[bool, float]:
@@ -295,6 +303,7 @@ def main():
     p.add_argument("--set", choices=list(SETS))
     p.add_argument("--test", action="store_true")
     p.add_argument("--workers", type=int, default=4)
+    p.add_argument("--only", nargs="*", default=None, help="versions of the set to run")
     a = p.parse_args()
     os.makedirs(RESULT_DIR, exist_ok=True)
     eth_daily()  # fill the caches before the workers read them
@@ -306,7 +315,8 @@ def main():
                   SETS["h5_4585"][3], SETS["h10_cap"][2]):
             print(pd.Series(run(c, date(2024, 3, 1), date(2024, 3, 10))).to_string(), flush=True)
         return
-    tasks = [(c, s, window_end(s)) for c in SETS[a.set] for s in window_starts(SETS[a.set][0].pool_key)]
+    configs = [c for c in SETS[a.set] if a.only is None or c.name in a.only]
+    tasks = [(c, s, window_end(s)) for c in configs for s in window_starts(configs[0].pool_key)]
     with multiprocessing.Pool(a.workers, maxtasksperchild=1) as pool:
         rows = pool.starmap(run, tasks, chunksize=1)
     t = pd.DataFrame(rows)
