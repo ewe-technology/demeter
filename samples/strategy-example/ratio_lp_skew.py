@@ -41,6 +41,7 @@ import argparse
 import math
 import multiprocessing
 import os
+import time
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
@@ -158,7 +159,13 @@ def prepare_gates():
 
 
 def _run(job):
-    return yl.run_sleeve(*job)
+    for attempt in range(5):  # another worker may be writing the same Demeter cache file (as in pool_lp_batch.run)
+        try:
+            return yl.run_sleeve(*job)
+        except (EOFError, OSError, ValueError):
+            if attempt == 4:
+                raise
+            time.sleep(30)
 
 
 def run_sleeves(workers: int):
