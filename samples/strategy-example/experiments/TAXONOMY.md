@@ -1,5 +1,9 @@
 # Experiment taxonomy (EXP-001..175)
 
+Team sheet (everyone adds their own experiments there; it supersedes this file once others write to it):
+[LP 策略研究總表](https://docs.google.com/spreadsheets/d/1wRgWxo6PyXtHUAEX-tObBQzKb5oZEvG_7bQDJfT-llo/edit),
+seeded by `build_taxonomy_xlsx.py` (QUAN-1108).
+
 Every experiment filed by the part of v6 it changes. One row per experiment in `TAXONOMY.csv`, built by
 `python experiments/taxonomy.py` from `registry.csv` and the 2026-10-07 deck appendix (EXP-052..164 keep
 the deck's category; `ladder` is renamed `width`, `idle` → `non_lp`). A combination is filed under the rule
