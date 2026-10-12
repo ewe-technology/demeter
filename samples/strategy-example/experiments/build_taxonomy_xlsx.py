@@ -56,7 +56,7 @@ LESSON = {
     "other": "",
 }
 
-OWNERS = ["Dino Huang", "Maker Su", "Steven Yang", "Joy Hsu", "Austin"]
+OWNERS = ["Dino Huang", "Maker Su", "Joy Hsu"]
 STATUSES = ["規劃中", "進行中", "通過", "失敗", "開發期淘汰", "待前測", "撤回", "基準"]
 RULES = ["全歷史（多池）", "dev + holdout", "單池 / 單期間", "規格書模型", "其他"]
 STATUS_MAP = {"dropped-at-dev": "開發期淘汰", "holdout-pass": "通過", "pass": "通過", "holdout-fail": "失敗",
@@ -342,7 +342,7 @@ def guide(ws):
     for i, step in enumerate((
         "找出改動屬於哪個類別分頁（總覽第 1 節有每類的定義）；都不合就放「其他類別」。",
         "在該分頁最下面新增一列，黃底欄位必填。",
-        "ID 用自己的前綴加流水號，例如 MK-001（Maker）、ST-001（Steven）；Dino 的實驗沿用 EXP-NNN。",
+        "ID 用自己的前綴加流水號，例如 MK-001（Mark）、JY-001（Joy）；Dino 的實驗沿用 EXP-NNN。",
         "負責人、狀態、判定規則用下拉選單；新成員先加到「清單」分頁的負責人欄。",
         "研究成果連結貼一個網址：HTML 報告、artifact、GitHub 文件或 Google 文件都可以。",
         "狀態改變時更新同一列，不要新增一列；總覽的計數會自動更新。",
