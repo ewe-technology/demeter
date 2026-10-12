@@ -13,6 +13,9 @@ H21  g_down on the BTC/ETH ratio in 0.3%: 0xCBCd (WBTC/WETH 0.3%, mainnet), 4585
      12-month windows from 2022-01 .. 2023-10 (8, the last ends 2024-09-30; data ends 2024-10-01). g_down and
      g_spot100; H5's 4585 numbers over the same 8 windows are listed beside them.
        Verdict: (g_down - g_spot100) meets H2's 1-3 (>= 6 of 8 windows > 0).
+H21R (registered 2026-10-12 in 2b04a7c, after 0xCBCd was filled to 2026-09-30) H21 on the stretch it never saw:
+     12-month windows from 2024-10 .. 2025-10 (5, the last ends 2026-09-30), g_down and g_spot100 as H21.
+       Verdict: (g_down - g_spot100) has a median > 0 and is > 0 in at least 4 of the 5 windows.
 H22  ETH ladder in 0.3%, listed only: 0xc473 (WETH/USDC 0.3%, Arbitrum, data 2023-06-11 .. 2024-08-05), the ETH gate
      of H18-A (88e6 EMA100), $100k, Arbitrum gas. 6-month windows from 2023-07, 2023-10, 2024-01. e_down and
      e_spot100, with the same two on c696 (WETH/USDC 0.05%, Arbitrum) over the same windows.
@@ -21,7 +24,7 @@ Data: sync 0xCBCd... and 0xc473... from S3 into ../real-data first.
 
 Run from samples/strategy-example:
   PYTHONPATH=../.. python pool_lp_more.py --test                  # one short run per new pool and slice
-  PYTHONPATH=../.. python pool_lp_more.py --set h20 --workers 3   # also h20_33k, h21, h22
+  PYTHONPATH=../.. python pool_lp_more.py --set h20 --workers 3   # also h20_33k, h21, h21r, h22
   PYTHONPATH=../.. python pool_lp_more.py --report
 """
 import argparse
@@ -46,6 +49,7 @@ SLICE_33K = 100_000 / 3
 LADDER = dict(off="range", off_width=0.40, off_up=0.01)
 g = dict(gated=True, on="spot")
 H21_STARTS = [date(y, m, 1) for y in (2022, 2023) for m in (1, 4, 7, 10)]
+H21R_STARTS = [date(2024, 10, 1)] + [date(2025, m, 1) for m in (1, 4, 7, 10)]
 H22_WINDOWS = [(date(2023, 7, 1), date(2023, 12, 31)), (date(2023, 10, 1), date(2024, 3, 31)),
                (date(2024, 1, 1), date(2024, 6, 30))]
 
@@ -84,6 +88,7 @@ SETS = {
     "h20": slice_cfgs(8) + slice_cfgs(16),
     "h20_33k": [c for h in HOURS for c in slice_cfgs(h, SLICE_33K, "_33k")],
     "h21": [batch.cfg("cbcd", "g_down", **LADDER, **g), batch.cfg("cbcd", "g_spot100", **g)],
+    "h21r": [batch.cfg("cbcd", "g_down", **LADDER, **g), batch.cfg("cbcd", "g_spot100", **g)],
     "h22": eth_gated("c473") + eth_gated("c696"),
 }
 
@@ -91,8 +96,8 @@ SETS = {
 def tasks(name: str) -> list[tuple]:
     if name in ("h20", "h20_33k"):
         return [(c, s, batch.window_end(s)) for c in SETS[name] for s in batch.window_starts("99ac")]
-    if name == "h21":
-        return [(c, s, batch.window_end(s)) for c in SETS[name] for s in H21_STARTS]
+    if name in ("h21", "h21r"):
+        return [(c, s, batch.window_end(s)) for c in SETS[name] for s in (H21_STARTS if name == "h21" else H21R_STARTS)]
     return [(c, s, e) for c in SETS[name] for s, e in H22_WINDOWS]
 
 
@@ -148,6 +153,14 @@ def report():
             m = pd.read_csv(h5).pivot(index="start", columns="version", values="net")
             y = (m["g_down"] - m["g_spot100"]).reindex(x.index)
             print("  4585 (H5), same windows:", " ".join(f"{v * 100:+.1f}" for v in y), f"median {y.median():.4f}")
+    if os.path.exists(f"{batch.RESULT_DIR}/windows_h21r.csv"):
+        t = pd.read_csv(f"{batch.RESULT_DIR}/windows_h21r.csv")
+        n = t.pivot(index="start", columns="version", values="net").sort_index()
+        x = n["g_down"] - n["g_spot100"]
+        ok = x.median() > 0 and (x > 0).sum() >= 4
+        print(f"H21R cbcd 2024-10 .. 2026-09 g_down - g_spot100: median {x.median():.4f}, positive {(x > 0).sum()}/"
+              f"{len(x)} -> {'PASS' if ok else 'fail'}")
+        print("  by window:", " ".join(f"{v * 100:+.1f}" for v in x))
     if os.path.exists(f"{batch.RESULT_DIR}/windows_h22.csv"):
         t = pd.read_csv(f"{batch.RESULT_DIR}/windows_h22.csv")
         n = t.pivot_table(index="start", columns=["pool", "version"], values="net")

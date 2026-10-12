@@ -20,6 +20,10 @@ Verdict, fixed before the run (commit of this file), per pool at +/- 10% and $10
   L passes if (L - B) total return over the period is > 0 and (L - B) is > 0 in at least two thirds of the calendar
   years (2022 .. 2026, 2026 to 09-30: >= 4 of 5 for 4585; 2022 .. 2024, 2024 to 09-30: >= 2 of 3 for cbcd).
 Listed: +/- 20%, no gas and $1M, max drawdown.
+H23R (registered 2026-10-12 in 2b04a7c, after 0xCBCd was filled to 2026-09-30): cbcd at +/- 10% and $100k over
+  2024-10-01 .. 2026-09-30, from cash on 2024-10-01. Passes if (L - B) total > 0 and > 0 in both 2025 and 2026.
+  The cbcd sleeve now runs to 2026-10-01 in one go; the strategy is causal, so its path up to 2024-10-01 is the one
+  H23 would have had, and H23 is still judged on 2022-01-01 .. 2024-09-30 only.
 Prior evidence (before the run): section 8 found the 4585 LP at +/- 10% about 5.8% a year behind holding its coins,
 and H5 failed on 4585, so 4585 is expected to fail; cbcd has never been tested.
 
@@ -46,7 +50,11 @@ from tri_btc_eth_gate import wbtc, weth
 
 RESULT_DIR = "result/ratio-lp-gate"
 POOLS = {"4585": ("0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0", 0.05, 10, "2022-01-01", "2026-10-01"),
-         "cbcd": ("0xCBCdF9626bC03E24f779434178A73a0B4bad62eD", 0.3, 60, "2022-01-01", "2024-10-01")}
+         "cbcd": ("0xCBCdF9626bC03E24f779434178A73a0B4bad62eD", 0.3, 60, "2022-01-01", "2026-10-01")}
+LAST_DATA = date(2026, 9, 30)  # the last minute file; POOLS' "to" is an exclusive bound for the stats
+# (pool, from, to, test): the stretches judged; the sleeves run over POOLS' whole span
+PERIODS = [("4585", "2022-01-01", "2026-10-01", "H23"), ("cbcd", "2022-01-01", "2024-10-01", "H23"),
+           ("cbcd", "2024-10-01", "2026-10-01", "H23R")]
 WIDTHS = (0.10, 0.20)
 JUDGED_WIDTH = 0.10
 INITIAL_WETH = 40
@@ -67,7 +75,8 @@ def sleeves() -> list[RatioSleeve]:
     for key, (address, fee, spacing, lo, hi) in POOLS.items():
         for w in WIDTHS:
             out.append(RatioSleeve(f"{key}_w{round(w * 100)}", address, wbtc, weth, weth, date.fromisoformat(lo),
-                                   date.fromisoformat(hi), w, INITIAL_WETH, fee=fee, spacing=spacing))
+                                   min(date.fromisoformat(hi), LAST_DATA), w, INITIAL_WETH, fee=fee,
+                                   spacing=spacing))
     return out
 
 
@@ -101,7 +110,7 @@ def combine():
     park, ev_park = yl.load_sleeve("park_usdc", yl.HOLDOUT_TAG)
     cash = yl.index_on(park["nav"], hours, yl.FULL[0])
     rows = []
-    for key, (_, _, _, lo, hi) in POOLS.items():
+    for key, lo, hi, test in PERIODS:
         for width in WIDTHS:
             lp, ev_lp = load(f"{key}_w{round(width * 100)}")
             lp_v = eth * yl.index_on(lp, hours, lo)
@@ -115,11 +124,12 @@ def combine():
                 scale = 0 if capital is None else 100_000 / capital
                 for name, (weights, values, cost, gas_on, lp_events) in books.items():
                     gas = {s: mainnet_gas(eth, scale) for s in gas_on} if scale else None
+                    values = values[values.index < hi]  # trades, swaps and gas counted inside the stretch only
                     nav, trades, paid = simulate(weights, values, start=lo, cost_bps=cost, cash_cost_bps=0.5, gas=gas,
                                                  lp=lp_events)
                     nav = nav[nav.index < hi]
                     st = sr.stats(nav, lo, hi)
-                    row = {"pool": key, "width": width, "capital": capital or 0, "book": name, "total": st["total"],
+                    row = {"pool": key, "test": test, "from": lo, "width": width, "capital": capital or 0, "book": name, "total": st["total"],
                            "maxDD": st["maxDD"], "trades": trades, "swap $": round(paid["swap"]),
                            "gas $": round(paid["gas"])}
                     row.update({y0[:4]: sr.stats(nav, y0, y1)["total"] for y0, y1 in years_of(lo, hi)})
@@ -129,18 +139,23 @@ def combine():
     pd.set_option("display.width", 250)
     pd.set_option("display.max_columns", 30)
     print(t.to_string(index=False, float_format=lambda v: f"{v:+.4f}"))
-    for (key, width, capital), part in t.groupby(["pool", "width", "capital"], sort=False):
+    for (key, test, width, capital), part in t.groupby(["pool", "test", "width", "capital"], sort=False):
         b, l = part.set_index("book").loc["B"], part.set_index("book").loc["L"]
-        lo, hi = POOLS[key][3], POOLS[key][4]
+        lo, hi = next((p[1], p[2]) for p in PERIODS if p[0] == key and p[3] == test)
         yrs = [y0[:4] for y0, _ in years_of(lo, hi)]
         diff = {y: l[y] - b[y] for y in yrs}
-        need = math.ceil(2 * len(yrs) / 3)
-        ok = l["total"] - b["total"] > 0 and sum(v > 0 for v in diff.values()) >= need
+        if test == "H23R":
+            need_txt = "2025 and 2026 > 0"
+            ok = l["total"] - b["total"] > 0 and diff["2025"] > 0 and diff["2026"] > 0
+        else:
+            need = math.ceil(2 * len(yrs) / 3)
+            need_txt = f"needs {need}/{len(yrs)} years > 0"
+            ok = l["total"] - b["total"] > 0 and sum(v > 0 for v in diff.values()) >= need
         judged = width == JUDGED_WIDTH and capital == 100_000
-        print(f"{key} +/-{width:.0%} {'no gas' if not capital else f'${capital:,}'}: L - B total "
+        print(f"{test} {key} {lo}..{hi} +/-{width:.0%} {'no gas' if not capital else f'${capital:,}'}: L - B total "
               f"{l['total'] - b['total']:+.4f}, by year " + " ".join(f"{y} {v:+.3f}" for y, v in diff.items())
               + f", maxDD L {l['maxDD']:+.3f} B {b['maxDD']:+.3f}"
-              + (f" -> {'PASS' if ok else 'fail'} (needs {need}/{len(yrs)} years > 0)" if judged else " (listed)"))
+              + (f" -> {'PASS' if ok else 'fail'} ({need_txt})" if judged else " (listed)"))
 
 
 def main():
