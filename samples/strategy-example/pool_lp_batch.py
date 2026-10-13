@@ -66,6 +66,7 @@ from tri_btc_eth_gate import GAS_GWEI, GAS_UNITS, load_market, usdc, usdt, wbtc,
 
 RESULT_DIR = "result/pool-lp-batch"
 LAST_DAY = date(2026, 9, 30)
+BAR = None  # None = minute bars; "1h" for long runs (candidate_vs_c.py), set before the workers fork
 ARB_GAS_USD = {"AddLiquidityAction": 0.20, "RemoveLiquidityAction": 0.20, "CollectFeeAction": 0.20, "SwapAction": 0.05}
 
 
@@ -203,7 +204,7 @@ def run(c: ConfigX, start: date, end: date) -> dict:
     base = p.token1 if p.quote == p.token0 else p.token0
     for attempt in range(5):  # another worker may be writing the same Demeter cache file
         try:
-            data, _ = load_market(KEY, c.pool(), p.address, start, end, None, chain=p.chain)
+            data, _ = load_market(KEY, c.pool(), p.address, start, end, BAR, chain=p.chain)
             break
         except (EOFError, OSError, ValueError):
             if attempt == 4:

@@ -17,7 +17,12 @@ Verdict ($100k book, n = 3, each year's gas): (C+g - C) total > 0, > 0 in at lea
 2022 .. 2026, and C+g's max drawdown (hourly) no more than 2 pt worse than C's. Listed: n = 1, $10k, $1M, the years,
 gas and trades, and the BTC halves alone.
 
+Bars: the Demeter runs use hourly bars (pool_lp_batch.BAR = "1h"). The minute-bar runs needed 4 - 5 GB each and were
+killed by the OOM killer on the 7.7 GB host (2026-10-13, 0 of 12 done). --check reruns two of H26's windows on hourly
+bars first; the hourly runs go ahead only if both are within 2 pt of H26's minute-bar net (fixed before the check).
+
 Run from samples/strategy-example (the spot price cache, yield_layer's park_usdc_to2026, 99ac in ../real-data):
+  PYTHONPATH=../.. python candidate_vs_c.py --check                 # hourly against minute bars on H26's windows
   PYTHONPATH=../.. python candidate_vs_c.py --test                  # a 6-week check, into result/candidate-vs-c/test
   PYTHONPATH=../.. python candidate_vs_c.py --runs --workers 2      # the 12 Demeter runs, skips finished ones
   PYTHONPATH=../.. python candidate_vs_c.py --combine
@@ -48,7 +53,7 @@ SWAP = GAS_EVENT_UNITS["swap"]
 
 
 def demeter_cfg(book: int, n: int, h: int):
-    return robust.rcfg(f"gd1x_c{TAGS[book]}_n{n}_h{h:02d}", initial=book / 2 / n, daily_check=True, gate_hour=h,
+    return robust.rcfg(f"gd1x_1h_c{TAGS[book]}_n{n}_h{h:02d}", initial=book / 2 / n, daily_check=True, gate_hour=h,
                        delay=h, **robust.LADDER)
 
 
@@ -156,6 +161,21 @@ def combine(lo: str = LO, hi: str = HI, start: date = START, rdir: str = RESULT_
                   + (f" -> {'PASS' if ok else 'fail'}" if judged else " (listed)"))
 
 
+def check() -> bool:
+    """Two of H26's windows (g_down_d1x, $100k) on hourly bars against their minute-bar net values."""
+    t = pd.read_csv(f"{batch.RESULT_DIR}/windows_h26.csv")
+    ok = True
+    for s in (date(2022, 1, 1), date(2024, 7, 1)):
+        c = robust.rcfg("g_down_d1x_1hcheck", daily_check=True, **robust.LADDER)
+        hourly = batch.run(c, s, batch.window_end(s))["net"]
+        minute = float(t[(t["version"] == "g_down_d1x") & (t["start"] == str(s))]["net"].iloc[0])
+        gap = hourly - minute
+        ok &= abs(gap) < 0.02
+        print(f"check {s}: hourly {hourly:+.4f}, minute {minute:+.4f}, gap {gap:+.4f}", flush=True)
+    print("CHECK", "OK: within 2 pt" if ok else "FAILED: a gap of 2 pt or more")
+    return ok
+
+
 def test():
     """A 6-week check of the plumbing (2023-01-01 .. 02-15, gate on and off), into result/candidate-vs-c/test."""
     s, e = date(2023, 1, 1), date(2023, 2, 15)
@@ -166,16 +186,21 @@ def test():
 def main():
     a = argparse.ArgumentParser()
     a.add_argument("--test", action="store_true")
+    a.add_argument("--check", action="store_true")
     a.add_argument("--runs", action="store_true")
     a.add_argument("--combine", action="store_true")
-    a.add_argument("--workers", type=int, default=2)
+    a.add_argument("--workers", type=int, default=3)
     a = a.parse_args()
     os.makedirs(batch.RESULT_DIR, exist_ok=True)
+    batch.BAR = "1h"  # read by pool_lp_batch.run; the workers fork after
     batch.eth_daily()  # fill the caches before the workers read them
     for h in (0, 8, 16):
         batch.gate("99ac", 100, h)
     if a.test:
         test()
+        return
+    if a.check:
+        check()
         return
     if a.runs:
         run_demeter(a.workers)
