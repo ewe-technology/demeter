@@ -80,6 +80,8 @@ def patch(text: str, v: str, hour: int = 0, pool: str = MAINNET, start=(2021, 5,
         text = sub(text, r"\nREFILL_STAGES = \(\(1, [^\n]*", f"\nREFILL_STAGES = ({st})  # neighbour run x{ladder}", count=1)
     if div_on is not None:
         text = sub(text, r"\nDIVERGENCE_ON, DIVERGENCE_OFF = 0\.40, 0\.20", f"\nDIVERGENCE_ON, DIVERGENCE_OFF = {div_on}, 0.20")
+    if ladder is not None or div_on is not None:  # Maker's self-check asserts the default constants
+        text = sub(text, r"\n    _self_check\(\)\n", "\n    pass  # _self_check() skipped: it asserts the default parameters\n")
     if "netvalue_" not in text:  # v1: same minute net-value export as v2 / v3
         text = sub(text, r'(\n        benchmark_series = actuator\.account_status_df\["price"\]\[price_name\]\n)',
                    lambda m: m.group(1) + '        pd.DataFrame({"net_value": actuator.account_status_df["net_value"], '

@@ -80,7 +80,7 @@ is consistent; its return advantage is not established. v2's ladder change has n
 | T5 PBO (32 configs, S = 16) | 0.18, pass | (same batch) | |
 | T6 DSR (N = 18 / 32) | v2 0.46 / 0.42 **fail** | v3 0.72 / 0.69 **fail** | v1 0.44 / 0.39 **fail** |
 | T7 paired bootstrap, p (UTC 0 / 24-h mean) | 0.44 / 0.015 **fail** | 0.23 / 0.17 **fail** | 0.23 / 0.053 **fail** |
-| T8a random timing (v3 rule rank) | — | pass: 99.1 % terminal, 100 % DD (spec window); 88 % / 97 % (full) | |
+| T8a random timing (v3 rule rank) | — | pass as run: 99.1 % terminal, 100 % DD (spec window); 88 % / 97 % (full). Corrected: the DD pass came from the episode open at the window start (rank 0.06 without it); a fair null gives rank 0.92 (Demeter addendum) | |
 | T8b 1,000 bootstrap paths | **fail** (55.6 % of paths) | **fail** (65.4 %; DD better 76 %) | pass (67.6 %) |
 | T9 cost stress | pass | pass | pass |
 | T10 Demeter mainnet `0x88e6` (sign agrees) | pass (−15.7 vs sim −15.3) | pass (+43.8 vs +45.2) | pass (+28.1 vs +29.9) |
@@ -135,9 +135,12 @@ cost; v2 / v3 pool fee + depth slippage, as on the branch. Max DD is per minute.
 
 | $k | Demeter | simulator (UTC 0) | spec |
 |---|---|---|---|
-| v1 | 196.8 (max DD −22.7 %, 179 rebuilds) | 201.3 (−28.8 %) | — |
-| v2 | 181.1 (−24.7 %, 162) | 186.0 (−27.6 %) | 186.2 (−28 %) |
-| v3 | 224.9 (−17.7 %, 164) | 231.2 (−18.2 %) | 231.9 (−19 %) |
+| v1 | 196.8 (max DD −29.4 %, 179 rebuilds; corrected, was −22.7 %) | 201.3 (−28.8 %) | — |
+| v2 | 181.1 (−29.4 %, 162; was −24.7 %) | 186.0 (−27.6 %) | 186.2 (−28 %) |
+| v3 | 224.9 (−21.9 %, 164; was −17.7 %) | 231.2 (−18.2 %) | 231.9 (−19 %) |
+
+Correction (2026-10-13): demeter's `max_draw_down` (`demeter/result/metrics/calculator.py:110-118`) takes the largest
+dollar drop, not the largest percentage drop. The figures above are the minute percentage drawdowns.
 | v2 − v1 | −15.7 | −15.3 | |
 | v3 − v2 | +43.8 | +45.2 | |
 | v3 − v1 | +28.1 | +29.9 | |
@@ -162,6 +165,9 @@ runs about 3 % above Demeter on this pool. On the real pool at UTC 0, v1 ends $1
 
 ## Stand-alone scorecards (added 2026-10-13, after the pre-registered tests; descriptive, no pre-registered bar)
 
+**Superseded** by `VALIDATION-2026-10-13-defense-v1-v3-demeter.md` (Demeter as the source of truth, eight methods
+after a four-agent review). Kept for the record; the table below is simulator-based.
+
 Each version judged against zero and against its own variants, no other strategy as benchmark
 (`experiments/scorecard_v123.py`, `result/validate_v123/scorecard.json`). Spec window 2021-05-05..2026-08-31 unless
 noted. Significance is computed per decision hour and reported as the median of the 24 hours: one deployment runs one
@@ -185,7 +191,7 @@ for Dino to confirm, not a rule.
 | UTC 0 → 24-h mean | −35 % | −22 % | −16 % | |
 | own-parameter plateau, ±1 step (spec / full window) | ±7 % pass / −13, +15 % fail | ±1.5 % pass / pass | −4, +2 % pass / −14, +12 % fail | within 10 % |
 | cost stress (reward × 0.8, swap × 2), 24-h mean $k | 111.9 | 124.4 | 168.1 | > 100 |
-| Demeter `0x88e6`, UTC 0: $k / max DD | 196.8 / −22.7 % | 181.1 / −24.7 % | 224.9 / −17.7 % | |
+| Demeter `0x88e6`, UTC 0: $k / max DD (corrected) | 196.8 / −29.4 % | 181.1 / −29.4 % | 224.9 / −21.9 % | |
 | full window 2018-: P(return > 0), median hour / CAGR 24-h | 49 % / 1.5 % | 72 % / 5.1 % | 91 % / 9.8 % | |
 
 Reading: none clears P(return > 0) >= 95 % or DSR >= 0.95 at a random hour. v3 is close (92 %, DSR 0.86, about 7

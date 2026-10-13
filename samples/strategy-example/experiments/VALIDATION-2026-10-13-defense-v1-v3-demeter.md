@@ -6,7 +6,7 @@ real backtest performance is Maker's `maker-defense` branch run in Demeter. The 
 results are labelled "model". A four-agent review of the first scorecard removed five methods; eight remain, split
 into generic checks (any strategy) and checks specific to v1 / v2 / v3.
 
-Status: **pre-registered** (no run below has started when this file is committed).
+Status: **done 2026-10-13** (pre-registered in 88eeb21 before any run). Slides: https://claude.ai/artifact/1rmNEUAYUosctoz7sLVBwh
 
 ## 1. Source of truth and runs
 
@@ -60,6 +60,52 @@ demeter's `max_draw_down`, which picks the largest dollar drop).
 - T8a: the drawdown pass came from the episode open at the window start; with it excluded the rank is 0.06.
 - v3 DSR: 0.72-0.87 depending on var(SR); MinTRL against SR0 about 12-17 years, not 6.9.
 
-## Result
+## Result (2026-10-13; `scorecard_demeter_v123.py`, `result/validate_v123/scorecard_demeter.json`, runs in `result/validate_v123/demeter/`)
 
-(empty until the runs are done)
+**Verdict, per chain: mainnet — not for deployment (all three fail A2: gas). Base — pilot for all three (pass A1,
+A2, A3, B1; fail A4). v3 is the best of the three on Base and at every decision hour; no version is deployable.**
+
+| method | v1 | v2 | v3 |
+|---|---|---|---|
+| A1 mainnet UTC 0: terminal $k / CAGR / max DD | 196.8 / 13.6 % / −29.4 % | 181.1 / 11.8 % / −29.4 % | 224.9 / 16.5 % / −21.9 % |
+| A1 Base 2023-12-02..2026-08-31 | 155.0 / 17.3 % / −34.7 % | 139.4 / 12.9 % / −37.5 % | 156.6 / 17.7 % / −25.8 % |
+| A1 fees / rebuilds (mainnet) | 100.2 / 179 | 92.5 / 162 | 98.4 / 164 |
+| A2 mainnet gas $k | 125.7 | 112.3 | 110.6 |
+| A2 mainnet: fees × 0.66 + swap × 2 + gas | **33.0 fail** | **31.4 fail** | **76.8 fail** |
+| A2 Base: fees × 0.66 + swap × 2 (gas ≈ 0) | 138.0 pass | 123.3 pass | 141.6 pass |
+| A3 neighbour profit vs chosen | ×0.9 −10.5 %, ×1.1 +7.0 % pass | ×1.4 −6.6 %, ×1.6 +6.5 % pass | 0.35 +4.0 %, 0.45 −2.5 % pass |
+| A4 median hour: Sharpe / 1 − p / DSR | 0.21 / 0.69 / 0.23 fail | 0.27 / 0.73 / 0.35 fail | 0.62 / 0.93 / 0.76 fail |
+| A4 MinTRL vs SR0 (median hour) | never (SR < SR0 0.55) | never (SR < SR0 0.44) | ~30 years (SR0 0.31) |
+| A5 kill line: 90-day return, 5th pct | −11.7 % | −11.8 % | −10.3 % |
+| A6 Monte Carlo (model) max DD median / p5 | −40 % / −61 % | −40 % / −59 % | −34 % / −53 % |
+| B1 terminal UTC 0 / mean of 6 / worst | 196.8 / 144.4 / 116.4 pass | 181.1 / 137.9 / 114.2 pass | 224.9 / 192.5 / 164.1 pass |
+| B1 UTC 0's rank of 6 hours | 1 | 1 | 1 |
+| B1 worst-hour max DD | −41.8 % | −42.0 % | −26.9 % |
+| B2 random timing (model, v3) | — | — | rank 0.916, fail |
+
+Decision hours (mainnet, $k, h0 / 4 / 8 / 12 / 16 / 20): v1 196.8 / 137.5 / 172.7 / 123.2 / 119.7 / 116.4;
+v2 181.1 / 114.2 / 128.7 / 127.8 / 150.6 / 124.7; v3 224.9 / 164.1 / 181.2 / 201.1 / 209.8 / 174.0. Neighbour runs
+(UTC 0, mainnet): v1 ×0.9 186.6, ×1.1 203.6; v2 ×1.4 175.8, ×1.6 186.4; v3 0.35 229.9, 0.45 221.9.
+
+Reading:
+1. **Chain decides.** A 16-band ladder rebuilt 160-180 times costs $110-126k of mainnet gas on $100k over 5.3 years,
+   more than the fees. On Base the same logic keeps its profit under a fee haircut to 0.66 and double swap cost.
+2. **UTC 0 is the best of six hours for all three.** Expect the six-hour mean: v1 −27 %, v2 −24 %, v3 −14 % below
+   the UTC 0 figure.
+3. **Parameters are on a plateau** for all three (profit within ±11 % one step away). The overfitting concern is not
+   the parameters; it is the decision hour and the small sample.
+4. **No edge is statistically established.** v3's Sharpe 0.62 sits above the expected best of 108 tries (0.31) but
+   the DSR is 0.76; about 30 years of daily data would be needed. v3's divergence exits beat random exits on 92 % of
+   draws (model), short of 95 %.
+5. **Pilot on Base**: v3 first (Base 156.6 $k, max DD −25.8 %, mainnet worst hour still 164.1 $k). Size small; stop
+   if a 90-day return falls below −10.3 %. Base has 2.75 years of data and no 2022-style bear market.
+
+## Deviations
+
+- The decision-hour runs (R1) crash in Maker's post-run metrics (benchmark length mismatch, 2,799,120 vs 2,799,359
+  rows) after the backtest has finished and written net value, events and daily fees. Their fees come from the daily
+  fee log and their swap cost is rebuilds × the version's UTC 0 swap cost per rebuild (swap cost is $4-6k, gas $77-188k).
+- The neighbour runs (R3) skip Maker's `_self_check()`, which asserts the default parameters; first attempt failed on it.
+- The pre-registration did not say whether A2 must pass on both chains. "On the pool's own chain" is read as a verdict
+  per chain. B1 was run on mainnet only.
+- A4 var(SR) is taken over the six hours and the two neighbours of each version.
