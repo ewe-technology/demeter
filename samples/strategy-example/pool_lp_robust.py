@@ -21,6 +21,12 @@ H28  block bootstrap, no new runs: the daily (g_down, g_spot100) returns of H4b'
      the 2025-10 window over 2026-01 .. 09, chained into 2022-01 .. 2026-09 (entry costs at each Jan 1 kept). 30-day
      circular blocks, 10,000 draws, seed 28: 90% interval of the annualised excess.
        Described: lower bound > 0, "not likely luck within this path"; <= 0, "overlapping windows overstate it".
+H35  (plan_2026-10-12_single_coin.md, registered 2026-10-13 in 1782fd3) H26's daily check every 3 days (r3), every 7
+     days (r7) or never (never), at $100k and $10k. A schedule replaces the daily check if it meets H2's 1-3 against
+     g_spot100 at both capitals and its $100k median is no more than 1 pt below the daily check's; the least frequent
+     such schedule wins.
+H36  The daily check, but no re-centre below the range (kb): replaces it if it meets H2's 1-3 at both capitals and its
+     $100k median is at least 1 pt above the daily check's.
 
 Run from samples/strategy-example:
   PYTHONPATH=../.. python pool_lp_robust.py --test                  # equivalence and one short run per change
@@ -52,10 +58,12 @@ class ConfigR(batch.ConfigX):
     shift: int = 0  # H24: days the gate is rolled by
     delay: int = 0  # H25: UTC hour the gate is read and the book switched
     daily_check: bool = False  # H26: re-centre only at the gate hour
+    recheck_days: int = 1  # H35, with daily_check: check every k days (days since EPOCH % k == 0); 0 never re-centres
+    keep_below: bool = False  # H36: below the range, keep the WBTC bought instead of re-centring
 
 
 def rcfg(name: str, ema: int = 100, initial: float | None = None, **kw) -> ConfigR:
-    extra = {k: kw.pop(k) for k in ("shift", "delay", "daily_check") if k in kw}
+    extra = {k: kw.pop(k) for k in ("shift", "delay", "daily_check", "recheck_days", "keep_below") if k in kw}
     base = batch.cfg("99ac", name, initial=initial, ema=ema, gated=True, on="spot", **kw)
     return ConfigR(**{f.name: getattr(base, f.name) for f in dataclasses.fields(base)}, **extra)
 
@@ -75,9 +83,13 @@ def rolled(gate: pd.Series, k: int) -> pd.Series:
     return pd.Series(np.roll(seg.to_numpy(), k), index=seg.index)
 
 
+EPOCH = pd.Timestamp("2020-01-01")
+
+
 class RobustGated(GatedPool):
-    """GatedPool with a rolled gate (shift), a later switch hour (delay) and a daily-only re-centre (daily_check).
-    With the defaults it does what GatedPool.on_bar does (checked by --test)."""
+    """GatedPool with a rolled gate (shift), a later switch hour (delay), a daily-only re-centre (daily_check), every
+    k days or never (recheck_days), no re-centre below the range (keep_below), and a gate read at its own hour when
+    the config has gate_hour (H34's slices). With the defaults it does what GatedPool.on_bar does (checked by --test)."""
 
     def __init__(self, cfg, gate: pd.Series):
         super().__init__(cfg, rolled(gate, cfg.shift) if getattr(cfg, "shift", 0) else gate)
@@ -90,13 +102,21 @@ class RobustGated(GatedPool):
         gate_bar = t.hour == getattr(c, "delay", 0) and t.minute == 0
         switched = False
         if first or gate_bar:
-            on = bool(self.gate.asof(pd.Timestamp(t).normalize()))
+            # a gate built at an hour (pool_lp_batch.gate(hour=)) is indexed at that hour of the day
+            when = pd.Timestamp(t) if getattr(c, "gate_hour", 0) else pd.Timestamp(t).normalize()
+            on = bool(self.gate.asof(when))
             if on != self.state:
                 self.go(on, price, t)
                 switched = True
-        check = gate_bar and not switched if getattr(c, "daily_check", False) else not gate_bar
-        if (not first and check and t.minute == 0 and self.mode == "range"
-                and not (self.bounds[0] <= price <= self.bounds[1])):
+        if getattr(c, "daily_check", False):
+            k = getattr(c, "recheck_days", 1)
+            check = gate_bar and not switched and k > 0 and (pd.Timestamp(t).normalize() - EPOCH).days % k == 0
+        else:
+            check = not gate_bar
+        out = self.bounds is not None and not (self.bounds[0] <= price <= self.bounds[1])
+        if out and getattr(c, "keep_below", False) and price < self.bounds[0]:
+            out = False
+        if not first and check and t.minute == 0 and self.mode == "range" and out:
             self.remove()
             self.place(price, 0.0, "recentre", t)
         if t.minute == 0:
@@ -127,6 +147,10 @@ SETS = {
     "h24": [rcfg(f"{v}_s{k:+d}", shift=k, **kw) for k in placebo_shifts()
             for v, kw in (("g_down", LADDER), ("g_spot100", {}))],
     "h25": [rcfg(f"{v}_d{d}", delay=d, **kw) for d in (1, 4) for v, kw in (("g_down", LADDER), ("g_spot100", {}))],
+    "h35": [rcfg(f"g_down_{v}{tag}", initial=cap, daily_check=True, **kw, **LADDER)
+            for v, kw in (("r3", dict(recheck_days=3)), ("r7", dict(recheck_days=7)), ("never", dict(recheck_days=0)),
+                          ("kb", dict(keep_below=True)))
+            for cap, tag in ((None, ""), (10_000, "_10k"))],
     "h26": [rcfg("g_down_d1x", daily_check=True, **LADDER),
             rcfg("g_down_d1x_10k", initial=10_000, daily_check=True, **LADDER)],
     "h27": [rcfg(f"gd_{lo}_{up}", ema=e, off="range", off_width=LOWS[lo], off_up=UPS[up])
@@ -201,6 +225,28 @@ def report_h26():
     print(f"  g_down_d1x - g_down median: {(cell('g_down_d1x') - cell('g_down')).median():+.4f}")
 
 
+def report_h35():
+    """H35 / H36: each schedule against g_spot100 at both capitals, and against H26's daily check at $100k."""
+    t = pd.read_csv(f"{batch.RESULT_DIR}/windows_h35.csv")
+    daily = float((cell("g_down_d1x") - cell("g_spot100")).median())
+    print(f"H35/H36 H26 daily check, $100k: median {daily:+.4f}")
+    ok = {}
+    for v in ("r3", "r7", "never", "kb"):
+        xs = {cap: cell(f"g_down_{v}{tag}") - cell(f"g_spot100{tag}") for cap, tag in ((100_000, ""), (10_000, "_10k"))}
+        both = all(all(batch.checks(x).values()) for x in xs.values())
+        m = float(xs[100_000].median())
+        for cap, x in xs.items():
+            g = t[t["version"] == f"g_down_{v}{'' if cap == 100_000 else '_10k'}"]
+            print(line(f"  {v} ${cap:,} - g_spot100", x) +
+                  f" | recentres {g['recentres'].median():.0f}, gas {g['gas'].median():.4f}, impact {g['impact'].median():.4f}")
+        ok[v] = both and (m >= daily - 0.01 if v != "kb" else m >= daily + 0.01)
+        print(f"  {v}: H2 1-3 at both capitals {both}, $100k median {m:+.4f} vs daily {daily:+.4f} -> "
+              f"{'meets its rule' if ok[v] else 'does not meet its rule'}")
+    pick = next((v for v in ("never", "r7", "r3") if ok[v]), None)
+    print(f"H35 -> {'replace the daily check with ' + pick if pick else 'keep the daily check'}")
+    print(f"H36 -> {'keep the WBTC below the range' if ok['kb'] else 'keep re-centring below the range'}")
+
+
 def gd_name(e: int, lo: int, up: int) -> str:
     """The version name of a map cell, the 5 run before under their own names."""
     if (lo, up) == (140, 101):
@@ -265,7 +311,8 @@ def report_h28(draws: int = 10_000, block: int = 30):
 
 def report():
     pd.set_option("display.width", 250)
-    for name, fn in (("h24", report_h24), ("h25", report_h25), ("h26", report_h26), ("h27", report_h27)):
+    for name, fn in (("h24", report_h24), ("h25", report_h25), ("h26", report_h26), ("h27", report_h27),
+                     ("h35", report_h35)):
         if os.path.exists(f"{batch.RESULT_DIR}/windows_{name}.csv"):
             fn()
     report_h28()
