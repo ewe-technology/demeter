@@ -160,6 +160,40 @@ runs about 3 % above Demeter on this pool. On the real pool at UTC 0, v1 ends $1
    forward kill line of section 4, and with the spec's return figures replaced by the 24-hour means (v3 standard
    ~$193k on 2021-05..2026-08, max DD ~−22 %).
 
+## Stand-alone scorecards (added 2026-10-13, after the pre-registered tests; descriptive, no pre-registered bar)
+
+Each version judged against zero and against its own variants, no other strategy as benchmark
+(`experiments/scorecard_v123.py`, `result/validate_v123/scorecard.json`). Spec window 2021-05-05..2026-08-31 unless
+noted. Significance is computed per decision hour and reported as the median of the 24 hours: one deployment runs one
+hour, and averaging the hours' returns first would smooth them and overstate the Sharpe. "Suggested bar" = a reference
+for Dino to confirm, not a rule.
+
+| | v1 | v2 | v3 | suggested bar |
+|---|---|---|---|---|
+| terminal $k: 24-h mean / UTC 0 / worst hour | 131 / 201 / 100 | 144 / 186 / 102 | 193 / 231 / 138 | |
+| CAGR, 24-h mean | 5.3 % | 7.1 % | 13.2 % | |
+| annual log return, 90 % CI (median hour) | −12.5 .. +20.9 % | −9.1 .. +22.4 % | −1.1 .. +26.2 % | lower end > 0 |
+| P(mean return > 0) (median hour / UTC 0) | 64 % / 93 % | 76 % / 92 % | 92 % / 97 % | >= 95 % |
+| Sharpe, annual (median hour) | 0.18 | 0.30 | 0.63 | |
+| DSR, N = 18 (median hour) | 0.48 | 0.41 | 0.86 | >= 0.95 |
+| years of data to confirm (MinTRL, median hour) | 91 | 31 | 6.9 | <= data length (5.3) |
+| max DD: 24-h mean / worst hour | −38.5 / −51.5 % | −36.5 / −46.8 % | −22.0 / −30.1 % | |
+| P(loss over any 1 year), all hours | 17 % | 13.5 % | 12 % | |
+| 1-year return, 5th percentile | −10.6 % | −7.9 % | −5.9 % | |
+| 3-year starts 2018-01..2023-08 profitable (worst, $k) | 95.6 % (66) | 98.5 % (85) | 100 % (117) | >= 90 % |
+| Monte Carlo 8 y: P(loss) / median DD / 5th-pct DD | 24 % / −40 % / −61 % | 23 % / −40 % / −59 % | 14 % / −34 % / −53 % | |
+| UTC 0 → 24-h mean | −35 % | −22 % | −16 % | |
+| own-parameter plateau, ±1 step (spec / full window) | ±7 % pass / −13, +15 % fail | ±1.5 % pass / pass | −4, +2 % pass / −14, +12 % fail | within 10 % |
+| cost stress (reward × 0.8, swap × 2), 24-h mean $k | 111.9 | 124.4 | 168.1 | > 100 |
+| Demeter `0x88e6`, UTC 0: $k / max DD | 196.8 / −22.7 % | 181.1 / −24.7 % | 224.9 / −17.7 % | |
+| full window 2018-: P(return > 0), median hour / CAGR 24-h | 49 % / 1.5 % | 72 % / 5.1 % | 91 % / 9.8 % | |
+
+Reading: none clears P(return > 0) >= 95 % or DSR >= 0.95 at a random hour. v3 is close (92 %, DSR 0.86, about 7
+years of data needed against 5.3 available) and clears the start-date, cost and spec-window plateau checks. v1's
+headline depends on the decision hour (UTC 0 93 %, median hour 64 %); with 2018-2021 included its median-hour return is
+indistinguishable from zero. The Monte Carlo drawdown tail (−53 to −61 % at the 5th percentile) is much deeper than
+the historical 24-hour mean; it resamples 2018-style crashes, where the simulator is weakest (T0).
+
 ## Deviations
 
 - T1 named no window in the pre-registration; both windows were run and both are reported (the verdict holds on
