@@ -111,6 +111,29 @@ Noise-level counts (< 0.1 pt CAGR on a half): ETH `fstage`, `vstep3`; BTC `share
 chance; only findings 1 and 2 hold on both halves by more than 0.5 pt. Next test: the forward window after 2026-09-17,
 and finding 1 / 2 on another ETH and another BTC/ETH pool.
 
+### P&L attribution (added 2026-10-14, after the result)
+
+v3 and the 23 counted variants were rerun with a daily log of holdings, LP amounts, fees and swap cost (logging only:
+net value files byte-identical to the first runs; `v3_goal.py attrib`, CSV `~/Desktop/v3_winners_pnl_attribution.csv`).
+Between two daily logs nothing trades, so the change in net value splits exactly into: directional (average ETH share x
+daily ETH returns), timing (the ETH share moving with F / the share rule), fees, LVR / impermanent loss (residual), and
+swap costs. Shares of the starting book, whole window (not per year):
+
+| pool, segment | v3: directional / timing / fees / LVR-IL / costs = total |
+|---|---|
+| ETH IS | +36.1 / +70.4 / +77.6 / −92.6 / −3.0 = +88.6% |
+| ETH OOS | +2.5 / +43.4 / +19.3 / −31.1 / −1.2 = +32.9% |
+| BTC IS | −5.7 / +9.2 / +8.7 / −12.2 / −0.6 = −0.7% |
+| BTC OOS | +0.2 / +20.4 / +2.2 / −5.5 / −1.9 = +15.4% |
+
+- The LP leg (fees + LVR/IL) loses on every pool and segment (ETH IS −15.0 pts, OOS −11.8; BTC IS −3.5, OOS −3.3);
+  v3 earns from timing (the F engine), as v6 does (`RESEARCH-2026-10-06-is-lp-worth-it.md`).
+- Every counted variant wins mainly through timing. ETH `share70/75`: more ETH while invested, IS +7..10 pts directional
+  and +11..14 timing, LP net −1.7..−2.7 pts (OOS LP net also worse). BTC `sharema10/15/20`: OOS +3.2 pts timing, LP net
+  −0.1. ETH `ig9` / `spanswide`: more fees but more LVR, LP net −3.8 / −5.9 pts IS (+1.1 / +1.4 OOS). Only `f2low`,
+  `follow0625` and `confirm5` improve the LP leg OOS (+0.7..2.1 pts), with mixed IS.
+- None of the 23 is a better LP; they are better market timing or more ETH exposure.
+
 ## Deviations
 
 - Binance closes: Maker's ETHUSDT file ends 2026-08-31 and ETHBTC 2025-12-31; both are extended to 2026-09-17 from

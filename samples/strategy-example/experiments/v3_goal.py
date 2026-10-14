@@ -285,7 +285,28 @@ def patch(text: str, pool: str, seg: str, variant: str) -> str:
         text = sub(text, '    load_btc_price = quote_token.name == "btc"', "    load_btc_price = False  # v3_goal: results in BTC", 1)
     for pattern, repl, n_expected in VARIANTS[variant][2]:
         text = sub(text, pattern, repl, n_expected)
-    return text
+    return sub(text, LOG_LINE, LOG_MORE, 1)
+
+
+# Logging only (no change in behaviour): the daily fee log (00:00 UTC, after that minute's rebuilds) also records the
+# token holdings, the LP's own amounts, cumulative swap cost and rebuild counts, for the P&L attribution (`attrib`).
+LOG_LINE = '                             "lp_value": float(lp_market.get_market_balance().net_value) if lp_market.positions else 0.0})'
+LOG_MORE = (
+    '                             "lp_value": float(lp_market.get_market_balance().net_value) if lp_market.positions else 0.0,\n'
+    '                             **self._attrib_row(lp_market, price)})\n'
+    '\n'
+    '    def _attrib_row(self, lp_market, price) -> dict:\n'
+    '        """v3_goal attribution columns (quote units)."""\n'
+    '        bal = lp_market.get_market_balance() if lp_market.positions else None\n'
+    '        f = lambda x: float(x) if bal is not None else 0.0\n'
+    '        return {"lp_liq_value": f(bal and bal.liquidity_value), "lp_base": f(bal and bal.base_in_position),\n'
+    '                "lp_quote": f(bal and bal.quote_in_position), "unc_base": f(bal and bal.base_uncollected),\n'
+    '                "unc_quote": f(bal and bal.quote_uncollected),\n'
+    '                "base_bal": float(lp_market.broker.get_token_balance(self.gp.base_token)),\n'
+    '                "quote_bal": float(lp_market.broker.get_token_balance(self.gp.quote_token)),\n'
+    '                "swap_cost": float(self.total_quote_swap_fee + self.total_base_swap_fee * price),\n'
+    '                "slippage": float(self.total_slippage_cost), "follow_n": self.follow_rebuild_count,\n'
+    '                "upper_n": self.upper_rescale_count, "lower_n": self.lower_rescale_count}')
 
 
 def binance_files(dst: Path):
@@ -335,7 +356,7 @@ def run(pool: str, seg: str, variant: str) -> str:
     with open(dst / "run.log", "w") as f:
         rc = subprocess.run([str(PY), script.name], cwd=se, env=env, stdout=f, stderr=subprocess.STDOUT).returncode
     nv = list((se / "result").rglob("netvalue_*.csv"))
-    for f in nv + list((se / "result").rglob("apr_*.csv")):
+    for f in nv + list((se / "result").rglob("apr_*.csv")) + list((se / "result").rglob("fees_*.csv")):
         shutil.copy(f, dst / f.name)
     shutil.rmtree(d.parent)
     if rc != 0 or not nv:
@@ -421,7 +442,105 @@ def export(dst: Path) -> pd.DataFrame:
     return out
 
 
+INIT = {"eth": 100000.0, "btc": 2.0}
+COMPONENTS = ["directional", "timing", "fees", "lvr_il", "costs"]
+
+
+def attrib(pool: str, seg: str, variant: str) -> dict:
+    """
+    P&L attribution of one run from the daily log (00:00 UTC, after that minute's rebuilds), in the quote token, as a
+    share of the starting book. Between two logs the strategy does not trade, so the change in net value splits into:
+      directional  ETH held x price change, at the window's value-weighted average ETH share (how much ETH on average)
+      timing       ETH held x price change, the rest: the ETH share moving with the F engine / share rule
+      fees         change in fees collected + pending
+      lvr_il       the residual: the LP's loss to rebalancing inside its range (impermanent loss / LVR), plus the last
+                   partial day's fee collection
+      costs        minus the change in swap cost (pool fee, extra spec cost, depth slippage) at rebuilds and fee sales
+    The first day uses the first log's holdings (the log starts one day after the build). Sum = total return.
+    """
+    d = OUT / tag_of(pool, seg, variant)
+    log = pd.read_csv(next(d.glob("fees_*.csv")), parse_dates=["date"])
+    m = json.loads((d / "metrics.json").read_text())
+    nvf = next(d.glob("netvalue_*.csv"))
+    first = pd.read_csv(nvf, nrows=1, index_col=0)
+    with open(nvf, "rb") as f:   # last row without reading the minute file
+        f.seek(-400, 2)
+        last = f.read().decode().strip().splitlines()[-1].split(",")
+    p = log["price"].to_numpy()
+    nv = (log.lp_liq_value + log.unc_base * log.price + log.unc_quote + log.base_bal * log.price + log.quote_bal).to_numpy()
+    h = (log.base_bal + log.lp_base + log.unc_base).to_numpy()
+    fee = (log.collected_quote + log.pending_quote).to_numpy()
+    cost = log.swap_cost.to_numpy()
+    nv0, p0, nv_end, p_end = float(first["net_value"].iloc[0]), float(first["price"].iloc[0]), float(last[1]), float(last[2])
+    # rows: start, every log, end
+    P = [p0, *p, p_end]
+    NV = [nv0, *nv, nv_end]
+    H = [h[0], *h, h[-1]]
+    FEE = [0.0, *fee, fee[-1]]
+    COST = [0.0, *cost, cost[-1]]
+    n = len(P) - 1
+    delta = [H[i] * (P[i + 1] - P[i]) for i in range(n)]
+    dfee = [FEE[i + 1] - FEE[i] for i in range(n)]
+    dcost = [COST[i + 1] - COST[i] for i in range(n)]
+    resid = [NV[i + 1] - NV[i] - delta[i] - dfee[i] + dcost[i] for i in range(n)]
+    e_bar = sum(H[i] * P[i] for i in range(n)) / sum(NV[i] for i in range(n))
+    static = [e_bar * NV[i] * (P[i + 1] / P[i] - 1) for i in range(n)]
+    comp = {"directional": sum(static), "timing": sum(delta) - sum(static), "fees": sum(dfee), "lvr_il": sum(resid),
+            "costs": -sum(dcost)}
+    share = {k: v / nv0 for k, v in comp.items()}
+    years = m["years"]
+    lp = log.lp_liq_value.to_numpy()
+    return {**m, **{f"{k}_pct": v * 100 for k, v in share.items()},
+            "check_sum_pct": sum(share.values()) * 100, "total_return_pct": m["ret"] * 100,
+            "nv_log_gap_pct": (nv[0] - nv0) / nv0 * 100,
+            "avg_lp_share_F": float((lp / nv).mean()), "avg_eth_share": float((h * p / nv).mean()),
+            "asset_price_change_pct": (p_end / p0 - 1) * 100,
+            "fees_quote": comp["fees"], "fee_yield_on_lp_pct_yr": comp["fees"] / max(lp.mean(), 1e-12) / years * 100,
+            "swap_cost_quote": sum(dcost), "slippage_quote": float(log.slippage.iloc[-1]),
+            "rebuilds_follow": int(log.follow_n.iloc[-1]), "rebuilds_upper_exit": int(log.upper_n.iloc[-1]),
+            "rebuilds_lower_exit": int(log.lower_n.iloc[-1])}
+
+
+def attrib_table(dst: Path, winners_csv: Path) -> pd.DataFrame:
+    """Attribution for v3 and every counted variant, IS and OOS, with the strategy information and the gap to v3."""
+    won = pd.read_csv(winners_csv)
+    pools = {"0x88e6 WETH/USDC 0.05% (USDC)": "eth", "0x4585 WBTC/WETH 0.05% (BTC)": "btc"}
+    note = {(pools[r.pool], r.variant): r.note for r in won.itertuples()}
+    rows = []
+    for pool in ("eth", "btc"):
+        names = ["v3"] + won[won.pool.map(pools) == pool].variant.tolist()
+        for seg in ("is", "oos"):
+            base = attrib(pool, seg, "v3")
+            for v in names:
+                a = attrib(pool, seg, v)
+                el, to, _ = VARIANTS[v]
+                r = {"pool": {"eth": "0x88e6 WETH/USDC 0.05%", "btc": "0x4585 WBTC/WETH 0.05%"}[pool],
+                     "quote_unit": {"eth": "USDC", "btc": "BTC"}[pool], "segment": seg.upper(),
+                     "window": f"{a['start'][:10]}..{a['end'][:10]}", "years": a["years"], "variant": v,
+                     "element_of_v3": el, "changed_to": to,
+                     "total_return_pct": a["total_return_pct"], "cagr_pct": a["cagr"] * 100, "max_dd_pct": a["mdd"] * 100,
+                     "calmar": a["calmar"], "v3_cagr_pct": base["cagr"] * 100, "cagr_vs_v3_pts": (a["cagr"] - base["cagr"]) * 100,
+                     **{f"{k}_pct": a[f"{k}_pct"] for k in COMPONENTS},
+                     **{f"{k}_vs_v3_pts": a[f"{k}_pct"] - base[f"{k}_pct"] for k in COMPONENTS},
+                     "lp_net_pct": a["fees_pct"] + a["lvr_il_pct"],
+                     "lp_net_vs_v3_pts": a["fees_pct"] + a["lvr_il_pct"] - base["fees_pct"] - base["lvr_il_pct"],
+                     "check_sum_pct": a["check_sum_pct"]}
+                gaps = {k: r[f"{k}_vs_v3_pts"] for k in COMPONENTS}
+                r["main_source_vs_v3"] = "" if v == "v3" else max(gaps, key=gaps.get)
+                r.update({k: a[k] for k in ("avg_lp_share_F", "avg_eth_share", "asset_price_change_pct", "fees_quote",
+                                            "fee_yield_on_lp_pct_yr", "swap_cost_quote", "slippage_quote",
+                                            "rebuilds_follow", "rebuilds_upper_exit", "rebuilds_lower_exit")})
+                r["note"] = note.get((pool, v), "baseline")
+                rows.append(r)
+    out = pd.DataFrame(rows).round(4)
+    out.to_csv(dst, index=False)
+    return out
+
+
 if __name__ == "__main__":
+    if sys.argv[1] == "attrib":
+        print(attrib_table(Path(sys.argv[2]), Path(sys.argv[3])).to_string())
+        sys.exit()
     if sys.argv[1] == "table":
         print(table().to_string())
         sys.exit()
