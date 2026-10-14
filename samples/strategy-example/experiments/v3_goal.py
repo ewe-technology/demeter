@@ -241,6 +241,17 @@ VARIANTS: dict[str, tuple[str, str, list]] = {
     "share40": ("6 real ETH share", "fixed 40% (no EMA100 switch)", [(SHARE, 'SHARE_ABOVE_EMA, SHARE_BELOW_EMA = Decimal("0.4"), Decimal("0.4")', 1)]),
     "width25": ("real LP width", "+-25% instead of +-20%", [('for r in ("0.20",)]', 'for r in ("0.25",)]', 1)]),
     "width175": ("real LP width", "+-17.5% instead of +-20%", [('for r in ("0.20",)]', 'for r in ("0.175",)]', 1)]),
+    # ---- batch 5 (written 2026-10-14 after batch 4's BTC IS and OOS runs; chosen from IS passes; BTC pool) ----
+    "sharema10": ("6 real ETH share switch line", "70 / 50 switched on EMA10 instead of EMA100", [FRAME_EMA_S(10), SHARE_ON_EMA_S]),
+    "sharema15": ("6 real ETH share switch line", "70 / 50 switched on EMA15 instead of EMA100", [FRAME_EMA_S(15), SHARE_ON_EMA_S]),
+    "sharema40": ("6 real ETH share switch line", "70 / 50 switched on EMA40 instead of EMA100", [FRAME_EMA_S(40), SHARE_ON_EMA_S]),
+    "sharema75": ("6 real ETH share switch line", "70 / 50 switched on EMA75 instead of EMA100", [FRAME_EMA_S(75), SHARE_ON_EMA_S]),
+    "share7040": ("6 real ETH share", "70% above EMA100, 40% below (instead of 50%)", [(SHARE, 'SHARE_ABOVE_EMA, SHARE_BELOW_EMA = Decimal("0.7"), Decimal("0.4")', 1)]),
+    "share6040": ("6 real ETH share", "60% above EMA100, 40% below (instead of 70 / 50)", [(SHARE, 'SHARE_ABOVE_EMA, SHARE_BELOW_EMA = Decimal("0.6"), Decimal("0.4")', 1)]),
+    "share35": ("6 real ETH share", "fixed 35% (no EMA100 switch)", [(SHARE, 'SHARE_ABOVE_EMA, SHARE_BELOW_EMA = Decimal("0.35"), Decimal("0.35")', 1)]),
+    "share30": ("6 real ETH share", "fixed 30% (no EMA100 switch)", [(SHARE, 'SHARE_ABOVE_EMA, SHARE_BELOW_EMA = Decimal("0.3"), Decimal("0.3")', 1)]),
+    "divon125": ("10 divergence trigger", "ON at +12.5% (OFF +6.25%) instead of +40% / +20%", [(DIV, "DIVERGENCE_ON, DIVERGENCE_OFF = 0.125, 0.0625", 1)]),
+    "divon30b": ("10 divergence trigger", "ON at +30% (OFF +20%) instead of +40%", [(DIV, "DIVERGENCE_ON, DIVERGENCE_OFF = 0.30, 0.20", 1)]),
 }
 # uniform / gaussian (batch 1) cannot run: equal-price bands need a shape with zero centre weight (ValueError in v3)
 INFEASIBLE = {"uniform", "gaussian"}
