@@ -1,0 +1,3 @@
+﻿check 2022-01-01: hourly +0.0254, minute +0.0186, gap +0.0068
+check 2024-07-01: hourly +0.5136, minute +0.5055, gap +0.0081
+elapsed 1:14.40 maxrss 2362020 KB
