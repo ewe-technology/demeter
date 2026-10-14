@@ -220,6 +220,27 @@ VARIANTS: dict[str, tuple[str, str, list]] = {
     "spansxwide": ("EMA spans", "(40, 100, 160, 220) instead of (90, 100, 110, 120)", [(SPANS, "EMA_SPANS = (40, 100, 160, 220)", 1)]),
     "ig9": ("real LP shape", "4 + 4 bands (inverted gaussian 9) instead of 8 + 8",
             [('    _shapes: List[str] = ["inverted_gaussian_spec_price"]', '    _shapes: List[str] = ["inverted_gaussian_9_price"]', 1)]),
+    # ---- batch 4 (written 2026-10-14 after batch 3's IS runs, before batch 3's OOS runs were read) ----
+    "divon15": ("10 divergence trigger", "ON at +15% (OFF +7.5%) instead of +40% / +20%", [(DIV, "DIVERGENCE_ON, DIVERGENCE_OFF = 0.15, 0.075", 1)]),
+    "divon175": ("10 divergence trigger", "ON at +17.5% (OFF +8.75%) instead of +40% / +20%", [(DIV, "DIVERGENCE_ON, DIVERGENCE_OFF = 0.175, 0.0875", 1)]),
+    "divema50": ("10 divergence reference", "distance from EMA50 instead of EMA100",
+                 [('    frame["d"] = frame["close"] / frame["ema"] - 1',
+                   '    frame["d"] = frame["close"] / close.ewm(span=50, adjust=False).mean() - 1', 1)]),
+    "divdown": ("downside divergence flag", "added: F' = 0 while close <= EMA100 x 0.75, released above EMA100 x 0.90",
+                [(FP, FP + '\n    frame["Fp"] = frame["Fp"].where(pd.Series(divergence_flags(-frame["d"], 0.25, 0.10), index=frame.index) == 0, 0.0)', 1),
+                 ("def divergence_flags(d: pd.Series) -> List[int]:",
+                  "def divergence_flags(d: pd.Series, on_at: float | None = None, off_at: float | None = None) -> List[int]:", 1),
+                 ("        on = x >= (DIVERGENCE_OFF if on else DIVERGENCE_ON)",
+                  "        on = x >= ((DIVERGENCE_OFF if off_at is None else off_at) if on else (DIVERGENCE_ON if on_at is None else on_at))", 1)]),
+    "sharema30": ("6 real ETH share switch line", "70 / 50 switched on EMA30 instead of EMA100", [FRAME_EMA_S(30), SHARE_ON_EMA_S]),
+    "sharema20": ("6 real ETH share switch line", "70 / 50 switched on EMA20 instead of EMA100", [FRAME_EMA_S(20), SHARE_ON_EMA_S]),
+    "sharecross": ("6 real ETH share switch rule", "70% while EMA50 > EMA100, else 50% (instead of close vs EMA100)",
+                   [FRAME_EMA_S(50), ('    share = SHARE_ABOVE_EMA if row["close"] > row["ema"] else SHARE_BELOW_EMA',
+                                      '    share = SHARE_ABOVE_EMA if row["ema_s"] > row["ema"] else SHARE_BELOW_EMA', 1)]),
+    "share45": ("6 real ETH share", "fixed 45% (no EMA100 switch)", [(SHARE, 'SHARE_ABOVE_EMA, SHARE_BELOW_EMA = Decimal("0.45"), Decimal("0.45")', 1)]),
+    "share40": ("6 real ETH share", "fixed 40% (no EMA100 switch)", [(SHARE, 'SHARE_ABOVE_EMA, SHARE_BELOW_EMA = Decimal("0.4"), Decimal("0.4")', 1)]),
+    "width25": ("real LP width", "+-25% instead of +-20%", [('for r in ("0.20",)]', 'for r in ("0.25",)]', 1)]),
+    "width175": ("real LP width", "+-17.5% instead of +-20%", [('for r in ("0.20",)]', 'for r in ("0.175",)]', 1)]),
 }
 # uniform / gaussian (batch 1) cannot run: equal-price bands need a shape with zero centre weight (ValueError in v3)
 INFEASIBLE = {"uniform", "gaussian"}
