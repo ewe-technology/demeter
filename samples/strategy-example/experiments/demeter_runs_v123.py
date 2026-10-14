@@ -3,11 +3,13 @@ Demeter runs of Maker's defense v1 / v2 / v3 scripts (branch maker-defense 5cec7
 VALIDATION-2026-10-13-defense-v1-v3-demeter.md: decision hours, a second pool and parameter neighbours.
 
 Each run gets its own copy of the maker-defense samples/strategy-example folder with text replacements only (each one
-asserted), and runs with this branch's `demeter` on PYTHONPATH.
+asserted), and runs on the main checkout's Rust engine (.venv-rs, no PYTHONPATH; same results as the python engine,
+experiments/RUST-ENGINE-2026-10-14.md). ENGINE=python runs the python engine instead (.venv-lab + PYTHONPATH), only to
+compare engines.
 
     python demeter_runs_v123.py <work_dir> [workers] [tag,tag,...]
 
-Results are copied to the main checkout's result/validate_v123/demeter/<tag>/.
+Results are copied to the main checkout's result/validate_v123/demeter/<tag>/ (`OUT` env overrides the folder).
 """
 from __future__ import annotations
 
@@ -25,8 +27,10 @@ import pandas as pd
 
 REPO = Path(__file__).resolve().parents[3]
 MAIN = Path("/Users/dinohuang/Desktop/demeter-momentum")
-OUT = MAIN / "samples/strategy-example/result/validate_v123/demeter"
-PY = MAIN / ".venv-lab/bin/python"
+OUT = Path(os.environ.get("OUT", MAIN / "samples/strategy-example/result/validate_v123/demeter"))
+PYTHON_ENGINE = os.environ.get("ENGINE") == "python"
+# main checkout's venvs: they survive worktree removal; .venv-rs imports the main checkout's rust/python/demeter
+PY = MAIN / (".venv-lab/bin/python" if PYTHON_ENGINE else ".venv-rs/bin/python")
 REF = "5cec767"
 SCRIPTS = {"v1": "gamma_maker_defense_ethusdc_v1.py", "v2": "gamma_maker_defense_ethusdc_v2.py",
            "v3": "gamma_maker_defense_ethusdc_v3.py"}
@@ -125,7 +129,9 @@ def prepare(work: Path, tag: str, spec: dict) -> Path:
 def run(work: Path, tag: str, spec: dict) -> str:
     script = prepare(work, tag, spec)
     log = work / f"{tag}.log"
-    env = dict(os.environ, PYTHONPATH=str(MAIN))  # main checkout: same demeter as this branch, survives worktree removal
+    env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "ENGINE", "OUT")}
+    if PYTHON_ENGINE:
+        env["PYTHONPATH"] = str(MAIN)  # the python demeter/ of the main checkout
     with open(log, "w") as f:
         rc = subprocess.run([str(PY), script.name], cwd=script.parent, env=env, stdout=f, stderr=subprocess.STDOUT).returncode
     res = script.parent / "result"
@@ -138,7 +144,21 @@ def run(work: Path, tag: str, spec: dict) -> str:
     return f"{tag} rc={rc}"
 
 
+def check_engine():
+    """The interpreter must import the engine this run claims (Rust unless ENGINE=python)."""
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    if PYTHON_ENGINE:
+        env["PYTHONPATH"] = str(MAIN)
+    probe = "import demeter; print(hasattr(demeter, '_rs'), demeter.__file__)"
+    out = subprocess.run([str(PY), "-c", probe], env=env, cwd="/", capture_output=True, text=True).stdout.strip()
+    if out.startswith("True") == PYTHON_ENGINE:
+        sys.exit(f"demeter_runs_v123: {PY} imports {out or 'nothing'}; expected the "
+                 f"{'python' if PYTHON_ENGINE else 'Rust'} engine (build .venv-rs: CLAUDE.md Environment)")
+    print(f"engine: {'python' if PYTHON_ENGINE else 'rust'} ({out.split(' ', 1)[-1]})", flush=True)
+
+
 if __name__ == "__main__":
+    check_engine()
     work = Path(sys.argv[1])
     workers = int(sys.argv[2]) if len(sys.argv) > 2 else 4
     todo = runs()
