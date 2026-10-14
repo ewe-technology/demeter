@@ -1,0 +1,22 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "zelos-demeter-rs"
+version = "2.0.0a1"
+description = "demeter DeFi backtesting (Uniswap v3) with a Rust engine; drop-in for the python `demeter` package"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.2,<3",
+    "numpy>=1.26.4",
+    "pyarrow>=14",
+    "orjson>=3.9.15",
+    "python-dateutil",
+]
+
+[tool.maturin]
+manifest-path = "demeter-py/Cargo.toml"
+python-source = "python"
+module-name = "demeter._rs"
+features = []
