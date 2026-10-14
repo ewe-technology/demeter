@@ -2,7 +2,7 @@
 
 - Jira: QUAN-1149
 - Status: pass (goal reached: 11 counted on `0x88e6`, 12 on `0x4585`; few independent findings, see Result)
-- Pre-registration commit: c879cce (batches 2-5: aac6a10, 37409f5, 58c7401, fe19994) · Result commit: see registry
+- Pre-registration commit: c879cce (batches 2-5: aac6a10, 37409f5, 58c7401, fe19994) · Result commit: 2110f67
 
 /goal 2026-10-14 (Dino): "在 mainnet 0x88e6 WETH/USDC 0.05% and 0x4585 WBTC/WETH，資料 20241231 以前都是 is，之後都是 oos，
 你只能看著 is 去操作，如果 is 績效比較好，就可以看 oos 是否也比較好。每次調整只 v3 的其中一個元素就好，你可以刪除新增或替換其中
