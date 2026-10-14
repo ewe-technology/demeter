@@ -385,9 +385,48 @@ def table():
     return df
 
 
+def export(dst: Path) -> pd.DataFrame:
+    """One row per variant that beats v3 on a pool's IS and OOS: the element changed, what it became, IS / OOS vs v3."""
+    df = table()
+    key = ["pool", "variant"]
+    cols = ["cagr", "mdd", "calmar", "v3_cagr", "v3_mdd", "v3_calmar", "beats_v3"]
+    m = df[df.seg == "is"][key + ["element", "change", "start"] + cols].merge(
+        df[df.seg == "oos"][key + cols], on=key, suffixes=("_is", "_oos"))
+    m = m[m.beats_v3_is & m.beats_v3_oos].copy()
+    m["pool"] = m["pool"].map({"eth": "0x88e6 WETH/USDC 0.05% (USDC)", "btc": "0x4585 WBTC/WETH 0.05% (BTC)"})
+    for s in ("is", "oos"):
+        m[f"{s}_cagr_gain_pts"] = (m[f"cagr_{s}"] - m[f"v3_cagr_{s}"]) * 100
+    oos_sig = m[["pool", "cagr_oos", "mdd_oos"]].round(6).astype(str).agg("|".join, axis=1)
+    notes = []
+    for i, r in m.iterrows():
+        n = []
+        if min(r.is_cagr_gain_pts, r.oos_cagr_gain_pts) < 0.1:
+            n.append("margin < 0.1 pt CAGR: within noise")
+        twins = m[(oos_sig == oos_sig[i]) & (m.index != i)].variant.tolist()
+        if twins:
+            n.append("same OOS result as " + " / ".join(twins))
+        notes.append("; ".join(n))
+    m["note"] = notes
+    out = pd.DataFrame({
+        "pool": m.pool, "variant": m.variant, "element_of_v3": m.element, "changed_to": m.change,
+        "is_window": m.start.str[:10] + "..2024-12-31", "oos_window": "2025-01-01..2026-09-17",
+        "is_cagr_pct": m.cagr_is * 100, "is_v3_cagr_pct": m.v3_cagr_is * 100, "is_cagr_gain_pts": m.is_cagr_gain_pts,
+        "is_maxdd_pct": m.mdd_is * 100, "is_v3_maxdd_pct": m.v3_mdd_is * 100,
+        "is_calmar": m.calmar_is, "is_v3_calmar": m.v3_calmar_is,
+        "oos_cagr_pct": m.cagr_oos * 100, "oos_v3_cagr_pct": m.v3_cagr_oos * 100, "oos_cagr_gain_pts": m.oos_cagr_gain_pts,
+        "oos_maxdd_pct": m.mdd_oos * 100, "oos_v3_maxdd_pct": m.v3_mdd_oos * 100,
+        "oos_calmar": m.calmar_oos, "oos_v3_calmar": m.v3_calmar_oos, "note": m.note,
+    }).sort_values(["pool", "oos_cagr_gain_pts"], ascending=[False, False]).round(4)
+    out.to_csv(dst, index=False)
+    return out
+
+
 if __name__ == "__main__":
     if sys.argv[1] == "table":
         print(table().to_string())
+        sys.exit()
+    if sys.argv[1] == "export":
+        print(export(Path(sys.argv[2])).to_string())
         sys.exit()
     seg, pool, names = sys.argv[1], sys.argv[2], sys.argv[3]
     workers = int(sys.argv[4]) if len(sys.argv) > 4 else 4

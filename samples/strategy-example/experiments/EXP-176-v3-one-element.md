@@ -1,8 +1,8 @@
 # EXP-176: one-element variants of Maker's defense v3, in-sample to 2024 / out-of-sample 2025-26
 
 - Jira: QUAN-1149
-- Status: pre-registered
-- Pre-registration commit: c879cce · Result commit: ______
+- Status: pass (goal reached: 11 counted on `0x88e6`, 12 on `0x4585`; few independent findings, see Result)
+- Pre-registration commit: c879cce (batches 2-5: aac6a10, 37409f5, 58c7401, fe19994) · Result commit: see registry
 
 /goal 2026-10-14 (Dino): "在 mainnet 0x88e6 WETH/USDC 0.05% and 0x4585 WBTC/WETH，資料 20241231 以前都是 is，之後都是 oos，
 你只能看著 is 去操作，如果 is 績效比較好，就可以看 oos 是否也比較好。每次調整只 v3 的其中一個元素就好，你可以刪除新增或替換其中
@@ -61,6 +61,56 @@ Batch 1 (28 variants, written 2026-10-14 before any variant run):
 
 ## Result
 
+Run 2026-10-14, `experiments/v3_goal.py` (Rust engine; raw runs in the main checkout's `result/v3_goal/`, every run in
+`result/v3_goal/runs.csv`; counted variants in `~/Desktop/v3_one_element_results.csv`).
+
+v3 itself:
+
+| pool | IS total / CAGR / max DD / Calmar | OOS total / CAGR / max DD / Calmar |
+|---|---|---|
+| ETH `0x88e6` (USDC) | +88.6% / 18.94% / −21.9% / 0.866 | +32.9% / 18.08% / −26.3% / 0.688 |
+| WBTC/WETH `0x4585` (BTC) | −0.7% / −0.21% / −25.8% / −0.008 | +15.4% / 8.72% / −14.9% / 0.585 |
+
+Batches: 1 (28 variants, both pools; `uniform` / `gaussian` cannot run, see Deviations), 2 (25, both), 3 (22, both),
+4 (11, BTC only: ETH had 11 counted after batch 3), 5 (10, BTC only).
+
+| pool | IS runs | beat v3 IS | OOS runs | beat v3 OOS too (counted) |
+|---|---|---|---|---|
+| ETH `0x88e6` | 73 | 26 | 26 | **11** |
+| WBTC/WETH `0x4585` | 94 | 27 | 27 | **12** |
+
+Counted, OOS CAGR vs v3 (IS gain in brackets):
+
+- ETH: `confirm5` 23.05% (+0.26), `f2low` 21.86% (+0.78), `share75` 21.33% (+3.40), `share70` 20.15% (+2.69),
+  `follow0625` 19.98% (+0.16), `ig9` 19.15% (+1.64), `share7060` 19.12% (+1.35), `share65` 18.95% (+1.96),
+  `spanswide` 18.81% (+0.88; OOS max DD −17.2% vs −26.3%), `fstage` 18.09% (+0.16), `vstep3` 18.08% (+0.00).
+- BTC: `sharema15` / `sharema20` 10.55%, `sharema10` 10.54% (all +0.58 IS; OOS max DD −11.5% vs −14.9%), `share75`
+  9.35% (+0.13), `share70` = `sharema30` = `sharema40` = `sharema50` = `sharema75` 8.79% (identical OOS run),
+  `share7060` 8.75%, `ig9` 8.75%, `vstep3` 8.72% (+0.00).
+
+IS pass, OOS fail: ETH `divema200`, `divoff10`, `divon20`, `fmin`, `followplain`, `invexp`, `share55`, `share60`,
+`sharema200`, `sharema50`, `stop70`, `stop75`, `upper130`, `upper140`, `uptarget`; BTC `divon125`, `divon15`,
+`divon175`, `divon20`, `fmin`, `share30`..`share65` fixed levels below 70%, `share6040`, `share6050`. The largest IS
+winners (`fmin` +5.8 pts ETH IS, `divon20` +2.0 pts BTC IS) lost the most out of sample.
+
+Verdict: **pass as the goal is worded** (≥ 10 one-element variants beat v3 on IS and OOS on each pool), but read it as
+about five independent findings, not 23:
+
+1. **Real ETH share ~65-75% instead of the 70 / 50 EMA100 switch** (ETH `share65/70/75/7060`; BTC `share70/75/7060` and
+   the `sharema30..75` switches, which OOS behave exactly like a fixed 70%). The clearest single finding; ETH +1..3 pts
+   CAGR both halves, max DD up to 0.7 pt deeper OOS.
+2. **BTC: switch the share on a short EMA (10-20 days)** — the only BTC change well beyond noise: OOS 10.55% vs 8.72%,
+   max DD −11.5% vs −14.9%; IS +0.58 pt.
+3. **ETH: slower or more conservative refill / F** (`confirm5`, `f2low`, `follow0625`), +2..5 pts OOS but only
+   +0.2..0.8 pt IS.
+4. **ETH: wider EMA spans (50/100/150/200)** — OOS max DD −17.2% vs −26.3%.
+5. **4 + 4 bands (`ig9`)** — +1.6 pt ETH IS, +1.1 pt ETH OOS; BTC within noise.
+
+Noise-level counts (< 0.1 pt CAGR on a half): ETH `fstage`, `vstep3`; BTC `share70` and its four twins, `share7060`,
+`ig9`, `vstep3`. With 73 / 94 tries per pool and ~45% of IS passes failing OOS, single counted variants are expected by
+chance; only findings 1 and 2 hold on both halves by more than 0.5 pt. Next test: the forward window after 2026-09-17,
+and finding 1 / 2 on another ETH and another BTC/ETH pool.
+
 ## Deviations
 
 - Binance closes: Maker's ETHUSDT file ends 2026-08-31 and ETHBTC 2025-12-31; both are extended to 2026-09-17 from
@@ -72,3 +122,13 @@ Batch 1 (28 variants, written 2026-10-14 before any variant run):
 - Each version changes one element, as the goal asks; several variants set a value (threshold, width, ladder), which is
   parameter tuning inside v3's family. With ~30+ tries per pool, single passes are expected by chance (see the
   multiple-testing note under *Result*).
+- `uniform` / `gaussian` (batch 1) cannot run: v3's equal-price bands need a shape with zero centre weight (ValueError);
+  replaced in batch 2 by `invtri` / `invexp`.
+- `nostop` and `noupper` give the same F (difference 1e-16): at stage 4 the virtual upper rebuild does not change F, so
+  its only effect is moving the centre up for a later lower stop; deleting either rule removes the same stops.
+- `uptarget` (batch 1) beat v3 on ETH IS by less than 0.001 pt and was missed in the first read; it got its OOS run with
+  batch 2 (fail).
+- Batch 5 was written after batch 4's OOS results were read (batches 2-4 were committed before the previous batch's OOS
+  was read). Its families (share switch line, share levels, divergence trigger) were chosen from IS passes.
+- Batches 4 and 5 ran on `0x4585` only, as ETH had reached 10 counted.
+- The follow-rebuild count is missing for some runs (the child process's final print is sometimes lost); not used.
