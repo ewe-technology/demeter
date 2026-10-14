@@ -195,14 +195,14 @@ def run_all():
     # H40 and H42: UTC 00, continuous and 16 windows, instant and one hour late
     for delay in (0, 1):
         tag = "" if delay == 0 else "_delay"
-        for s in [START] + h38.WINDOW_STARTS:
-            e = END if s == START else h38.window_end(s)
-            kind = "cont" if s == START else f"win_{s}"
+        # the first window starts on START too, so the continuous book is named, not told apart by its start
+        books = [("cont", START, END)] + [(f"win_{s}", s, h38.window_end(s)) for s in h38.WINDOW_STARTS]
+        for kind, s, e in books:
             for v, rules in (("fp_spot", FPRules(fp0)), ("btc_gate", GateRules(btc0)), ("eth_gate", GateRules(eth0))):
                 if delay and v == "eth_gate":
                     continue
                 rows.append({"version": v, "set": f"{kind}{tag}",
-                             **book(f"{v}_{kind}{tag}", rules, s, e, delay=delay, save=(s == START))})
+                             **book(f"{v}_{kind}{tag}", rules, s, e, delay=delay, save=(kind == "cont"))})
     print("UTC 00 done", flush=True)
     # H41: 24 judgement hours, continuous, F' from the pool price at every hour (00 included)
     for h in range(24):
