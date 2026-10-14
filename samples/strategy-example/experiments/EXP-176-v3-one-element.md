@@ -1,8 +1,8 @@
 # EXP-176: one-element variants of Maker's defense v3, in-sample to 2024 / out-of-sample 2025-26
 
-- Jira: QUAN-___
+- Jira: QUAN-1149
 - Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Pre-registration commit: c879cce · Result commit: ______
 
 /goal 2026-10-14 (Dino): "在 mainnet 0x88e6 WETH/USDC 0.05% and 0x4585 WBTC/WETH，資料 20241231 以前都是 is，之後都是 oos，
 你只能看著 is 去操作，如果 is 績效比較好，就可以看 oos 是否也比較好。每次調整只 v3 的其中一個元素就好，你可以刪除新增或替換其中

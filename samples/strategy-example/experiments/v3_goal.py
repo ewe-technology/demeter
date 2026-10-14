@@ -62,6 +62,14 @@ UP_EXIT = ("                    self.build_fraction = ZERO if diverged_for(self.
            "                        else self.lp_fraction(lp_market, current_price)")
 SHARE = 'SHARE_ABOVE_EMA, SHARE_BELOW_EMA = Decimal("0.7"), Decimal("0.5")'
 FP = 'frame["Fp"] = frame["F"].where(frame["diverged"] == 0, 0.0)'
+SPANS = "EMA_SPANS = (90, 100, 110, 120)"
+# EMA100 must stay in `emas` (share and divergence rules) when the account spans drop it
+EMAS100 = ("    emas = {n: close.ewm(span=n, adjust=False).mean() for n in EMA_SPANS}",
+           "    emas = {n: close.ewm(span=n, adjust=False).mean() for n in set(EMA_SPANS) | {EMA_SPAN}}", 1)
+STOPS = "LOWER_STOP, UPPER_REBUILD = 0.80, 1.20"
+DIV = "DIVERGENCE_ON, DIVERGENCE_OFF = 0.40, 0.20"
+LADDER = "REFILL_STAGES = ((1, 1.075), (2, 1.125), (3, 1.175), (4, 1.225))"
+WEAK = "VIRTUAL_SHARE_WEAK, WEAK_EMA_FACTOR = 0.25, 0.95"
 
 VARIANTS: dict[str, tuple[str, str, list]] = {
     "v3": ("-", "v3 unchanged", []),
@@ -138,7 +146,45 @@ VARIANTS: dict[str, tuple[str, str, list]] = {
              [(FMEAN, "        fractions.append(min(a.deployed for a in accounts))", 1)]),
     "fmax": ("F aggregation", "maximum of the four accounts instead of the mean",
              [(FMEAN, "        fractions.append(max(a.deployed for a in accounts))", 1)]),
+    # ---- batch 2 (written 2026-10-14 after batch 1's IS runs, before any OOS run was read) ----
+    "fmedian": ("F aggregation", "median of the four accounts instead of the mean",
+                [(FMEAN, "        fractions.append(sum(sorted(a.deployed for a in accounts)[1:3]) / 2)", 1)]),
+    "f2low": ("F aggregation", "second-lowest of the four accounts instead of the mean",
+              [(FMEAN, "        fractions.append(sorted(a.deployed for a in accounts)[1])", 1)]),
+    "spansshort": ("EMA spans", "(60, 70, 80, 90) instead of (90, 100, 110, 120)", [(SPANS, "EMA_SPANS = (60, 70, 80, 90)", 1), EMAS100]),
+    "spanslong": ("EMA spans", "(120, 140, 160, 180) instead of (90, 100, 110, 120)", [(SPANS, "EMA_SPANS = (120, 140, 160, 180)", 1), EMAS100]),
+    "spanswide": ("EMA spans", "(50, 100, 150, 200) instead of (90, 100, 110, 120)", [(SPANS, "EMA_SPANS = (50, 100, 150, 200)", 1), EMAS100]),
+    "accounts8": ("number of accounts", "eight accounts on EMA 90, 95, ..., 125 instead of four", [(SPANS, "EMA_SPANS = (90, 95, 100, 105, 110, 115, 120, 125)", 1)]),
+    "stop85": ("3 lower stop level", "centre x 0.85 instead of x 0.80", [(STOPS, "LOWER_STOP, UPPER_REBUILD = 0.85, 1.20", 1)]),
+    "stop75": ("3 lower stop level", "centre x 0.75 instead of x 0.80", [(STOPS, "LOWER_STOP, UPPER_REBUILD = 0.75, 1.20", 1)]),
+    "upper130": ("4 virtual upper rebuild level", "centre x 1.30 instead of x 1.20", [(STOPS, "LOWER_STOP, UPPER_REBUILD = 0.80, 1.30", 1)]),
+    "divon30": ("10 divergence trigger", "ON at +30% (OFF +15%) instead of +40% / +20%", [(DIV, "DIVERGENCE_ON, DIVERGENCE_OFF = 0.30, 0.15", 1)]),
+    "divon50": ("10 divergence trigger", "ON at +50% instead of +40% (OFF +20%)", [(DIV, "DIVERGENCE_ON, DIVERGENCE_OFF = 0.50, 0.20", 1)]),
+    "divoff10": ("10 divergence release", "OFF below +10% instead of +20%", [(DIV, "DIVERGENCE_ON, DIVERGENCE_OFF = 0.40, 0.10", 1)]),
+    "divoff30": ("10 divergence release", "OFF below +30% instead of +20%", [(DIV, "DIVERGENCE_ON, DIVERGENCE_OFF = 0.40, 0.30", 1)]),
+    "divema200": ("10 divergence reference", "distance from EMA200 instead of EMA100",
+                  [('    frame["d"] = frame["close"] / frame["ema"] - 1',
+                    '    frame["d"] = frame["close"] / close.ewm(span=200, adjust=False).mean() - 1', 1)]),
+    "share60": ("6 real ETH share", "fixed 60% (no EMA100 switch)", [(SHARE, 'SHARE_ABOVE_EMA, SHARE_BELOW_EMA = Decimal("0.6"), Decimal("0.6")', 1)]),
+    "share7060": ("6 real ETH share", "70% above EMA100, 60% below (instead of 50%)", [(SHARE, 'SHARE_ABOVE_EMA, SHARE_BELOW_EMA = Decimal("0.7"), Decimal("0.6")', 1)]),
+    "follow0625": ("7 follow threshold", "6.25% instead of 12.5%", [('FOLLOW_THRESHOLD = Decimal("0.125")', 'FOLLOW_THRESHOLD = Decimal("0.0625")', 1)]),
+    "confirm5": ("5 refill stage-1 confirmation", "5 closes instead of 3", [("REFILL_CONFIRM_DAYS = 3 ", "REFILL_CONFIRM_DAYS = 5 ", 1)]),
+    "ladder125": ("5 refill ladder", "+6.25 / 10.42 / 14.58 / 18.75 % (v1 x 1.25) instead of +7.5 / 12.5 / 17.5 / 22.5 %",
+                  [(LADDER, "REFILL_STAGES = ((1, 1.0625), (2, 1.1042), (3, 1.1458), (4, 1.1875))", 1)]),
+    "ladder2": ("5 refill ladder", "+10 / 16.67 / 23.33 / 30 % (v1 x 2) instead of +7.5 / 12.5 / 17.5 / 22.5 %",
+                [(LADDER, "REFILL_STAGES = ((1, 1.10), (2, 1.1667), (3, 1.2333), (4, 1.30))", 1)]),
+    "exitbuf": ("1 EMA exit", "close below EMA x 0.98 (2% buffer) instead of below the EMA",
+                [(A, "            if self.armed and close < ema * 0.98:  # 1 EMA exit with a 2% buffer", 1)]),
+    "weak0": ("9 virtual weak share", "0% ETH instead of 25% below EMA100 x 0.95", [(WEAK, "VIRTUAL_SHARE_WEAK, WEAK_EMA_FACTOR = 0.0, 0.95", 1)]),
+    "vshare50": ("virtual ETH share", "virtual ladder 50% ETH above the account's EMA too (no 70% level)",
+                 [("(0.7 if close > ema else 0.5)", "(0.5 if close > ema else 0.5)", 1)]),
+    "invtri": ("real LP shape", "inverted triangle weights instead of the inverted gaussian valley",
+               [('    _shapes: List[str] = ["inverted_gaussian_spec_price"]', '    _shapes: List[str] = ["inverted_triangle_price"]', 1)]),
+    "invexp": ("real LP shape", "inverted exponential weights instead of the inverted gaussian valley",
+               [('    _shapes: List[str] = ["inverted_gaussian_spec_price"]', '    _shapes: List[str] = ["inverted_exponential_price"]', 1)]),
 }
+# uniform / gaussian (batch 1) cannot run: equal-price bands need a shape with zero centre weight (ValueError in v3)
+INFEASIBLE = {"uniform", "gaussian"}
 
 
 def sub(text: str, pattern: str, repl: str, n_expected: int) -> str:
