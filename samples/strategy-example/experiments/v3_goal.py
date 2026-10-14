@@ -70,6 +70,17 @@ STOPS = "LOWER_STOP, UPPER_REBUILD = 0.80, 1.20"
 DIV = "DIVERGENCE_ON, DIVERGENCE_OFF = 0.40, 0.20"
 LADDER = "REFILL_STAGES = ((1, 1.075), (2, 1.125), (3, 1.175), (4, 1.225))"
 WEAK = "VIRTUAL_SHARE_WEAK, WEAK_EMA_FACTOR = 0.25, 0.95"
+FOLLOW_DOC = '        """Spec sheet 2.3 rule 3: rebuild to F x equity when the book drifted >= FOLLOW_THRESHOLD from F."""'
+FRAME = '    frame = pd.DataFrame({"close": close, "ema": emas[EMA_SPAN], "F": fractions})'
+
+
+def FRAME_EMA_S(span: int) -> tuple:
+    """Adds column ema_s (EMA `span` of the closes) for the real share switch."""
+    return (FRAME, FRAME + f'\n    frame["ema_s"] = close.ewm(span={span}, adjust=False).mean()', 1)
+
+
+SHARE_ON_EMA_S = ('    share = SHARE_ABOVE_EMA if row["close"] > row["ema"] else SHARE_BELOW_EMA',
+                  '    share = SHARE_ABOVE_EMA if row["close"] > row["ema_s"] else SHARE_BELOW_EMA', 1)
 
 VARIANTS: dict[str, tuple[str, str, list]] = {
     "v3": ("-", "v3 unchanged", []),
@@ -182,6 +193,33 @@ VARIANTS: dict[str, tuple[str, str, list]] = {
                [('    _shapes: List[str] = ["inverted_gaussian_spec_price"]', '    _shapes: List[str] = ["inverted_triangle_price"]', 1)]),
     "invexp": ("real LP shape", "inverted exponential weights instead of the inverted gaussian valley",
                [('    _shapes: List[str] = ["inverted_gaussian_spec_price"]', '    _shapes: List[str] = ["inverted_exponential_price"]', 1)]),
+    # ---- batch 3 (written 2026-10-14 after batch 2's IS runs, before batch 2's OOS runs were read) ----
+    "share55": ("6 real ETH share", "fixed 55% (no EMA100 switch)", [(SHARE, 'SHARE_ABOVE_EMA, SHARE_BELOW_EMA = Decimal("0.55"), Decimal("0.55")', 1)]),
+    "share65": ("6 real ETH share", "fixed 65% (no EMA100 switch)", [(SHARE, 'SHARE_ABOVE_EMA, SHARE_BELOW_EMA = Decimal("0.65"), Decimal("0.65")', 1)]),
+    "share75": ("6 real ETH share", "fixed 75% (no EMA100 switch)", [(SHARE, 'SHARE_ABOVE_EMA, SHARE_BELOW_EMA = Decimal("0.75"), Decimal("0.75")', 1)]),
+    "share80": ("6 real ETH share", "fixed 80% (no EMA100 switch)", [(SHARE, 'SHARE_ABOVE_EMA, SHARE_BELOW_EMA = Decimal("0.8"), Decimal("0.8")', 1)]),
+    "share8060": ("6 real ETH share", "80% above EMA100, 60% below (instead of 70 / 50)", [(SHARE, 'SHARE_ABOVE_EMA, SHARE_BELOW_EMA = Decimal("0.8"), Decimal("0.6")', 1)]),
+    "share6050": ("6 real ETH share", "60% above EMA100, 50% below (instead of 70 / 50)", [(SHARE, 'SHARE_ABOVE_EMA, SHARE_BELOW_EMA = Decimal("0.6"), Decimal("0.5")', 1)]),
+    "sharema50": ("6 real ETH share switch line", "70 / 50 switched on EMA50 instead of EMA100", [FRAME_EMA_S(50), SHARE_ON_EMA_S]),
+    "sharema200": ("6 real ETH share switch line", "70 / 50 switched on EMA200 instead of EMA100", [FRAME_EMA_S(200), SHARE_ON_EMA_S]),
+    "divon20": ("10 divergence trigger", "ON at +20% (OFF +10%) instead of +40% / +20%", [(DIV, "DIVERGENCE_ON, DIVERGENCE_OFF = 0.20, 0.10", 1)]),
+    "divon25": ("10 divergence trigger", "ON at +25% (OFF +12.5%) instead of +40% / +20%", [(DIV, "DIVERGENCE_ON, DIVERGENCE_OFF = 0.25, 0.125", 1)]),
+    "compound": ("fee handling", "compound mode: fees added to the book on the 1st of each month (instead of paid out)",
+                 [("\n    _compound = False\n", "\n    _compound = True\n", 1)]),
+    "followweekly": ("7 follow cadence", "the follow check runs on Mondays only instead of daily",
+                     [(FOLLOW_DOC, FOLLOW_DOC + "\n        if row_data.timestamp.weekday() != 0:  # v3_goal: weekly follow\n            return", 1)]),
+    "fsmooth3": ("F' smoothing", "F' = 3-day mean of F' (added)",
+                 [(FP, FP + '\n    frame["Fp"] = frame["Fp"].rolling(3, min_periods=1).mean()', 1)]),
+    "vstep3": ("virtual ladder width", "virtual bands 3% wide (+-24%) instead of 2.5% (+-20%)", [("BAND_STEP = 0.025 ", "BAND_STEP = 0.03 ", 1)]),
+    "vstep2": ("virtual ladder width", "virtual bands 2% wide (+-16%) instead of 2.5% (+-20%)", [("BAND_STEP = 0.025 ", "BAND_STEP = 0.02 ", 1)]),
+    "weak90": ("9 virtual weak share line", "25% level below EMA100 x 0.90 instead of x 0.95", [(WEAK, "VIRTUAL_SHARE_WEAK, WEAK_EMA_FACTOR = 0.25, 0.90", 1)]),
+    "stop70": ("3 lower stop level", "centre x 0.70 instead of x 0.80", [(STOPS, "LOWER_STOP, UPPER_REBUILD = 0.70, 1.20", 1)]),
+    "upper140": ("4 virtual upper rebuild level", "centre x 1.40 instead of x 1.20", [(STOPS, "LOWER_STOP, UPPER_REBUILD = 0.80, 1.40", 1)]),
+    "confirm7": ("5 refill stage-1 confirmation", "7 closes instead of 3", [("REFILL_CONFIRM_DAYS = 3 ", "REFILL_CONFIRM_DAYS = 7 ", 1)]),
+    "follow03": ("7 follow threshold", "3% instead of 12.5%", [('FOLLOW_THRESHOLD = Decimal("0.125")', 'FOLLOW_THRESHOLD = Decimal("0.03")', 1)]),
+    "spansxwide": ("EMA spans", "(40, 100, 160, 220) instead of (90, 100, 110, 120)", [(SPANS, "EMA_SPANS = (40, 100, 160, 220)", 1)]),
+    "ig9": ("real LP shape", "4 + 4 bands (inverted gaussian 9) instead of 8 + 8",
+            [('    _shapes: List[str] = ["inverted_gaussian_spec_price"]', '    _shapes: List[str] = ["inverted_gaussian_9_price"]', 1)]),
 }
 # uniform / gaussian (batch 1) cannot run: equal-price bands need a shape with zero centre weight (ValueError in v3)
 INFEASIBLE = {"uniform", "gaussian"}
