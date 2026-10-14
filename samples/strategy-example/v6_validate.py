@@ -23,6 +23,7 @@ from decimal import Decimal
 import numpy as np
 import pandas as pd
 
+import engine_guard
 import gamma_ig_gap_bands_defense_v6 as V
 from demeter import TokenInfo, MarketInfo, ChainType, Actuator, AccountStatus
 from demeter.uniswap import UniV3Pool
@@ -752,6 +753,7 @@ def daily_base_flow(m: pd.DataFrame, pool: str) -> pd.Series:
 
 def main():
     global POOL, DATA, PRICE, GATE_MINUTES, GAS, ETH_USD
+    engine_guard.require_rust("v6_validate.py")
     POOL = sys.argv[1]
     start, end, grid = date.fromisoformat(sys.argv[2]), date.fromisoformat(sys.argv[3]), sys.argv[4]
     procs = int(sys.argv[5]) if len(sys.argv) > 5 else 4

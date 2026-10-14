@@ -198,8 +198,8 @@ impl UniData {
             cache.insert(tick, p);
             Ok(p)
         };
-        let scale0 = dec::pow10(d0 as i32);
-        let scale1 = dec::pow10(d1 as i32);
+        let scale0 = dec::int_pow10(d0);
+        let scale1 = dec::int_pow10(d1);
         let mut prev_close: Option<Dec> = None;
         for (i, bar) in self.bars.iter_mut().enumerate() {
             bar.close = price_of(bar.close_tick)?;
@@ -571,36 +571,54 @@ fn decimal_series(name: &str, vals: &[Option<Dec>]) -> Result<Series> {
         max_frac = max_frac.max(-e);
     }
     let scale = max_frac.min(38 - max_int).clamp(0, 38);
+    let mut lossless = true;
     let scaled: Vec<Option<i128>> = vals
         .iter()
         .map(|v| match v {
-            Some(d) if !d.is_nan() && !d.is_infinite() => scaled_i128(d, scale),
+            Some(d) if !d.is_nan() && !d.is_infinite() => {
+                let s = scaled_i128(d, scale);
+                lossless &= matches!(s, Some((_, true)));
+                s.map(|(x, _)| x)
+            }
             _ => None,
         })
         .collect();
+    if !lossless {
+        // values spanning more than ~3 orders of magnitude do not fit one Decimal(38, scale) column
+        // without rounding: send the exact text as binary, which the python bridge turns into
+        // Decimal objects (python keeps every value exact in its own frames)
+        let text: Vec<Option<Vec<u8>>> = vals
+            .iter()
+            .map(|v| match v {
+                Some(d) if !d.is_nan() && !d.is_infinite() => Some(dec::to_py_string(d).into_bytes()),
+                _ => None,
+            })
+            .collect();
+        return Ok(BinaryChunked::from_iter_options(name.into(), text.into_iter()).into_series());
+    }
     let ca = Int128Chunked::from_iter_options(name.into(), scaled.into_iter());
     Ok(ca.into_decimal_unchecked(38, scale as usize).into_series())
 }
 
-/// round(d * 10^scale) as i128, half-even.
-fn scaled_i128(d: &Dec, scale: i32) -> Option<i128> {
+/// round(d * 10^scale) as i128, half-even, and whether that was exact (nothing rounded off).
+fn scaled_i128(d: &Dec, scale: i32) -> Option<(i128, bool)> {
     let (neg, m, e) = dec::to_parts(d);
     let shift = e + scale;
-    let v: i128 = if shift >= 0 {
-        (m as i128).checked_mul(10i128.checked_pow(shift as u32)?)?
+    let (v, exact): (i128, bool) = if shift >= 0 {
+        ((m as i128).checked_mul(10i128.checked_pow(shift as u32)?)?, true)
     } else {
         let div = (-shift) as u32;
         if div > 38 {
-            0
+            (0, m == 0)
         } else {
             let p = 10u128.pow(div);
             let (q, r) = (m / p, m % p);
             let half = p / 2;
             let up = r > half || (r == half && q % 2 == 1);
-            (q + up as u128) as i128
+            ((q + up as u128) as i128, r == 0)
         }
     };
-    Some(if neg { -v } else { v })
+    Some((if neg { -v } else { v }, exact))
 }
 
 // ---------------------------------------------------------------- loading CSV files

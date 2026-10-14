@@ -83,51 +83,94 @@ fn sorted(a: U256, b: U256) -> (U256, U256) {
     }
 }
 
-/// `get_amount0`: `(Decimal(L * 2**96 * (sqrtB - sqrtA)) / sqrtB / sqrtA) / 10**decimals`.
+use dec::int_pow10;
+
+/// `get_amount0`: `(Decimal(L * 2**96 * (sqrtB - sqrtA)) / sqrtB / sqrtA) / 10**decimals`, step by
+/// step like python (the big integers stay exact; each division rounds to 35 digits).
 pub fn get_amount0(sqrt_a: U256, sqrt_b: U256, liquidity: u128, decimals: u32) -> Dec {
     let (a, b) = sorted(sqrt_a, sqrt_b);
-    let prod = U512::from(liquidity) * (U512::from(1u8) << 96) * U512::from(b - a);
-    (dec::from_u512(prod) / dec::from_u256(b) / dec::from_u256(a)) / dec::pow10(decimals as i32)
+    let prod: U512 = U512::from(liquidity) * (U512::from(1u8) << 96) * U512::from(b - a);
+    let q = dec::py_div_int(prod, U512::from(b), 0, false);
+    let (_, m, e) = dec::to_parts(&q);
+    dec::py_div_int(U512::from(m), U512::from(a), e, false) / int_pow10(decimals)
 }
 
-/// `get_amount1`: `Decimal(L * (sqrtB - sqrtA)) / 2**96 / 10**decimals`.
+/// `get_amount1`: `Decimal(L * (sqrtB - sqrtA)) / 2**96 / 10**decimals`, step by step like python.
 pub fn get_amount1(sqrt_a: U256, sqrt_b: U256, liquidity: u128, decimals: u32) -> Dec {
     let (a, b) = sorted(sqrt_a, sqrt_b);
-    let prod = U512::from(liquidity) * U512::from(b - a);
-    dec::from_u512(prod) / dec::q96() / dec::pow10(decimals as i32)
+    let prod: U512 = U512::from(liquidity) * U512::from(b - a);
+    dec::py_div_int(prod, U512::from(1u8) << 96, 0, false) / int_pow10(decimals)
 }
 
-/// A sqrt price x96 together with its decimal value (converted once, reused every iteration).
+/// [`get_amount0`] when python's `liquidity` is a Decimal (see `Position::liquidity_is_decimal`):
+/// `liquidity * 2**96` and `* (sqrtB - sqrtA)` each round to 35 digits.
+pub fn get_amount0_dec_liquidity(sqrt_a: U256, sqrt_b: U256, liquidity: u128, decimals: u32) -> Dec {
+    let (a, b) = sorted(sqrt_a, sqrt_b);
+    let t = dec::py_mul_int(dec::from_u128(liquidity), U512::from(1u8) << 96);
+    let t = dec::py_mul_int(t, U512::from(b - a));
+    let (_, m, e) = dec::to_parts(&t);
+    let q = dec::py_div_int(U512::from(m), U512::from(b), e, false);
+    let (_, m, e) = dec::to_parts(&q);
+    dec::py_div_int(U512::from(m), U512::from(a), e, false) / int_pow10(decimals)
+}
+
+/// [`get_amount1`] when python's `liquidity` is a Decimal: `liquidity * (sqrtB - sqrtA)` rounds.
+pub fn get_amount1_dec_liquidity(sqrt_a: U256, sqrt_b: U256, liquidity: u128, decimals: u32) -> Dec {
+    let (a, b) = sorted(sqrt_a, sqrt_b);
+    let t = dec::py_mul_int(dec::from_u128(liquidity), U512::from(b - a));
+    let (_, m, e) = dec::to_parts(&t);
+    dec::py_div_int(U512::from(m), U512::from(1u8) << 96, e, false) / int_pow10(decimals)
+}
+
+/// python `get_amounts` for a position whose liquidity is an int (`false`) or a Decimal (`true`).
+pub fn get_amounts_typed(
+    sqrt: &SqrtPrice,
+    a: &SqrtPrice,
+    b: &SqrtPrice,
+    liquidity: u128,
+    liquidity_is_decimal: bool,
+    decimal0: u32,
+    decimal1: u32,
+) -> (Dec, Dec) {
+    if !liquidity_is_decimal {
+        return get_amounts_fast(sqrt, a, b, liquidity, decimal0, decimal1);
+    }
+    let (a, b) = if a.x96 > b.x96 { (b, a) } else { (a, b) };
+    if sqrt.x96 <= a.x96 {
+        (get_amount0_dec_liquidity(a.x96, b.x96, liquidity, decimal0), dec::zero())
+    } else if sqrt.x96 < b.x96 {
+        (
+            get_amount0_dec_liquidity(sqrt.x96, b.x96, liquidity, decimal0),
+            get_amount1_dec_liquidity(a.x96, sqrt.x96, liquidity, decimal1),
+        )
+    } else {
+        (dec::zero(), get_amount1_dec_liquidity(a.x96, b.x96, liquidity, decimal1))
+    }
+}
+
+/// A sqrt price x96 (positions and the market cache it per iteration).
 #[derive(Clone, Copy, Debug)]
 pub struct SqrtPrice {
     pub x96: U256,
-    pub dec: Dec,
 }
 
 impl SqrtPrice {
     pub fn new(x96: U256) -> Self {
-        SqrtPrice {
-            x96,
-            dec: dec::from_u256(x96),
-        }
+        SqrtPrice { x96 }
     }
 }
 
-/// Fast `get_amount0`: exact integer `sqrtB - sqrtA`, then 38 digit decimal math. Differs from the
-/// exact 512 bit version by ~1e-37 relative (python itself works with 35 digits).
+/// `get_amount0` on cached sqrt prices. It used to take 38-digit decimal shortcuts, which differed
+/// from python in the last digit; it is the exact version now (python's rounding, see [`get_amount0`]).
 #[inline]
 pub fn get_amount0_fast(a: &SqrtPrice, b: &SqrtPrice, liquidity: u128, decimals: u32) -> Dec {
-    let (a, b) = if a.x96 > b.x96 { (b, a) } else { (a, b) };
-    let diff = dec::from_u256(b.x96 - a.x96);
-    dec::from_u128(liquidity) * dec::Q96 * diff / b.dec / a.dec / dec::pow10(decimals as i32)
+    get_amount0(a.x96, b.x96, liquidity, decimals)
 }
 
-/// Fast `get_amount1`, see [`get_amount0_fast`].
+/// `get_amount1` on cached sqrt prices, see [`get_amount0_fast`].
 #[inline]
 pub fn get_amount1_fast(a: &SqrtPrice, b: &SqrtPrice, liquidity: u128, decimals: u32) -> Dec {
-    let (a, b) = if a.x96 > b.x96 { (b, a) } else { (a, b) };
-    let diff = dec::from_u256(b.x96 - a.x96);
-    dec::from_u128(liquidity) * diff / dec::Q96 / dec::pow10(decimals as i32)
+    get_amount1(a.x96, b.x96, liquidity, decimals)
 }
 
 /// Fast `get_amounts` used by the market on every iteration.
@@ -237,7 +280,7 @@ pub fn get_liquidity_for_amount1(sqrt_a: U256, sqrt_b: U256, amount: U256) -> U2
 
 /// `to_wei`: `int(amount * 10**decimals)`; negative amounts give 0.
 pub fn to_wei(amount: &Dec, decimals: u32) -> U256 {
-    let v = *amount * dec::pow10(decimals as i32);
+    let v = *amount * dec::int_pow10(decimals);
     dec::trunc_to_u256(&v).unwrap_or(U256::ZERO)
 }
 
@@ -318,8 +361,24 @@ pub fn amounts_relation(
 
 // ------------------------------------------------------------------ price <-> tick (helper.py)
 
+/// helper.py `_from_x96`: `Decimal(number) / Q96` (the integer stays exact, the quotient rounds).
 pub fn from_x96(number: U256) -> Dec {
-    dec::from_u256(number) / dec::q96()
+    dec::py_div_int(U512::from(number), U512::from(1u8) << 96, 0, false)
+}
+
+/// python `10 ** k`: an int for k >= 0, else a float (C pow). `Decimal()` of that float has 50+
+/// digits, more than a `Dec` holds, so the float itself is kept (see `dec::py_f64_mul`).
+enum PyPow10 {
+    Int(Dec),
+    Float(f64),
+}
+
+fn py_pow10_k(k: i32) -> PyPow10 {
+    if k >= 0 {
+        PyPow10::Int(dec::from_u128(10u128.pow(k as u32)))
+    } else {
+        PyPow10::Float(10f64.powf(k as f64)) // python's `10 ** k` is C pow(), as in dec::py_pow10
+    }
 }
 
 pub fn to_x96(sqrt_price: &Dec) -> U256 {
@@ -332,31 +391,21 @@ pub fn sqrt_price_x96_to_base_unit_price(
     d1: u32,
     is_token0_quote: bool,
 ) -> Dec {
-    // helper.py at prec 35, step by step and exactly, so prices equal python's to the last digit
-    // (rounding at 38 digits once differs in the last digit on about half of all ticks):
-    //   sqrt = Decimal(x96) / Q96;  p = sqrt ** 2  (libmpdec squares at prec 38, then rounds to 35)
-    //   p = p * Decimal(10 ** (d0 - d1))  (a float for d0 < d1: its exact binary value)
-    //   price = 1 / p if token0 is the quote
-    const P: u32 = dec::PY_PREC;
+    // helper.py, step by step with python's decimal arithmetic, so prices equal python's to the
+    // last digit (a single 38-digit computation differed in the last digit on about half of all ticks):
+    //   pool_price = _from_x96(x96) ** 2 * Decimal(10 ** (d0 - d1));  1 / pool_price if token0 is the quote
     if sqrt_price_x96.is_zero() {
         return dec::zero();
     }
-    let one = U512::from(1u8);
-    let (m, e) = dec::ratio_round(U512::from(sqrt_price_x96), one << 96, 0, P);
-    let (m, e) = dec::ratio_round(U512::from(m) * U512::from(m), one, 2 * e, 38);
-    let (m, e) = dec::ratio_round(U512::from(m), one, e, P);
-    let k = d0 as i32 - d1 as i32;
-    let (m, e) = if k >= 0 {
-        (m, e + k)
-    } else {
-        let bits = 10f64.powf(k as f64).to_bits();   // python's `10 ** k` is C pow(), as in dec::py_pow10
-        let (mant, shift) = ((bits & ((1 << 52) - 1)) | (1 << 52), 1075 - ((bits >> 52) & 0x7ff) as usize);
-        dec::ratio_round(U512::from(m) * U512::from(mant), one << shift, e, P)
+    let p = dec::py_square(from_x96(sqrt_price_x96));
+    let p = match py_pow10_k(d0 as i32 - d1 as i32) {
+        PyPow10::Int(f) => p * f,
+        PyPow10::Float(f) => dec::py_f64_mul(f, p),
     };
     if is_token0_quote {
-        dec::from_ratio(one, U512::from(m), -e, P)
+        dec::one() / p
     } else {
-        dec::from_ratio(U512::from(m), one, e, P)
+        p
     }
 }
 
@@ -366,37 +415,27 @@ pub fn base_unit_price_to_sqrt_price_x96(
     d1: u32,
     is_token0_quote: bool,
 ) -> U256 {
-    // helper.py at prec 35, step by step and exactly (a 38-digit computation could land one unit
-    // below a tick's sqrt ratio, leaving ~1e-29 of a token in a position python sees as out of range):
+    // helper.py, step by step with python's decimal arithmetic (a 38-digit computation could land
+    // one unit below a tick's sqrt ratio, leaving ~1e-29 of a token where python has none):
     //   price = 1 / price if token0 is the quote;  atomic = price / Decimal(10 ** (d0 - d1))
-    //   sqrt = atomic.sqrt();  x96 = int(sqrt * Q96)  (the product is rounded to 35 digits first)
-    const P: u32 = dec::PY_PREC;
-    let (neg, m, e) = dec::to_parts(price);
-    if neg || m == 0 {
+    //   int(atomic.sqrt() * Q96)
+    if price.is_sign_negative() || price.is_zero() || !price.is_finite() {
         return U256::ZERO;
     }
-    let one = U512::from(1u8);
-    let (m, e) = if is_token0_quote {
-        dec::ratio_round(one, U512::from(m), -e, P)
+    to_x96(&atomic_price(price, d0, d1, is_token0_quote).sqrt())
+}
+
+/// helper.py `price = 1 / price if is_token0_quote else price; price / Decimal(10 ** (d0 - d1))`.
+fn atomic_price(price: &Dec, d0: u32, d1: u32, is_token0_quote: bool) -> Dec {
+    let price = if is_token0_quote {
+        dec::one() / *price
     } else {
-        (m, e)
+        *price
     };
-    let k = d0 as i32 - d1 as i32;
-    let (m, e) = if k >= 0 {
-        dec::ratio_round(U512::from(m), U512::from(10u8).pow(U512::from(k)), e, P)
-    } else {
-        let bits = 10f64.powf(k as f64).to_bits();   // python's `10 ** k` is C pow(), as in dec::py_pow10
-        let (mant, shift) = ((bits & ((1 << 52) - 1)) | (1 << 52), 1075 - ((bits >> 52) & 0x7ff) as usize);
-        dec::ratio_round(U512::from(m) << shift, U512::from(mant), e, P)
-    };
-    let (m, e) = dec::sqrt_round(m, e, P);
-    let (m, e) = dec::ratio_round(U512::from(m) << 96, one, e, P);
-    let v = if e >= 0 {
-        U512::from(m) * U512::from(10u8).pow(U512::from(e))
-    } else {
-        U512::from(m) / U512::from(10u8).pow(U512::from(-e))
-    };
-    U256::from(v)
+    match py_pow10_k(d0 as i32 - d1 as i32) {
+        PyPow10::Int(f) => price / f,
+        PyPow10::Float(f) => dec::py_div_f64(price, f),
+    }
 }
 
 /// Convert a sqrt price (not x96) to a tick.
@@ -455,18 +494,12 @@ pub fn base_unit_price_to_tick(
     is_token0_quote: bool,
     legacy: bool,
 ) -> i32 {
-    let price = if is_token0_quote {
-        dec::one() / *price
-    } else {
-        *price
-    };
-    let atomic = price / dec::py_pow10(d0 as i32 - d1 as i32);
-    sqrt_price_to_tick(&atomic.sqrt(), legacy)
+    sqrt_price_to_tick(&atomic_price(price, d0, d1, is_token0_quote).sqrt(), legacy)
 }
 
 /// `from_atomic_unit`: `Decimal(int(amount)) / Decimal(10**decimal)`.
 pub fn from_atomic_unit(amount: i128, decimal: u32) -> Dec {
-    dec::from_i128(amount) / dec::pow10(decimal as i32)
+    dec::from_i128(amount) / dec::int_pow10(decimal)
 }
 
 /// `nearest_usable_tick`: python `round()` is half-to-even on the float quotient.

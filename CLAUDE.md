@@ -147,6 +147,9 @@ Dino names versions `v6.1`, `v6.2`, ...; each is one experiment `EXP-NNN` (next 
 - Fee-tier rules count as one strategy (Dino, 2026-10-06): a variant may apply one switch set on pools with fee >= 0.3% and another
   on cheaper pools (`TIER` in `v6_validate.py`). Routing the rebuild swap through a cheaper pool also counts as a strategy change
   (Dino, ruling relayed by the EXP-117 session).
+- **Every backtest runs on the Rust engine (Dino, 2026-10-14: "以後這個分支跑回測都要很快且正確").** It gives the python
+  engine's results byte for byte, ~10x faster; `v6_validate.py` refuses the python engine unless `ENGINE=python`
+  (engine comparisons only). Commits that touch `rust/` or `demeter/` must pass `experiments/engine_check.py` (hook).
 - Baseline v6 runs in the same invocation. Costs: pool fee + price impact; gas reported, not charged. From EXP-157 on, run with
   `SPEC=v1` (baseline = spec v1, flat 0.1% swap cost; see "Baseline since 2026-10-06 evening").
 - **No in-sample / out-of-sample split (Dino, 2026-10-06).** Every pool in `INVENTORY.md`, local or in the team S3 bucket, may be
@@ -173,26 +176,27 @@ Dino names versions `v6.1`, `v6.2`, ...; each is one experiment `EXP-NNN` (next 
     # Write backtest results to the main checkout's samples/strategy-example/result/ (gitignored), not inside a worktree:
     # removing a worktree deletes its result/ folder (round 4's raw CSVs were lost that way).
 
-    # Rust engine (rust/, Steven's port from maker-defense, 2026-10-14): same results, ~10x faster. Own venv, Rust >= 1.94:
+    # Rust engine (rust/: Steven's port from maker-defense, made python-exact 2026-10-14). Every backtest runs on it.
+    # One venv per checkout (a worktree builds its own), Rust >= 1.94:
     uv venv -p 3.12 .venv-rs && uv pip install -p .venv-rs/bin/python maturin -r samples/strategy-example/requirements-lab.txt
     cd rust && CARGO_TARGET_DIR=~/.cache/demeter-rs-target VIRTUAL_ENV=$PWD/../.venv-rs ../.venv-rs/bin/maturin develop --release
-    # first build ~4 min (polars), later ones incremental; the shared target dir lets a new worktree reuse it.
+    # first build ~4 min (polars), later ~1 min (the shared target dir is reused by every checkout).
     # rebuild after any change under rust/demeter-core or rust/demeter-py; rust/python/ edits apply at once.
+    git config core.hooksPath .githooks   # once per clone (shared .git/config): the engine-equality pre-commit hook
 
-Run (from `samples/strategy-example`, `PYTHONPATH=../..`):
+Run (from `samples/strategy-example`, with `PY=../../.venv-rs/bin/python` and **no** `PYTHONPATH`):
 
-    python v6_validate.py <pool> <start> <end> opt:A,B 4     # experiment variants, OPT dict in v6_validate.py
-    python v6_validate.py <pool> <start> <end> sens|bench 3   # sensitivity grid / continuous v6 vs plain LP
-    python v6_validate_report.py                              # validation numbers
-    BINANCE_WARM=1 python v6_validate.py <pool> <start> <end> opt:A,B 4   # window before the pool's data: warm-up from Binance daily closes
-    SPEC=v1 python v6_validate.py <pool> <start> <end> opt:A,B 2   # the baseline since EXP-156: A = spec sheet v1 (tag "-specv1")
-    python experiments/judge.py dev|hold|holdbtc <tag> <prefix...>    # apply the pre-registered success rules to a run
+    $PY v6_validate.py <pool> <start> <end> opt:A,B 4     # experiment variants, OPT dict in v6_validate.py
+    $PY v6_validate.py <pool> <start> <end> sens|bench 3   # sensitivity grid / continuous v6 vs plain LP
+    $PY v6_validate_report.py                              # validation numbers
+    BINANCE_WARM=1 $PY v6_validate.py <pool> <start> <end> opt:A,B 4   # window before the pool's data: warm-up from Binance daily closes
+    SPEC=v1 $PY v6_validate.py <pool> <start> <end> opt:A,B 2   # the baseline since EXP-156: A = spec sheet v1 (tag "-specv1")
+    $PY experiments/judge.py dev|hold|holdbtc <tag> <prefix...>    # apply the pre-registered success rules to a run
+    $PY experiments/engine_check.py                     # Rust == python engine, byte for byte (~2 min; the hook runs it)
     # results -> result/v6_validate/ (gitignored); daily equity CSV per variant
-
-    SPEC=v1 ../../.venv-rs/bin/python v6_validate.py <pool> <start> <end> opt:A,B 4   # same run on the Rust engine
-    # no PYTHONPATH: a path to the repo root imports the old python demeter/ instead (check: demeter.__file__ ends in
-    # rust/python/demeter/__init__.py). Same CLI, same files, byte-identical numbers (RUST-ENGINE-2026-10-14.md);
-    # full-history WBTC/USDC 499 s -> 40 s, a 2022 ETH year 97 s -> 8 s. Uniswap only (no aave / gmx / deribit / squeeth).
+    # v6_validate.py refuses the old python engine (engine_guard.py; a PYTHONPATH to the repo root or .venv-lab would
+    # import demeter/); ENGINE=python lets it through, only to compare engines. Same CLI, same result files as the python
+    # engine, byte for byte (experiments/RUST-ENGINE-2026-10-14.md). Uniswap only (no aave / gmx / deribit / squeeth).
 
 ## Gotchas
 
@@ -203,10 +207,13 @@ Run (from `samples/strategy-example`, `PYTHONPATH=../..`):
   timestamp + net value of demeter's per-minute AccountStatus (`LEAN_STATUS`, default on; identical results, 2022 yearly run
   4.4 → 2.7 GB parent + worker). The machine has 51 GB and other sessions share it: at most ~6 full-history workers at once
   (three invocations of two workers were OOM-killed on 2026-10-06; Dino paused a 2 x 3-worker batch on 2026-10-07).
-- Rust engine: keep `actuator.legacy_quirks` at its default (`True`, python's quirks reproduced) or numbers stop matching
-  past runs. It has no `~/.demeter` cache (no `pickle EOFError`) and `LEAN_STATUS` does nothing there (account status
-  lives in Rust; full-history run ~3 GB per worker). Any change under `rust/` must keep the engines equal: rerun
-  `cargo test -p demeter-core` and a full-history pool on both engines, compare every result file byte for byte.
+- Rust engine: it reproduces python demeter's 35-digit `decimal` arithmetic to the last digit (`rust/README.md`,
+  "Python's decimal arithmetic"). Keep `actuator.legacy_quirks` at its default (`True`, python's quirks reproduced) or
+  numbers stop matching past runs. No `~/.demeter` cache (no `pickle EOFError`); `LEAN_STATUS` does nothing there
+  (account status lives in Rust; a full-history run ~3 GB per worker). Any change under `rust/` or `demeter/` must keep
+  the engines equal: the pre-commit hook rebuilds, runs `cargo test` and `experiments/engine_check.py`, and refuses the
+  commit on any difference. Known difference, values equal: `account_status_df` / `market.data` cells can print extra
+  trailing zeros. A new Rust venv in a worktree: `engine_guard` warns when `.venv-rs` imports another checkout's engine.
 - `git fetch` here only fetches `master` and `feat/dino-v6-opt` (narrow refspec in the local config); fetch any
   other branch by name.
 - Pushing needs the `dinohuang102` GitHub account (write access to `ewe-technology/demeter`): run `gh auth switch -u dinohuang102` before pushing (a 403 means the wrong account is active) and leave it active.

@@ -45,6 +45,11 @@ def interval_to_seconds(interval: str) -> int:
 def ipc_to_pandas(buf: bytes, index: str = "timestamp") -> pd.DataFrame:
     table = pa.ipc.open_file(pa.py_buffer(buf)).read_all()
     df = table.to_pandas()
+    # decimal columns that do not fit one Decimal(38, scale) exactly arrive as binary text
+    # (data.rs `decimal_series`); user string columns are utf8, never binary
+    for field in table.schema:
+        if pa.types.is_binary(field.type) or pa.types.is_large_binary(field.type) or pa.types.is_binary_view(field.type):
+            df[field.name] = [None if v is None else Decimal(v.decode()) for v in df[field.name].tolist()]
     if index in df.columns:
         df[index] = pd.to_datetime(df[index]).astype("datetime64[ns]")
         df = df.set_index(index)

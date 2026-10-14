@@ -64,28 +64,38 @@ methods the engine itself calls are not used by the engine: `update`, `set_marke
 `add_liquidity_by_tick` when another engine method calls them. The engine prints a warning when a
 subclass does this. None of the sample strategies do.
 
-Decimals handed to python are rounded to 35 significant digits: return values, snapshot rows,
-and the columns of `account_status_df` / `market.data`. That is the precision python demeter runs
-with (`getcontext().prec = 35`), so strategy code sees the same numbers as before. Internally the
-engine keeps 38 digits.
+### Python's decimal arithmetic, to the last digit (`feat/dino-v6-opt`, 2026-10-14)
 
-The two price conversions are computed exactly the way python's helper.py rounds at 35 digits,
-step by step, with big-integer arithmetic (`dec::ratio_round`, `dec::sqrt_round`; added on
-`feat/dino-v6-opt` 2026-10-14):
+Python demeter runs `decimal` at 35 digits (`getcontext().prec = 35`): every `+ - * /` rounds its
+exact result half-even to 35 digits, and an exact result keeps python's ideal exponent. The port
+first used fastnum's 38-digit arithmetic, which differs from that in the last digit. A strategy that
+truncates amounts to token units can turn a last-digit difference into a visible one: defense v6 on
+WBTC/USDC `0x99ac` drifted by ~1e-10 from day one (one USDC unit lost in `add_liquidity_by_tick`).
+Now:
 
-- tick → price (`math::sqrt_price_x96_to_base_unit_price`: `market.data` `price` / `close`,
-  `tick_to_price`). A single 38-digit computation rounded to 35 differed from python in the last
-  digit on about half of all ticks. A strategy that truncates amounts to token units
-  (`add_liquidity_by_tick`) turned that into ~1e-10 relative drift (defense v6, full history on
-  WBTC/USDC `0x99ac`).
-- price → sqrt price x96 (`math::base_unit_price_to_sqrt_price_x96`: every position amount and
-  fee). At a tick's own price the 38-digit result could be one unit below the tick's sqrt ratio,
-  so a position ending at that tick kept ~1e-29 of the quote token where python returns 0.
+- `dec::Dec` wraps a D128 and does `+ - * /` and `sqrt` like python: exact big-integer result, one
+  rounding to 35 digits, python's exponent (`x + 0E-30` gains a trailing zero, an exact quotient
+  drops them down to the ideal exponent). Operations run in python's order on python's operands.
+- Steps python does with exact big ints or floats are reproduced as such: `Decimal(L * 2**96 * d)`,
+  `Decimal(x96) / Q96`, `Decimal(10 ** k)` for k < 0 (a float's exact binary value, ~50 digits),
+  `Decimal(float)` in `add_liquidity_by_value` / `estimate_amount`, libmpdec's `x ** 2` (squared at
+  38 digits, then rounded to 35), `10 ** d` as an int (coefficient 10^d at exponent 0).
+- A partial `remove_liquidity(position, liquidity)` makes python hold that position's liquidity as
+  a Decimal (`float_param_formatter`), and its amounts then round `liquidity * 2**96` to 35 digits.
+  `Position::liquidity_is_decimal` tracks that and takes the same path.
+- `estimate_liquidity` out of range passes python's fractional `amount * 10**decimals` (not whole
+  wei) to `mul_div`; `lower_tick == upper_tick` raises like python's division by zero.
 
-Checked: 2.1 M ticks and 720 k prices (tick boundaries and random 35-digit prices; six decimal
-pairs, both quote sides) equal python, and defense v6's full-history runs on seven pools write
-byte-identical result files on both engines
-(`samples/strategy-example/experiments/RUST-ENGINE-2026-10-14.md`).
+Checked (`samples/strategy-example/experiments/RUST-ENGINE-2026-10-14.md`): `engine_probe.py`
+(every market operation on three pools, every value as its full Decimal text, 10 k lines) is
+byte-identical on both engines; so are 2.1 M tick prices, 720 k price → sqrt conversions and
+defense v6's full-history runs. `engine_check.py` repeats the probe and three short v6 runs (~2 min);
+the pre-commit hook in `.githooks` runs it whenever a commit touches `rust/` or `demeter/`.
+
+One known difference left, values equal: `account_status_df` and `market.data` arrive as one
+Decimal(38, scale) column each, so a cell can print trailing zeros python's own frame does not have
+(`str()` differs, the number does not). A column whose values would not all fit one scale exactly
+comes over as text and is converted to exact `Decimal` objects instead (`data::decimal_series`).
 
 ## Performance
 
@@ -165,7 +175,7 @@ which mode your results should use, and do not compare numbers across modes.
 | 6 | `Snapshot.market_status` has a mutable default shared by all snapshots. | `broker/_typing.py` | **fixed** in both modes | fixed |
 | 7 | `PeriodTrigger` fires only on an exact timestamp match; a missing minute stops it forever. | `strategy/trigger.py` | reproduced | fires on the first minute at or after the scheduled time |
 | 8 | `collect_fee` checks `if self._positions[position]:`, which is always true for a dataclass, so a collect action is always recorded. | `uniswap/market.py` | reproduced | same |
-| 9 | Precision: python Decimal uses 35 digits, Rust uses 38. Rust also takes some exact 512-bit products in 38 digit decimal steps (reassociated). | everywhere | Decimals handed to python are rounded to 35 digits; ≤1e-30 relative on internal values | same |
+| 9 | Precision: python Decimal rounds every operation to 35 digits. | everywhere | **reproduced exactly** since 2026-10-14 (`dec::Dec`, see "Python's decimal arithmetic" above); before, 38-digit arithmetic differed in the last digit | same |
 
 Also different, intentionally:
 

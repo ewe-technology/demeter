@@ -1,8 +1,12 @@
 //! Decimal helpers.
 //!
-//! The python engine works with `decimal.Decimal` at 35 significant digits. We use
-//! [`fastnum::D128`], which keeps ~38 significant digits, so results agree with python to
-//! roughly 1e-33 relative per operation (see README "Precision").
+//! The python engine works with `decimal.Decimal` at 35 significant digits (helper.py sets
+//! `getcontext().prec = 35`): every `+ - * /` rounds its exact result half-even to 35 digits.
+//! [`Dec`] stores a [`fastnum::D128`] (up to 38 digits) and does its arithmetic exactly the way
+//! python does: exact big-integer result, one correct rounding to 35 digits. So engine values equal
+//! python's to the last digit, as long as the operations run in python's order
+//! (`feat/dino-v6-opt` 2026-10-14; before, D128's own 38-digit arithmetic differed in the last
+//! digit, see experiments/RUST-ENGINE-2026-10-14.md).
 //!
 //! D128 refuses to parse a literal with more than 38 significant digits, and python feeds us
 //! values such as `sqrt_price_x96` (49 digits) or `liquidity * 2**96 * delta` (up to ~116 digits),
@@ -13,8 +17,259 @@ use fastnum::bint::UInt;
 use fastnum::decimal::{Context, Sign};
 use fastnum::D128;
 use ruint::aliases::{U256, U512};
+use std::fmt;
+use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
-pub type Dec = D128;
+/// A decimal with python `decimal` arithmetic at 35 digits (see the module docs).
+#[derive(Clone, Copy, PartialEq, PartialOrd)]
+pub struct Dec(pub D128);
+
+impl Dec {
+    pub const ZERO: Dec = Dec(D128::ZERO);
+    pub const ONE: Dec = Dec(D128::ONE);
+    pub const NAN: Dec = Dec(D128::NAN);
+    pub const INFINITY: Dec = Dec(D128::INFINITY);
+    pub const NEG_INFINITY: Dec = Dec(D128::NEG_INFINITY);
+
+    pub const fn from_parts(digits: UInt<2>, exp: i32, sign: Sign, ctx: Context) -> Dec {
+        Dec(D128::from_parts(digits, exp, sign, ctx))
+    }
+    pub fn is_zero(&self) -> bool {
+        self.0.is_zero()
+    }
+    pub fn is_nan(&self) -> bool {
+        self.0.is_nan()
+    }
+    pub fn is_infinite(&self) -> bool {
+        self.0.is_infinite()
+    }
+    pub fn is_finite(&self) -> bool {
+        !self.0.is_nan() && !self.0.is_infinite()
+    }
+    pub fn is_sign_negative(&self) -> bool {
+        self.0.is_sign_negative()
+    }
+    pub fn to_f64(&self) -> f64 {
+        self.0.to_f64()
+    }
+    /// exact: no rounding (python `abs` rounds to the context, a no-op for values of <= 35 digits)
+    pub fn abs(&self) -> Dec {
+        Dec(self.0.abs())
+    }
+    pub fn max(self, other: Dec) -> Dec {
+        if other > self {
+            other
+        } else {
+            self
+        }
+    }
+    pub fn min(self, other: Dec) -> Dec {
+        if other < self {
+            other
+        } else {
+            self
+        }
+    }
+    /// python `Decimal.sqrt()` at 35 digits (correctly rounded).
+    pub fn sqrt(&self) -> Dec {
+        if !self.is_finite() || self.is_sign_negative() || self.is_zero() {
+            return Dec(self.0.sqrt());
+        }
+        let (_, m, e) = to_parts(self);
+        let (mut m, mut e, exact) = sqrt_round(m, e, PY_PREC);
+        // an exact root drops trailing zeros down to python's ideal exponent floor(exp / 2)
+        let ideal = to_parts(self).2.div_euclid(2);
+        if exact {
+            while e < ideal && m % 10 == 0 {
+                m /= 10;
+                e += 1;
+            }
+        }
+        build(m, e, false)
+    }
+}
+
+impl fmt::Display for Dec {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl fmt::Debug for Dec {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&self.0, f)
+    }
+}
+
+impl From<i64> for Dec {
+    fn from(v: i64) -> Dec {
+        Dec(D128::from(v))
+    }
+}
+
+/// Exact `±num × 10^exp` rounded to python's 35 digits.
+fn py_round(num: U512, exp: i32, neg: bool) -> Dec {
+    if num.is_zero() {
+        return build(0, exp, neg);
+    }
+    if digits_u512(num) <= PY_PREC as i32 {
+        return build(num.to::<u128>(), exp, neg);
+    }
+    let (m, e) = ratio_round(num, U512::from(1u8), exp, PY_PREC);
+    build(m, e, neg)
+}
+
+fn py_add(a: Dec, b: Dec) -> Dec {
+    if !a.is_finite() || !b.is_finite() {
+        return Dec(a.0 + b.0);
+    }
+    let (na, ma, ea) = to_parts(&a);
+    let (nb, mb, eb) = to_parts(&b);
+    if ma == 0 && mb == 0 {
+        return build(0, ea.min(eb), na && nb);
+    }
+    // x + 0: python takes the smaller exponent, so x gains trailing zeros (up to 35 digits):
+    // 25287.28554028138376434291073792069 + 0E-30 is 25287.285540281383764342910737920690
+    if ma == 0 || mb == 0 {
+        let (neg, m, e, ez) = if mb == 0 { (na, ma, ea, eb) } else { (nb, mb, eb, ea) };
+        let d = digits_u512(U512::from(m));
+        if d >= PY_PREC as i32 || ez >= e {
+            return py_round(U512::from(m), e, neg);
+        }
+        let pad = (e - ez).min(PY_PREC as i32 - d);
+        return build(m * 10u128.pow(pad as u32), e - pad, neg);
+    }
+    // An operand more than 80 places below the other only decides the rounding direction (it is
+    // below the 35th digit of the sum); keep it as one unit there, a sticky digit.
+    let (mut ma, mut ea, mut mb, mut eb) = (ma, ea, mb, eb);
+    if ea - eb > 80 {
+        (mb, eb) = (1, ea - 80);
+    } else if eb - ea > 80 {
+        (ma, ea) = (1, eb - 80);
+    }
+    let e = ea.min(eb);
+    // fast path: aligned operands and their sum fit a u128 and the sum has <= 35 digits (no rounding)
+    if let (Some(x), Some(y)) = (
+        10u128.checked_pow((ea - e) as u32).and_then(|p| ma.checked_mul(p)),
+        10u128.checked_pow((eb - e) as u32).and_then(|p| mb.checked_mul(p)),
+    ) {
+        let (s, neg) = if na == nb {
+            (x.checked_add(y), na)
+        } else if x >= y {
+            (Some(x - y), na && x != y)
+        } else {
+            (Some(y - x), nb)
+        };
+        if let Some(s) = s {
+            if s < PY_TEN35 {
+                return build(s, e, neg);
+            }
+        }
+    }
+    let x = U512::from(ma) * pow10_u512((ea - e) as u32);
+    let y = U512::from(mb) * pow10_u512((eb - e) as u32);
+    if na == nb {
+        py_round(x + y, e, na)
+    } else if x >= y {
+        // python: an exact zero sum is +0 under ROUND_HALF_EVEN
+        let d = x - y;
+        py_round(d, e, na && !d.is_zero())
+    } else {
+        py_round(y - x, e, nb)
+    }
+}
+
+fn py_mul(a: Dec, b: Dec) -> Dec {
+    if !a.is_finite() || !b.is_finite() {
+        return Dec(a.0 * b.0);
+    }
+    let (na, ma, ea) = to_parts(&a);
+    let (nb, mb, eb) = to_parts(&b);
+    if let Some(p) = ma.checked_mul(mb) {
+        if p < PY_TEN35 {
+            return build(p, ea + eb, na != nb); // exact, nothing to round
+        }
+    }
+    py_round(U512::from(ma) * U512::from(mb), ea + eb, na != nb)
+}
+
+/// 10^35: a coefficient below it needs no rounding to python's 35 digits.
+const PY_TEN35: u128 = 100_000_000_000_000_000_000_000_000_000_000_000;
+
+fn py_div(a: Dec, b: Dec) -> Dec {
+    if !a.is_finite() || !b.is_finite() || b.is_zero() {
+        return Dec(a.0 / b.0);
+    }
+    let (na, ma, ea) = to_parts(&a);
+    let (nb, mb, eb) = to_parts(&b);
+    py_div_int(U512::from(ma), U512::from(mb), ea - eb, na != nb)
+}
+
+impl Add for Dec {
+    type Output = Dec;
+    fn add(self, rhs: Dec) -> Dec {
+        py_add(self, rhs)
+    }
+}
+
+impl Sub for Dec {
+    type Output = Dec;
+    fn sub(self, rhs: Dec) -> Dec {
+        py_add(self, -rhs)
+    }
+}
+
+impl Mul for Dec {
+    type Output = Dec;
+    fn mul(self, rhs: Dec) -> Dec {
+        py_mul(self, rhs)
+    }
+}
+
+impl Div for Dec {
+    type Output = Dec;
+    fn div(self, rhs: Dec) -> Dec {
+        py_div(self, rhs)
+    }
+}
+
+impl Neg for Dec {
+    type Output = Dec;
+    fn neg(self) -> Dec {
+        Dec(-self.0)
+    }
+}
+
+impl AddAssign for Dec {
+    fn add_assign(&mut self, rhs: Dec) {
+        *self = *self + rhs;
+    }
+}
+
+impl SubAssign for Dec {
+    fn sub_assign(&mut self, rhs: Dec) {
+        *self = *self - rhs;
+    }
+}
+
+impl MulAssign for Dec {
+    fn mul_assign(&mut self, rhs: Dec) {
+        *self = *self * rhs;
+    }
+}
+
+impl DivAssign for Dec {
+    fn div_assign(&mut self, rhs: Dec) {
+        *self = *self / rhs;
+    }
+}
+
+/// python `sum(values, Decimal(0))`: left to right from zero.
+impl std::iter::Sum for Dec {
+    fn sum<I: Iterator<Item = Dec>>(iter: I) -> Dec {
+        iter.fold(Dec::ZERO, |a, b| a + b)
+    }
+}
 
 /// Max significant digits kept by `Dec`.
 pub const MAX_DIGITS: usize = 38;
@@ -132,7 +387,8 @@ pub fn from_f64_exact(v: f64) -> Dec {
 pub fn dec_from_digits(digits: &str, exp: i32, negative: bool) -> Dec {
     let digits = digits.trim_start_matches('0');
     if digits.is_empty() {
-        return Dec::ZERO;
+        // a zero keeps its exponent and sign like python's Decimal('-0E-30')
+        return build(0, exp, negative);
     }
     let bytes = digits.as_bytes();
     let (mantissa, exp) = if bytes.len() <= MAX_DIGITS {
@@ -216,13 +472,13 @@ pub fn parse_lossy(s: &str) -> Result<Dec, String> {
 
 /// Split a finite `Dec` into (negative, digits, exponent): value = ±digits × 10^exponent.
 pub fn to_parts(d: &Dec) -> (bool, u128, i32) {
-    let limbs = d.digits();
+    let limbs = d.0.digits();
     let limbs = limbs.digits();
     let m = (limbs[0] as u128) | ((limbs[1] as u128) << 64);
     (
         d.is_sign_negative(),
         m,
-        -(d.fractional_digits_count() as i32),
+        -(d.0.fractional_digits_count() as i32),
     )
 }
 
@@ -275,22 +531,163 @@ pub fn round_sig(d: &Dec, digits: u32) -> Dec {
 /// Significant digits of python's decimal context in helper.py (`getcontext().prec = 35`).
 pub const PY_PREC: u32 = 35;
 
+/// 10^0 ..= 10^154 (10^154 < 2^512).
+fn pow10_table() -> &'static [U512] {
+    static T: std::sync::OnceLock<Vec<U512>> = std::sync::OnceLock::new();
+    T.get_or_init(|| {
+        let mut v = vec![U512::from(1u8)];
+        for _ in 0..154 {
+            let next = v[v.len() - 1] * U512::from(10u8);
+            v.push(next);
+        }
+        v
+    })
+}
+
 fn digits_u512(v: U512) -> i32 {
     if v.is_zero() {
-        1
+        return 1;
+    }
+    // 10^est <= 2^(bits-1) <= v, so v has est + 1 or est + 2 digits
+    let est = ((v.bit_len() - 1) as f64 * std::f64::consts::LOG10_2) as usize;
+    if est + 1 < pow10_table().len() && v >= pow10_table()[est + 1] {
+        est as i32 + 2
     } else {
-        v.to_string().len() as i32
+        est as i32 + 1
     }
 }
 
 fn pow10_u512(n: u32) -> U512 {
-    U512::from(10u8).pow(U512::from(n))
+    pow10_table()[n as usize]
 }
 
 /// `num / den × 10^exp` rounded half-even to `digits` (≤ 38) significant digits, computed
 /// exactly: the one correctly rounded result a python `Decimal` operation at that precision
 /// gives. Returns the mantissa and exponent. `num` must be > 0.
 pub fn ratio_round(num: U512, den: U512, exp: i32, digits: u32) -> (u128, i32) {
+    let (m, e, _) = ratio_round_x(num, den, exp, digits);
+    (m, e)
+}
+
+/// python `Decimal(num).scaleb(exp) / Decimal(den)` at 35 digits, including the representation:
+/// an exact quotient drops trailing zeros down to the ideal exponent `exp` (python prints
+/// `4275.049…824`, not `…8240`). `den` must be > 0.
+pub fn py_div_int(num: U512, den: U512, exp: i32, negative: bool) -> Dec {
+    py_div_ideal(num, den, exp, exp, negative)
+}
+
+/// [`py_div_int`] with python's ideal exponent given separately (dividend exponent minus divisor
+/// exponent, when the divisor was rescaled to an integer `den`).
+pub fn py_div_ideal(num: U512, den: U512, exp: i32, ideal: i32, negative: bool) -> Dec {
+    if num.is_zero() {
+        return build(0, ideal, negative);
+    }
+    let (mut m, mut e, exact) = ratio_round_x(num, den, exp, PY_PREC);
+    if exact {
+        while e < ideal && m % 10 == 0 {
+            m /= 10;
+            e += 1;
+        }
+    }
+    build(m, e, negative)
+}
+
+/// A finite f64 as python's `Decimal(f)` holds it, exactly: `±mant × 2^pow2` with `mant` odd
+/// (or 0). Decimal(f) is then the coefficient `mant × 5^-pow2` at exponent `pow2` when pow2 < 0.
+fn f64_parts(f: f64) -> (bool, u64, i32) {
+    let bits = f.to_bits();
+    let neg = bits >> 63 == 1;
+    let exp_bits = ((bits >> 52) & 0x7ff) as i32;
+    let frac = bits & ((1u64 << 52) - 1);
+    let (mut mant, mut pow2) = if exp_bits == 0 { (frac, -1074) } else { (frac | (1 << 52), exp_bits - 1075) };
+    if mant == 0 {
+        return (neg, 0, 0);
+    }
+    let tz = mant.trailing_zeros();
+    mant >>= tz;
+    pow2 += tz as i32;
+    (neg, mant, pow2)
+}
+
+/// python `Decimal(f) * d` at 35 digits (the float is converted exactly, not via its repr).
+pub fn py_f64_mul(f: f64, d: Dec) -> Dec {
+    let (nf, mant, pow2) = f64_parts(f);
+    if !f.is_finite() || !d.is_finite() || pow2 < -400 {
+        return from_f64_exact(f) * d;
+    }
+    let (nd, m, e) = to_parts(&d);
+    let neg = nf != nd;
+    if pow2 >= 0 {
+        return py_round(U512::from(m) * (U512::from(mant) << pow2 as usize), e, neg);
+    }
+    // exact product: (mant × m / 2^k) × 10^e; python's exponent is e - k, coefficient never trimmed
+    let k = -pow2;
+    py_div_ideal(U512::from(mant) * U512::from(m), U512::from(1u8) << k as usize, e, e - k, neg)
+}
+
+/// python `Decimal(f) / d` at 35 digits (the float is converted exactly).
+pub fn py_f64_div(f: f64, d: Dec) -> Dec {
+    let (nf, mant, pow2) = f64_parts(f);
+    if !f.is_finite() || !d.is_finite() || d.is_zero() || pow2 < -400 {
+        return from_f64_exact(f) / d;
+    }
+    let (nd, m, e) = to_parts(&d);
+    let neg = nf != nd;
+    if pow2 >= 0 {
+        return py_div_int(U512::from(mant) << pow2 as usize, U512::from(m), -e, neg);
+    }
+    // (mant / 2^k) / (m × 10^e); ideal exponent: the float's (-k) minus e
+    let k = -pow2;
+    py_div_ideal(U512::from(mant), U512::from(m) << k as usize, -e, -k - e, neg)
+}
+
+/// python `d / Decimal(f)` at 35 digits (the float is converted exactly).
+pub fn py_div_f64(d: Dec, f: f64) -> Dec {
+    let (nf, mant, pow2) = f64_parts(f);
+    if !f.is_finite() || !d.is_finite() || mant == 0 || pow2 < -400 {
+        return d / from_f64_exact(f);
+    }
+    let (nd, m, e) = to_parts(&d);
+    let neg = nf != nd;
+    if pow2 >= 0 {
+        return py_div_int(U512::from(m), U512::from(mant) << pow2 as usize, e, neg);
+    }
+    // (m × 10^e) / (mant / 2^k); ideal exponent: e minus the float's (-k)
+    let k = -pow2;
+    py_div_ideal(U512::from(m) << k as usize, U512::from(mant), e, e + k, neg)
+}
+
+/// python `d * k` for a python int `k` of any size (converted exactly), at 35 digits.
+pub fn py_mul_int(d: Dec, k: U512) -> Dec {
+    if !d.is_finite() {
+        return d;
+    }
+    let (neg, m, e) = to_parts(&d);
+    py_round(U512::from(m) * k, e, neg)
+}
+
+/// python `d ** 2` at prec 35: libmpdec squares at prec 38 (prec + 3 for exponent 2), then
+/// rounds that to 35 digits, so an exact square of > 38 digits is rounded twice.
+pub fn py_square(d: Dec) -> Dec {
+    if !d.is_finite() {
+        return d * d;
+    }
+    let (_, m, e) = to_parts(&d);
+    let sq = U512::from(m) * U512::from(m);
+    if digits_u512(sq) <= PY_PREC as i32 {
+        return build(sq.to::<u128>(), 2 * e, false);
+    }
+    let (m38, e38) = if digits_u512(sq) <= 38 {
+        (sq.to::<u128>(), 2 * e)
+    } else {
+        ratio_round(sq, U512::from(1u8), 2 * e, 38)
+    };
+    let (m35, e35) = ratio_round(U512::from(m38), U512::from(1u8), e38, PY_PREC);
+    build(m35, e35, false)
+}
+
+/// [`ratio_round`] that also says whether the quotient was exact (nothing rounded off).
+fn ratio_round_x(num: U512, den: U512, exp: i32, digits: u32) -> (u128, i32, bool) {
     let lo = pow10_u512(digits - 1);
     let hi = pow10_u512(digits);
     // quotient num * 10^s / den, scaled so it has exactly `digits` digits
@@ -301,7 +698,7 @@ pub fn ratio_round(num: U512, den: U512, exp: i32, digits: u32) -> (u128, i32) {
         } else {
             (num, den * pow10_u512((-s) as u32))
         };
-        let (mut q, r) = (n / d, n % d);
+        let (mut q, r) = n.div_rem(d);
         if q >= hi {
             s -= 1;
             continue;
@@ -319,13 +716,14 @@ pub fn ratio_round(num: U512, den: U512, exp: i32, digits: u32) -> (u128, i32) {
             q /= U512::from(10u8);
             e += 1;
         }
-        return (q.to::<u128>(), e);
+        return (q.to::<u128>(), e, r.is_zero());
     }
 }
 
 /// `sqrt(m × 10^exp)` rounded half-even to `digits` significant digits, exactly (python's
 /// `Decimal.sqrt`, which is correctly rounded). A square root of an integer never sits on a half.
-pub fn sqrt_round(m: u128, exp: i32, digits: u32) -> (u128, i32) {
+/// The flag says whether the root was exact.
+pub fn sqrt_round(m: u128, exp: i32, digits: u32) -> (u128, i32, bool) {
     let lo = pow10_u512(digits - 1);
     let hi = pow10_u512(digits);
     // floor(sqrt(m × 10^(exp + 2s))) has `digits` digits; exp + 2s must stay >= 0
@@ -344,6 +742,7 @@ pub fn sqrt_round(m: u128, exp: i32, digits: u32) -> (u128, i32) {
             s += 1;
             continue;
         }
+        let exact = n == q * q;
         if n > q * q + q {
             q += U512::from(1u8);
         }
@@ -352,7 +751,7 @@ pub fn sqrt_round(m: u128, exp: i32, digits: u32) -> (u128, i32) {
             q /= U512::from(10u8);
             e += 1;
         }
-        return (q.to::<u128>(), e);
+        return (q.to::<u128>(), e, exact);
     }
 }
 
@@ -442,10 +841,16 @@ pub fn py_pow10(n: i32) -> Dec {
     }
 }
 
-/// Exact 10^n (no float detour).
+/// Exact 10^n (no float detour), as `1E+n`. For python's `Decimal(10 ** n)` use [`int_pow10`].
 #[inline]
 pub fn pow10(n: i32) -> Dec {
     build(1, n, false)
+}
+
+/// python's `10 ** d` (an int) as a Decimal: coefficient 10^d at exponent 0. Same value as
+/// `pow10(d)`, but a division by it keeps python's ideal exponent (`0E0`, not `0E-18`).
+pub fn int_pow10(d: u32) -> Dec {
+    from_u128(10u128.pow(d))
 }
 
 /// 2^96 as Dec (exact: 29 digits).

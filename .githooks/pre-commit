@@ -1,0 +1,21 @@
+#!/bin/sh
+# feat/dino-v6-opt: backtests run on the Rust engine (rust/), which must equal the python engine (demeter/) to the
+# last digit. A commit that touches either one runs samples/strategy-example/experiments/engine_check.py (~2 min)
+# and is refused when the engines differ. Enabled by `git config core.hooksPath .githooks` (CLAUDE.md).
+# It checks the working tree, so stage everything you changed there. Skip once: git commit --no-verify.
+changed=$(git diff --cached --name-only -- rust demeter)
+[ -z "$changed" ] && exit 0
+root=$(git rev-parse --show-toplevel)
+py="$root/.venv-rs/bin/python"
+if [ ! -x "$py" ]; then
+    echo "pre-commit: engine files changed but $root/.venv-rs is missing; build it (CLAUDE.md Environment)" >&2
+    exit 1
+fi
+echo "pre-commit: engine files changed, checking Rust == python (engine_check.py, ~2 min)"
+if echo "$changed" | grep -qE '^rust/(demeter-core|demeter-py|Cargo)'; then
+    echo "pre-commit: Rust sources changed: rebuilding this checkout's engine and running cargo test"
+    (cd "$root/rust" && CARGO_TARGET_DIR="$HOME/.cache/demeter-rs-target" VIRTUAL_ENV="$root/.venv-rs" \
+        "$root/.venv-rs/bin/maturin" develop --release -q) || exit 1
+    (cd "$root/rust" && CARGO_TARGET_DIR="$HOME/.cache/demeter-rs-target" cargo test --release -q -p demeter-core) || exit 1
+fi
+cd "$root/samples/strategy-example" && "$py" experiments/engine_check.py

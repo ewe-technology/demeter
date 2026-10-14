@@ -12,7 +12,7 @@ use crate::types::{
     UniV3Pool,
 };
 use chrono::NaiveDate;
-use ruint::aliases::U256;
+use ruint::aliases::{U256, U512};
 use std::cell::Cell;
 use std::sync::Arc;
 
@@ -397,7 +397,8 @@ impl UniLpMarket {
         self.position_index(info).map(|i| self.positions.remove(i).1)
     }
 
-    fn token_amounts(&self, pos: &Position, sqrt_price: &SqrtPrice, liquidity: u128) -> (Dec, Dec) {
+    /// python `V3CoreLib.get_token_amounts` for `liquidity`, an int or (`is_dec`) a Decimal in python.
+    fn token_amounts(&self, pos: &Position, sqrt_price: &SqrtPrice, liquidity: u128, is_dec: bool) -> (Dec, Dec) {
         if liquidity == 0 {
             return (d0(), d0());
         }
@@ -417,31 +418,34 @@ impl UniLpMarket {
             // outside the range the amounts only depend on liquidity: most positions of a
             // multi-band strategy are out of range, so this avoids most of the decimal math
             if let Some(c) = pos.out_of_range_cache.get() {
-                if c.liquidity == liquidity && c.side == side {
+                if c.liquidity == liquidity && c.liquidity_is_decimal == is_dec && c.side == side {
                     return c.amounts;
                 }
             }
-            let amounts = math::get_amounts_fast(
+            let amounts = math::get_amounts_typed(
                 sqrt_price,
                 &pos.sqrt_lower,
                 &pos.sqrt_upper,
                 liquidity,
+                is_dec,
                 self.pool.token0.decimal,
                 self.pool.token1.decimal,
             );
             pos.out_of_range_cache
                 .set(Some(crate::types::OutOfRangeAmounts {
                     liquidity,
+                    liquidity_is_decimal: is_dec,
                     side,
                     amounts,
                 }));
             return amounts;
         }
-        math::get_amounts_fast(
+        math::get_amounts_typed(
             sqrt_price,
             &pos.sqrt_lower,
             &pos.sqrt_upper,
             liquidity,
+            is_dec,
             self.pool.token0.decimal,
             self.pool.token1.decimal,
         )
@@ -459,7 +463,7 @@ impl UniLpMarket {
         };
         let sqrt = self.current_sqrt()?;
         let pos = &self.positions[i].1;
-        Ok(self.token_amounts(pos, &sqrt, pos.liquidity))
+        Ok(self.token_amounts(pos, &sqrt, pos.liquidity, pos.liquidity_is_decimal))
     }
 
     /// python `get_position_status`
@@ -504,7 +508,7 @@ impl UniLpMarket {
                 let (bf, qf) = self.convert_pair(pos.pending_amount0, pos.pending_amount1);
                 base_fee_sum += bf;
                 quote_fee_sum += qf;
-                let (a0, a1) = self.token_amounts(pos, &sqrt, pos.liquidity);
+                let (a0, a1) = self.token_amounts(pos, &sqrt, pos.liquidity, pos.liquidity_is_decimal);
                 dep0 += a0;
                 dep1 += a1;
             }
@@ -610,6 +614,12 @@ impl UniLpMarket {
                 "lower tick should be less than upper tick",
             ));
         }
+        if lower_tick == upper_tick {
+            // python reaches get_liquidity_for_amount0/1 and divides by sqrtB - sqrtA = 0
+            return Err(DemeterError::Data(
+                "ZeroDivisionError: integer division or modulo by zero (lower tick == upper tick)".into(),
+            ));
+        }
         let (d0_, d1_) = (self.pool.token0.decimal, self.pool.token1.decimal);
         let sqrt_lower = SqrtPrice::new(math::get_sqrt_ratio_at_tick(lower_tick)?);
         let sqrt_upper = SqrtPrice::new(math::get_sqrt_ratio_at_tick(upper_tick)?);
@@ -653,6 +663,7 @@ impl UniLpMarket {
                         pending_amount0: d0(),
                         pending_amount1: d0(),
                         liquidity,
+                        liquidity_is_decimal: false,
                         lower_price,
                         upper_price,
                         init_price,
@@ -800,13 +811,17 @@ impl UniLpMarket {
             DemeterError::Data(format!("KeyError: position {:?} not found", info))
         })?;
         let pos_liq = self.positions[i].1.liquidity;
-        let delta = match liquidity {
-            Some(l) if l < pos_liq => l,
-            _ => pos_liq,
+        let pos_dec = self.positions[i].1.liquidity_is_decimal;
+        // python: a partial `liquidity` arrives as a Decimal (float_param_formatter); otherwise the
+        // position's own liquidity is removed, int or Decimal as it is held
+        let (delta, delta_dec) = match liquidity {
+            Some(l) if l < pos_liq => (l, true),
+            _ => (pos_liq, pos_dec),
         };
-        let (g0, g1) = self.token_amounts(&self.positions[i].1, &sqrt, delta);
+        let (g0, g1) = self.token_amounts(&self.positions[i].1, &sqrt, delta, delta_dec);
         let pos = &mut self.positions[i].1;
         pos.liquidity = pos_liq - delta;
+        pos.liquidity_is_decimal = pos_dec || delta_dec;
         pos.pending_amount0 += g0;
         pos.pending_amount1 += g1;
         self.has_update = true;
@@ -1104,11 +1119,11 @@ impl UniLpMarket {
         let ratio = math::estimate_ratio(tick, lower, upper)?;
         let ratio_in_amount =
             ratio * py_pow10_f64(self.pool.token1.decimal as i32 - self.pool.token0.decimal as i32);
-        let ratio_amount = dec::from_f64_exact(ratio_in_amount);
+        // python `Decimal(ratio_in_amount)` keeps the float's exact binary value (~50 digits)
         let ratio_in_value = if q0 {
-            ratio_amount / price
+            dec::py_f64_div(ratio_in_amount, price)
         } else {
-            ratio_amount * price
+            dec::py_f64_mul(ratio_in_amount, price)
         };
         let token1_value = value / (ratio_in_value + dec::one());
         let token0_value = value - token1_value;
@@ -1164,14 +1179,14 @@ impl UniLpMarket {
         let price = self.price()?;
         let current_tick = self.price_to_raw_tick(&price);
         let ratio = math::estimate_ratio(current_tick, lower_tick, upper_tick)?;
-        let ratio_amount = dec::from_f64_exact(
-            ratio * py_pow10_f64(self.pool.token1.decimal as i32 - self.pool.token0.decimal as i32),
-        );
+        // python `Decimal(ratio_in_amount)` keeps the float's exact binary value (~50 digits)
+        let ratio_amount =
+            ratio * py_pow10_f64(self.pool.token1.decimal as i32 - self.pool.token0.decimal as i32);
         let q0 = self.pool.is_token0_quote;
         let ratio_value = if q0 {
-            ratio_amount / price
+            dec::py_f64_div(ratio_amount, price)
         } else {
-            ratio_amount * price
+            dec::py_f64_mul(ratio_amount, price)
         };
         let token1_value = value / (ratio_value + dec::one());
         let token0_value = value - token1_value;
@@ -1202,15 +1217,31 @@ impl UniLpMarket {
                 v.to::<u128>()
             }
         };
+        // python passes `amount * 10**decimals` to get_liquidity_for_amount0/1 as a fractional
+        // Decimal, not whole wei: `mul_div` then rounds `amount * k` to 35 digits and `//` truncates
+        let (lo, hi) = if lower > upper { (upper, lower) } else { (lower, upper) };
+        let mul_floordiv = |amount: Dec, k: U512| -> U256 {
+            let p = dec::py_mul_int(amount, k);
+            let (_, m, e) = dec::to_parts(&p);
+            let d = U512::from(hi - lo);
+            let ten = U512::from(10u8);
+            let q = if e >= 0 {
+                U512::from(m) * ten.pow(U512::from(e)) / d
+            } else {
+                U512::from(m) / (d * ten.pow(U512::from(-e)))
+            };
+            U256::from(q)
+        };
         if current_tick <= info.lower_tick {
             let base_amount = value / price;
-            let wei = math::to_wei(&base_amount, self.pool.base_token.decimal);
-            let liq = to_u128(math::get_liquidity_for_amount0(lower, upper, wei));
+            let amount = base_amount * dec::from_u128(10u128.pow(self.pool.base_token.decimal));
+            let intermediate = (U512::from(lo) * U512::from(hi)) >> 96;
+            let liq = to_u128(mul_floordiv(amount, intermediate));
             let (a0, a1) = self.convert_pair(base_amount, d0());
             Ok((liq, a0, a1))
         } else if current_tick >= info.upper_tick {
-            let wei = math::to_wei(&value, self.pool.quote_token.decimal);
-            let liq = to_u128(math::get_liquidity_for_amount1(lower, upper, wei));
+            let amount = value * dec::from_u128(10u128.pow(self.pool.quote_token.decimal));
+            let liq = to_u128(mul_floordiv(amount, U512::from(1u8) << 96));
             let (a0, a1) = self.convert_pair(d0(), value);
             Ok((liq, a0, a1))
         } else {

@@ -116,7 +116,7 @@ Rules:
 - `multiprocessing.Process` / `Pool` work as before (e.g. the `__main__` block of
   `remix_dao_gamma.py`, `62_multiprocess.py`, `BacktestManager`). Each process builds its own
   engine objects.
-- Results match the old engine: every value matches to at least 1e-18 relative (see README).
+- Results match the old engine to the last digit: the engine does python's 35-digit decimal arithmetic (README, "Python's decimal arithmetic"; checked by `samples/strategy-example/experiments/engine_check.py`).
 - The `~/.demeter` feather cache is not used. Loading a year of minute CSVs takes ~0.7 s.
 
 ### Choosing quirk-compatible or corrected behaviour
@@ -161,7 +161,7 @@ pandas-specific tricks behave differently:
 | writes to market data | `market.data.loc[ts, "x"] = v` changed the data | same call only changes a pandas copy | `market.data["x"] = series`, `market.data = frame`, `strategy.add_column(...)` | assignments into the frame returned by pandas calls (`.loc[...] =`, `.iloc[...] =`) are not seen by the engine |
 | `market.positions` | `dict` | live `Mapping` view | `len`, `in`, iteration, `[pos].liquidity`, `.items()`, `.copy()` | `del positions[k]` and `positions.pop(k[, default])` remove the entry like the python dict does: its liquidity and fees are dropped, not returned to the broker. `pop` returns a detached `Position` copy. Other dict writes (`positions[k] = ...`, `clear`, `update`) are not supported. |
 | `strategy.account_status_df` in `finalize` | DataFrame | built lazily on first use | all DataFrame access | — |
-| Decimals returned by the engine | 35-digit python `Decimal` | same, rounded to 35 digits | — | internal math uses 38 digits; values can differ from the old engine in the last 1–2 digits (≤1e-30 relative) |
+| Decimals returned by the engine | 35-digit python `Decimal` | same value and representation (python's arithmetic, see README) | — | `account_status_df` / `market.data` cells can print extra trailing zeros (same value) |
 | `actuator.account_status`, `actuator.actions` | lists | list-like views | indexing, `len`, iteration | not `list` instances (`list(...)` if needed) |
 
 **Market subclasses** (like `UniLpMarketV2`) work when they add methods, or override methods that
@@ -455,5 +455,5 @@ python's 35-digit vs Rust's 38-digit decimals inside the strategy's own arithmet
 | Backtest much slower than expected | Built without `--release`; or a python strategy overrides `on_bar`/`after_bar` with heavy code, or uses custom python triggers (see 3.2). |
 | `RuntimeError: backtest is already running` | `actuator.run()` called from inside a strategy callback. |
 | `UserWarning: ... overrides update ...` | A market subclass overrides a method the engine calls natively; see 3.1. |
-| Results differ slightly from an old run | Check `actuator.legacy_quirks` (default `True` = same as the old engine). Otherwise differences are ≤1e-30 relative, from the precision difference. |
+| Results differ from an old run | Check `actuator.legacy_quirks` (default `True` = same as the old engine). Otherwise run `experiments/engine_check.py`: the engines must be byte-identical. |
 | pandas 3.x installed | `pip install "pandas>=2.2,<3"`. |

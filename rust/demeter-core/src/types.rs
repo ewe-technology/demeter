@@ -151,6 +151,10 @@ pub struct Position {
     pub pending_amount0: Dec,
     pub pending_amount1: Dec,
     pub liquidity: u128,
+    /// python holds this liquidity as a Decimal (after a partial `remove_liquidity`, whose int
+    /// argument `float_param_formatter` turns into a Decimal): its token amounts then round
+    /// `liquidity * 2**96 * delta` to 35 digits instead of keeping the int exact
+    pub liquidity_is_decimal: bool,
     pub lower_price: Dec,
     pub upper_price: Dec,
     pub init_price: Dec,
@@ -165,6 +169,7 @@ pub struct Position {
 #[derive(Clone, Copy, Debug)]
 pub struct OutOfRangeAmounts {
     pub liquidity: u128,
+    pub liquidity_is_decimal: bool,
     /// -1: price below the range (all token0), 1: price above the range (all token1)
     pub side: i8,
     pub amounts: (Dec, Dec),
