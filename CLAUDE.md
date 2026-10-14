@@ -173,6 +173,12 @@ Dino names versions `v6.1`, `v6.2`, ...; each is one experiment `EXP-NNN` (next 
     # Write backtest results to the main checkout's samples/strategy-example/result/ (gitignored), not inside a worktree:
     # removing a worktree deletes its result/ folder (round 4's raw CSVs were lost that way).
 
+    # Rust engine (rust/, Steven's port from maker-defense, 2026-10-14): same results, ~10x faster. Own venv, Rust >= 1.94:
+    uv venv -p 3.12 .venv-rs && uv pip install -p .venv-rs/bin/python maturin -r samples/strategy-example/requirements-lab.txt
+    cd rust && CARGO_TARGET_DIR=~/.cache/demeter-rs-target VIRTUAL_ENV=$PWD/../.venv-rs ../.venv-rs/bin/maturin develop --release
+    # first build ~4 min (polars), later ones incremental; the shared target dir lets a new worktree reuse it.
+    # rebuild after any change under rust/demeter-core or rust/demeter-py; rust/python/ edits apply at once.
+
 Run (from `samples/strategy-example`, `PYTHONPATH=../..`):
 
     python v6_validate.py <pool> <start> <end> opt:A,B 4     # experiment variants, OPT dict in v6_validate.py
@@ -183,6 +189,11 @@ Run (from `samples/strategy-example`, `PYTHONPATH=../..`):
     python experiments/judge.py dev|hold|holdbtc <tag> <prefix...>    # apply the pre-registered success rules to a run
     # results -> result/v6_validate/ (gitignored); daily equity CSV per variant
 
+    SPEC=v1 ../../.venv-rs/bin/python v6_validate.py <pool> <start> <end> opt:A,B 4   # same run on the Rust engine
+    # no PYTHONPATH: a path to the repo root imports the old python demeter/ instead (check: demeter.__file__ ends in
+    # rust/python/demeter/__init__.py). Same CLI, same files, byte-identical numbers (RUST-ENGINE-2026-10-14.md);
+    # full-history WBTC/USDC 499 s -> 40 s, a 2022 ETH year 97 s -> 8 s. Uniswap only (no aave / gmx / deribit / squeeth).
+
 ## Gotchas
 
 - `demeter/uniswap/core.py:167` casts ticks to `int` before `Decimal` (numpy int64 otherwise raises). Keep it.
@@ -192,6 +203,10 @@ Run (from `samples/strategy-example`, `PYTHONPATH=../..`):
   timestamp + net value of demeter's per-minute AccountStatus (`LEAN_STATUS`, default on; identical results, 2022 yearly run
   4.4 → 2.7 GB parent + worker). The machine has 51 GB and other sessions share it: at most ~6 full-history workers at once
   (three invocations of two workers were OOM-killed on 2026-10-06; Dino paused a 2 x 3-worker batch on 2026-10-07).
+- Rust engine: keep `actuator.legacy_quirks` at its default (`True`, python's quirks reproduced) or numbers stop matching
+  past runs. It has no `~/.demeter` cache (no `pickle EOFError`) and `LEAN_STATUS` does nothing there (account status
+  lives in Rust; full-history run ~3 GB per worker). Any change under `rust/` must keep the engines equal: rerun
+  `cargo test -p demeter-core` and a full-history pool on both engines, compare every result file byte for byte.
 - `git fetch` here only fetches `master` and `feat/dino-v6-opt` (narrow refspec in the local config); fetch any
   other branch by name.
 - Pushing needs the `dinohuang102` GitHub account (write access to `ewe-technology/demeter`): run `gh auth switch -u dinohuang102` before pushing (a 403 means the wrong account is active) and leave it active.

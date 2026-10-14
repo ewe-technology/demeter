@@ -332,12 +332,31 @@ pub fn sqrt_price_x96_to_base_unit_price(
     d1: u32,
     is_token0_quote: bool,
 ) -> Dec {
-    let sqrt_price = from_x96(sqrt_price_x96);
-    let pool_price = sqrt_price * sqrt_price * dec::py_pow10(d0 as i32 - d1 as i32);
-    if is_token0_quote {
-        dec::one() / pool_price
+    // helper.py at prec 35, step by step and exactly, so prices equal python's to the last digit
+    // (rounding at 38 digits once differs in the last digit on about half of all ticks):
+    //   sqrt = Decimal(x96) / Q96;  p = sqrt ** 2  (libmpdec squares at prec 38, then rounds to 35)
+    //   p = p * Decimal(10 ** (d0 - d1))  (a float for d0 < d1: its exact binary value)
+    //   price = 1 / p if token0 is the quote
+    const P: u32 = dec::PY_PREC;
+    if sqrt_price_x96.is_zero() {
+        return dec::zero();
+    }
+    let one = U512::from(1u8);
+    let (m, e) = dec::ratio_round(U512::from(sqrt_price_x96), one << 96, 0, P);
+    let (m, e) = dec::ratio_round(U512::from(m) * U512::from(m), one, 2 * e, 38);
+    let (m, e) = dec::ratio_round(U512::from(m), one, e, P);
+    let k = d0 as i32 - d1 as i32;
+    let (m, e) = if k >= 0 {
+        (m, e + k)
     } else {
-        pool_price
+        let bits = 10f64.powf(k as f64).to_bits();   // python's `10 ** k` is C pow(), as in dec::py_pow10
+        let (mant, shift) = ((bits & ((1 << 52) - 1)) | (1 << 52), 1075 - ((bits >> 52) & 0x7ff) as usize);
+        dec::ratio_round(U512::from(m) * U512::from(mant), one << shift, e, P)
+    };
+    if is_token0_quote {
+        dec::from_ratio(one, U512::from(m), -e, P)
+    } else {
+        dec::from_ratio(U512::from(m), one, e, P)
     }
 }
 
@@ -347,13 +366,37 @@ pub fn base_unit_price_to_sqrt_price_x96(
     d1: u32,
     is_token0_quote: bool,
 ) -> U256 {
-    let price = if is_token0_quote {
-        dec::one() / *price
+    // helper.py at prec 35, step by step and exactly (a 38-digit computation could land one unit
+    // below a tick's sqrt ratio, leaving ~1e-29 of a token in a position python sees as out of range):
+    //   price = 1 / price if token0 is the quote;  atomic = price / Decimal(10 ** (d0 - d1))
+    //   sqrt = atomic.sqrt();  x96 = int(sqrt * Q96)  (the product is rounded to 35 digits first)
+    const P: u32 = dec::PY_PREC;
+    let (neg, m, e) = dec::to_parts(price);
+    if neg || m == 0 {
+        return U256::ZERO;
+    }
+    let one = U512::from(1u8);
+    let (m, e) = if is_token0_quote {
+        dec::ratio_round(one, U512::from(m), -e, P)
     } else {
-        *price
+        (m, e)
     };
-    let atomic = price / dec::py_pow10(d0 as i32 - d1 as i32);
-    to_x96(&atomic.sqrt())
+    let k = d0 as i32 - d1 as i32;
+    let (m, e) = if k >= 0 {
+        dec::ratio_round(U512::from(m), U512::from(10u8).pow(U512::from(k)), e, P)
+    } else {
+        let bits = 10f64.powf(k as f64).to_bits();   // python's `10 ** k` is C pow(), as in dec::py_pow10
+        let (mant, shift) = ((bits & ((1 << 52) - 1)) | (1 << 52), 1075 - ((bits >> 52) & 0x7ff) as usize);
+        dec::ratio_round(U512::from(m) << shift, U512::from(mant), e, P)
+    };
+    let (m, e) = dec::sqrt_round(m, e, P);
+    let (m, e) = dec::ratio_round(U512::from(m) << 96, one, e, P);
+    let v = if e >= 0 {
+        U512::from(m) * U512::from(10u8).pow(U512::from(e))
+    } else {
+        U512::from(m) / U512::from(10u8).pow(U512::from(-e))
+    };
+    U256::from(v)
 }
 
 /// Convert a sqrt price (not x96) to a tick.
@@ -487,5 +530,33 @@ mod tests {
         assert_eq!(nearest_usable_tick(25, 10), 20); // 2.5 -> 2
         assert_eq!(nearest_usable_tick(-5, 10), 0);
         assert_eq!(nearest_usable_tick(887272, 60), 887220);
+    }
+
+    #[test]
+    fn tick_price_equals_python_last_digit() {
+        // python helper.tick_to_base_unit_price; a single 38-digit rounding got each one wrong in the last digit
+        for (tick, d0, d1, q0, py) in [
+            (40001, 8, 6, false, "5459.2690946025272552386090324769891"),
+            (180015, 6, 18, true, "15220.844726019017158707246858685917"),
+            (250000, 8, 18, false, "7.1914955436073249008050581274134523"),
+            (-215000, 18, 6, false, "460.40016915998201286688086055409133"),
+        ] {
+            let p = tick_to_base_unit_price(tick, d0, d1, q0).unwrap();
+            assert_eq!(dec::to_plain_string(&p), py, "tick {tick}");
+        }
+    }
+
+    #[test]
+    fn boundary_price_sqrt_equals_python() {
+        // python base_unit_price_to_sqrt_price_x96 of a tick's own price gives that tick's sqrt ratio here;
+        // 38-digit maths landed one unit lower at 201300, so a position ending there kept ~1e-29 USDC
+        for (tick, d0, d1, q0, price, py) in [
+            (201300, 6, 18, true, "1811.7120276473959931723748683800275", "1861379814583879847594565245307116"),
+            (64168, 8, 6, false, "61184.512171250791020430712322607670", "1959748472454936833636349183439"),
+        ] {
+            let p = dec::parse_lossy(price).unwrap();
+            assert_eq!(tick_to_base_unit_price(tick, d0, d1, q0).unwrap(), p);
+            assert_eq!(base_unit_price_to_sqrt_price_x96(&p, d0, d1, q0).to_string(), py, "tick {tick}");
+        }
     }
 }

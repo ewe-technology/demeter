@@ -272,6 +272,96 @@ pub fn round_sig(d: &Dec, digits: u32) -> Dec {
     build(q, exp, neg)
 }
 
+/// Significant digits of python's decimal context in helper.py (`getcontext().prec = 35`).
+pub const PY_PREC: u32 = 35;
+
+fn digits_u512(v: U512) -> i32 {
+    if v.is_zero() {
+        1
+    } else {
+        v.to_string().len() as i32
+    }
+}
+
+fn pow10_u512(n: u32) -> U512 {
+    U512::from(10u8).pow(U512::from(n))
+}
+
+/// `num / den × 10^exp` rounded half-even to `digits` (≤ 38) significant digits, computed
+/// exactly: the one correctly rounded result a python `Decimal` operation at that precision
+/// gives. Returns the mantissa and exponent. `num` must be > 0.
+pub fn ratio_round(num: U512, den: U512, exp: i32, digits: u32) -> (u128, i32) {
+    let lo = pow10_u512(digits - 1);
+    let hi = pow10_u512(digits);
+    // quotient num * 10^s / den, scaled so it has exactly `digits` digits
+    let mut s = digits as i32 - (digits_u512(num) - digits_u512(den));
+    loop {
+        let (n, d) = if s >= 0 {
+            (num * pow10_u512(s as u32), den)
+        } else {
+            (num, den * pow10_u512((-s) as u32))
+        };
+        let (mut q, r) = (n / d, n % d);
+        if q >= hi {
+            s -= 1;
+            continue;
+        }
+        if q < lo {
+            s += 1;
+            continue;
+        }
+        let twice = r << 1;
+        if twice > d || (twice == d && q.bit(0)) {
+            q += U512::from(1u8);
+        }
+        let mut e = exp - s;
+        if q == hi {
+            q /= U512::from(10u8);
+            e += 1;
+        }
+        return (q.to::<u128>(), e);
+    }
+}
+
+/// `sqrt(m × 10^exp)` rounded half-even to `digits` significant digits, exactly (python's
+/// `Decimal.sqrt`, which is correctly rounded). A square root of an integer never sits on a half.
+pub fn sqrt_round(m: u128, exp: i32, digits: u32) -> (u128, i32) {
+    let lo = pow10_u512(digits - 1);
+    let hi = pow10_u512(digits);
+    // floor(sqrt(m × 10^(exp + 2s))) has `digits` digits; exp + 2s must stay >= 0
+    let dm = digits_u512(U512::from(m));
+    let mut s = (2 * digits as i32 - dm - exp + 1).div_euclid(2).max((-exp + 1).div_euclid(2));
+    loop {
+        let n = U512::from(m) * pow10_u512((exp + 2 * s) as u32);
+        let mut q = n.root(2);
+        if q >= hi {
+            s -= 1;
+            // m < 10^39: a root with more than `digits` (<= 38) digits needs exp + 2s >= 2
+            debug_assert!(exp + 2 * s >= 0);
+            continue;
+        }
+        if q < lo {
+            s += 1;
+            continue;
+        }
+        if n > q * q + q {
+            q += U512::from(1u8);
+        }
+        let mut e = -s;
+        if q == hi {
+            q /= U512::from(10u8);
+            e += 1;
+        }
+        return (q.to::<u128>(), e);
+    }
+}
+
+/// `Dec` of a `ratio_round` result.
+pub fn from_ratio(num: U512, den: U512, exp: i32, digits: u32) -> Dec {
+    let (m, e) = ratio_round(num, den, exp, digits);
+    build(m, e, false)
+}
+
 /// Human friendly plain string (no exponent), used for CSV output and Display.
 pub fn to_plain_string(d: &Dec) -> String {
     if d.is_nan() || d.is_infinite() {

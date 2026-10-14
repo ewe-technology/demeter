@@ -69,6 +69,24 @@ and the columns of `account_status_df` / `market.data`. That is the precision py
 with (`getcontext().prec = 35`), so strategy code sees the same numbers as before. Internally the
 engine keeps 38 digits.
 
+The two price conversions are computed exactly the way python's helper.py rounds at 35 digits,
+step by step, with big-integer arithmetic (`dec::ratio_round`, `dec::sqrt_round`; added on
+`feat/dino-v6-opt` 2026-10-14):
+
+- tick → price (`math::sqrt_price_x96_to_base_unit_price`: `market.data` `price` / `close`,
+  `tick_to_price`). A single 38-digit computation rounded to 35 differed from python in the last
+  digit on about half of all ticks. A strategy that truncates amounts to token units
+  (`add_liquidity_by_tick`) turned that into ~1e-10 relative drift (defense v6, full history on
+  WBTC/USDC `0x99ac`).
+- price → sqrt price x96 (`math::base_unit_price_to_sqrt_price_x96`: every position amount and
+  fee). At a tick's own price the 38-digit result could be one unit below the tick's sqrt ratio,
+  so a position ending at that tick kept ~1e-29 of the quote token where python returns 0.
+
+Checked: 2.1 M ticks and 720 k prices (tick boundaries and random 35-digit prices; six decimal
+pairs, both quote sides) equal python, and defense v6's full-history runs on seven pools write
+byte-identical result files on both engines
+(`samples/strategy-example/experiments/RUST-ENGINE-2026-10-14.md`).
+
 ## Performance
 
 `golden/bench_gamma.py` runs one gamma configuration (triangle shape, ±5%, hourly rescale, ETH/USDC
