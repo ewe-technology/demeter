@@ -524,11 +524,12 @@ def attribution(name: str, initial: float) -> pd.DataFrame:
     act = pd.read_csv(f"{RESULT_DIR}/actions_{name}.csv", parse_dates=["t"])
     hours = set(act["t"].dt.floor("h"))
     is_act = pd.Series(nav.index.isin(list(hours)), index=nav.index)
-    builds = act.loc[act["action"] == "AddLiquidityAction", "t"].dt.floor("h").drop_duplicates()
+    # a segment starts at every action hour (a build, a withdrawal to USDC, a recentre): the coins in the bands
+    # right after it are what "held still" means until the next one
     seg = pd.Series(np.nan, index=nav.index)
-    seg.loc[seg.index.isin(list(builds))] = range(len(builds))
+    seg.loc[is_act] = range(int(is_act.sum()))
     seg = seg.ffill()
-    hold = bp.groupby(seg).transform("first").fillna(0.0)  # coins at the build hour, after the build
+    hold = bp.groupby(seg).transform("first").fillna(0.0)
     dp = p.diff().fillna(0.0)
     lp_x = bp * p + qp
     price = (hold.shift().fillna(0.0) + bw.shift().fillna(0.0)) * dp
