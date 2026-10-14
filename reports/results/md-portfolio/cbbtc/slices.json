@@ -1,0 +1,32 @@
+{
+ "yearly h00":{
+  "multiple_end":1.0082647892,
+  "lp_hours":8424,
+  "entries":15
+ },
+ "yearly h08":{
+  "multiple_end":1.0090317937,
+  "lp_hours":8328,
+  "entries":14
+ },
+ "yearly h16":{
+  "multiple_end":1.0081784797,
+  "lp_hours":8424,
+  "entries":14
+ },
+ "3 gwei h00":{
+  "multiple_end":1.0093053353,
+  "lp_hours":8424,
+  "entries":15
+ },
+ "3 gwei h08":{
+  "multiple_end":1.0100731312,
+  "lp_hours":8328,
+  "entries":14
+ },
+ "3 gwei h16":{
+  "multiple_end":1.0092189366,
+  "lp_hours":8424,
+  "entries":14
+ }
+}
