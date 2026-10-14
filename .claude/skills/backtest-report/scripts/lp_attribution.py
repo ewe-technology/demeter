@@ -139,9 +139,14 @@ def run_years(run, years, files, costs, bench):
     for y in years:
         f = files.get(y, {"start": f"{y}-01-01", "from": None})
         path = f"{run['dir']}/nav_{run['prefix']}_{f['start']}.csv"
-        if not os.path.exists(path):
+        hourly = f"{run['dir']}/nav_hourly/nav_{run['prefix']}_{f['start']}.parquet"  # archived minute files
+        if os.path.exists(path):
+            nav_df = pd.read_csv(path, index_col=0, parse_dates=True)
+        elif os.path.exists(hourly):
+            nav_df, path = pd.read_parquet(hourly, columns=["net", "price"]), hourly
+            print(f"  {run['name']} {y}: hourly archive {hourly}")
+        else:
             continue
-        nav_df = pd.read_csv(path, index_col=0, parse_dates=True)
         if f.get("from") is None and nav_df.index[-1] < pd.Timestamp(f"{y}-12-30") and y != years[-1]:
             print(f"  {run['name']} {y}: {path} ends {nav_df.index[-1].date()}, skipped (overwritten by a test run?)")
             continue

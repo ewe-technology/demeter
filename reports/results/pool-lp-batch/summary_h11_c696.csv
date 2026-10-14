@@ -1,0 +1,3 @@
+version,n,median_excess,median_matched,w_avg,positive,vs,verdict,vs_5050,vs_base
+g_down,10,0.06390930903786057,0.19833237069901744,0.7570067510781796,6.0,g_spot100,fail: >= 75% > 0; both halves median > 0,,
+g_spot100,10,,0.11921948540506633,0.6316632981510593,,(control),,0.232676991550404,0.22180496999330773

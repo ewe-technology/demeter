@@ -1,0 +1,5 @@
+version,n,median_excess,median_matched,w_avg,positive,verdict
+w20,10,-0.029245495688469764,-0.013228181047465482,0.45107254475256814,4,fail: median > 0; >= 75% > 0; both halves median > 0; rally median >= -10%
+sd_33_10,10,-0.12269571639653805,-0.10296813699329299,0.3383413890082595,0,fail: median > 0; >= 75% > 0; both halves median > 0; rally median >= -10%
+sd_25_10,10,-0.06827446679781837,-0.06533762770169649,0.4052904196648462,3,fail: median > 0; >= 75% > 0; both halves median > 0; rally median >= -10%
+sd_50_10,10,-0.02770366632862252,-0.004025108032402691,0.3460064030906165,4,fail: median > 0; >= 75% > 0; both halves median > 0

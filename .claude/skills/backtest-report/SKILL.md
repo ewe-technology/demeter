@@ -54,6 +54,7 @@ with 4 it starts swapping and every run gets about 7 times slower.
 |---|---|
 | single pool, windows (H2–H4b) | `pool-lp-windows/nav_<ver>_<start>.csv` (minute: net, price), `events_<ver>_<start>.csv` (t, kind), `windows_<set>.csv` |
 | single pool, batch (H5–H16) | `pool-lp-batch/nav_<pool>_<ver>_<gate>_<start>.csv`, `events_*`, `summary_<set>.csv` |
+| archive of the two above (runs to 2026-10-13) | minute `nav_*.csv` deleted on the host 2026-10-14; hourly copies in `<dir>/nav_hourly/nav_*.parquet` (net, price = last of the hour; net_min, net_first), checked against the minute files in `nav_hourly_manifest.csv`. `lp_attribution.py` falls back to them. The small files (`events_*`, `windows_*`, `summary_*`, `gate_*`) are also in the repo under `reports/results/` |
 | multi pool, spot gate | `spot-gate/`, `tri-gate/` (local copies too); hourly prices in `spot-gate/prices_2026-09-30.csv` |
 | multi pool, yield layer | `yield-layer/sleeve_<name>[_to2026].csv` + `events_*`, `cost-matrix/`, `holdout-extra/` |
 
