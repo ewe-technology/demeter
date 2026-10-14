@@ -109,3 +109,41 @@ Reading:
 - The pre-registration did not say whether A2 must pass on both chains. "On the pool's own chain" is read as a verdict
   per chain. B1 was run on mainnet only.
 - A4 var(SR) is taken over the six hours and the two neighbours of each version.
+
+## Final scorecard (2026-10-14, Dino's scope; supersedes the verdict above)
+
+Dino's changes after reviewing the slides: keep only generic methods; drop the cost and gas stress (old A2) and the
+two v1/v2/v3-specific checks (B1, B2); compute every remaining method from the method-1 Demeter backtests on both
+pools; drop DSR and MinTRL from significance. Five methods, renumbered: 1 real-data backtest (old A1), 2 parameter
+plateau (A3), 3 significance (A4 without DSR / MinTRL, bar PSR >= 0.95), 4 forward kill line (A5), 5 Monte Carlo
+(A6, now a stationary block bootstrap of the method-1 daily returns, mean block 90 days, 10,000 one-year paths,
+instead of the simulator). Script `scorecard_final_v123.py`, output `result/validate_v123/scorecard_final.json`.
+All figures exclude gas and the spec's 25 % success fee. UTC 0.
+
+**Reproduction of Maker's figures first.** Maker's scripts rerun unchanged on their default yearly windows (1/2 start,
+$100k each year; only v2's `_compound` set to False, as in Maker's V3.md 6.1 table): all twelve yearly returns match
+within 0.1 pt (v1 +11.8 / +40.4 / +32.3 / +16.3 %; v2 +20.7 / +21.9 / +19.6 / +22.6 %; v3 +20.7 / +21.9 / +23.2 /
++16.8 %), and so do fees, rebalance counts and minute drawdowns. Raw runs: `result/validate_v123/yearly/`.
+
+| method (mainnet / Base) | v1 | v2 | v3 |
+|---|---|---|---|
+| 1 terminal $k | 196.8 / 155.0 | 181.1 / 139.4 | 224.9 / 156.6 |
+| 1 CAGR / max DD | 13.6 % −29.4 % / 17.3 % −34.7 % | 11.8 % −29.4 % / 12.9 % −37.5 % | 16.5 % −21.9 % / 17.7 % −25.8 % |
+| 2 plateau (mainnet), profit one step away | −10.5 / +7.0 % | −6.6 / +6.5 % | +4.0 / −2.5 % |
+| 3 annual Sharpe | 0.60 / 0.58 | 0.58 / 0.48 | 0.78 / 0.74 |
+| 3 PSR (bar 0.95) | 0.92 / 0.83 | 0.91 / 0.79 | **0.96** / 0.89 |
+| 3 bootstrap 1 − p | 0.93 / 0.84 | 0.91 / 0.78 | 0.96 / 0.87 |
+| 4 kill line, 90-day return | −12.0 % / −14.3 % | −12.0 % / −14.9 % | −10.5 % / −12.2 % |
+| 5 one-year max DD median / 5th pct | −15 −28 % / −19 −33 % | −15 −28 % / −19 −36 % | −14 −23 % / −17 −28 % |
+| 5 one-year loss probability | 21 % / 23 % | 23 % / 29 % | 19 % / 21 % |
+| verdict mainnet / Base | pilot / pilot | pilot / pilot | **deployable\*** / pilot |
+
+Verdict ladder: method 1 fails → not for deployment; 1 and 2 pass → pilot; 3 also passes → deployable. \*Without gas:
+mainnet gas for v3's 164 rebuilds is about $110k on $100k over 5.3 years (estimate, `v6_validate.py:126` gas units,
+not measured on chain), so the mainnet verdict needs a measured gas cost before any deployment.
+
+Formulas: r_t = ln(V_t / V_t−1) on the daily net value; SR = mean(r) / std(r), annual × √365;
+D = √(1 − skew·SR + (kurt − 1)/4·SR²); PSR = Φ(SR·√(T − 1) / D); 1 − p from 5,000 stationary-bootstrap means
+(mean block 20 d), p = share(boot − mean ≥ mean); kill line = exp(P5 of 90-day sums of bootstrapped r) − 1 over
+10,000 draws; Monte Carlo path E_t = exp(Σ r*), t = 1..365, max DD = min(E_t / max_(s≤t) E_s − 1),
+loss probability = share(E_365 < 1).
