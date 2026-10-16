@@ -8,9 +8,10 @@ and the move / gate switch / gas counts.
   v1, v2, v3             maker-defense ETH/USDC, $100k (and $50k, the half in a portfolio)
   BTC 現貨 g_down + vN   0.5 x BTC half + 0.5 x vN ($50k), never rebalanced
   WBTC/cbBTC g_down + vN the same with the cbBTC BTC half
-Gas cases: "yearly" (GAS_GWEI 40 / 30 / 15 / 3 for 2022 / 2023 / 2024 / 2025+) and "flat3" (3 gwei every year).
+Gas cases: "yearly" (GAS_GWEI 40 / 30 / 15 / 3 for 2022 / 2023 / 2024 / 2025+), "flat3" (3 gwei every year) and
+"nogas" (0 gwei: pool fee and price impact only, asked for on 2026-10-16).
 
-Inputs: md_portfolio.py, md_portfolio_gas.py and md_portfolio_cbbtc.py's results (run those first).
+Inputs: md_portfolio.py, md_portfolio_gas.py (--gwei 3 and --gwei 0) and md_portfolio_cbbtc.py's results (run those first).
 Run from samples/strategy-example on the strategy host:
   PYTHONPATH=../.. python md_portfolio_report.py
 """
@@ -28,8 +29,8 @@ import yield_layer as yl
 from spot_btc_eth_gate import load_prices, stats
 
 OUT = f"{mp.RESULT_DIR}/report.json"
-GWEI = {"yearly": lambda y: mg.YEARLY.get(y, mg.YEARLY[2025]), "flat3": lambda y: 3.0}
-BTC_DIR = {"yearly": batch.RESULT_DIR, "flat3": mg.btc_dir(3)}
+GWEI = {"yearly": lambda y: mg.YEARLY.get(y, mg.YEARLY[2025]), "flat3": lambda y: 3.0, "nogas": lambda y: 0.0}
+BTC_DIR = {"yearly": batch.RESULT_DIR, "flat3": mg.btc_dir(3), "nogas": mg.btc_dir(0)}
 
 
 def years() -> list[str]:
@@ -69,6 +70,8 @@ def btc_counts(case: str) -> dict:
             out[y]["moves"] += int((e["kind"] == "recentre").sum())
             out[y]["switches"] += int(e["kind"].isin(["on", "off"]).sum())
         flat_gas = float(runs.loc[c.name, "gas"])
+        if case == "nogas":
+            continue
         if case == "flat3":
             gas += flat_gas * c.initial
         else:  # costs are subtracted afterwards in USD, so the end gap of the two nav files is the gas gap
@@ -114,6 +117,7 @@ def md_counts(version: str, book: int, eth_usd: pd.Series) -> dict:
 def main():
     base = pd.read_csv(f"{mp.RESULT_DIR}/navs.csv", index_col=0, parse_dates=True)
     flat = pd.read_csv(f"{mg.OUT}/navs_gwei3.csv", index_col=0, parse_dates=True)
+    nogas = pd.read_csv(f"{mg.OUT}/navs_gwei0.csv", index_col=0, parse_dates=True)
     idx = base.index
     eth_usd = batch.eth_daily()
     level, events = yl.load_sleeve("cbbtc_lp0.005", yl.HOLDOUT_TAG)
@@ -122,7 +126,7 @@ def main():
     btc_px = prices["btc"].reindex(idx).ffill()
     h45 = pd.read_csv(mp.H45_NAV, index_col=0, parse_dates=True).reindex(idx)
     report = {"years": years(), "period": [mp.LO, "2026-08-31"], "cases": {}, "counts": {}}
-    for case, navs in {"yearly": base, "flat3": flat}.items():
+    for case, navs in {"yearly": base, "flat3": flat, "nogas": nogas}.items():
         btc = mg.btc_half(BTC_DIR[case], idx)
         btc_cb, slices = mc.btc_half_cb(BTC_DIR[case], idx, GWEI[case], eth_usd, level, events)
         books, attr = {"btc": btc, "btccb": btc_cb}, {"btccb": split({"btc": btc, "cb": btc_cb - btc})}
@@ -146,7 +150,7 @@ def main():
         if case == "yearly":
             books["cg"], books["cgd"] = h45["C+g"], h45["C+g+def"]
         else:
-            books["cg"], books["cgd"] = flat["C+g (H45)"], flat["C+g+def (H45)"]
+            books["cg"], books["cgd"] = navs["C+g (H45)"], navs["C+g+def (H45)"]
         for k, s in books.items():
             assert not s.isna().any(), (case, k)
             for y, a in attr.get(k, {}).items():
