@@ -43,9 +43,12 @@ REF = "5cec767"
 SCRIPT = "gamma_maker_defense_btceth_v1.py"
 END = (2026, 9, 17)   # last day of minute data for both pools
 DATA = {"0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0": MAIN / "samples/holdout-data/0x4585fe77225b41b697c938b018e2ac67ac5a20c0",
-        "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": MAIN / "samples/real-data/0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"}
+        "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": MAIN / "samples/real-data/0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
+        "0x2f5e87C9312fa29aed5C179E456625D79015299c": MAIN / "samples/holdout-data/0x2f5e87c9312fa29aed5c179e456625d79015299c"}
 SEGMENTS = {"is": ((2021, 11, 2), (2024, 12, 31)), "oos": ((2025, 1, 1), END), "smoke": ((2025, 3, 1), (2025, 3, 10)),
-            "y2023": ((2023, 1, 2), (2023, 12, 31)), "y2025": ((2025, 1, 2), (2025, 12, 31))}  # Maker's check years
+            "y2023": ((2023, 1, 2), (2023, 12, 31)), "y2025": ((2025, 1, 2), (2025, 12, 31)),  # Maker's check years
+            "arb": ((2023, 1, 1), (2026, 1, 13)),   # EXP-182: Arbitrum 0x2f5e, all its minute data
+            "arbsmoke": ((2024, 3, 1), (2024, 3, 10)), "mainsmoke": ((2024, 3, 1), (2024, 3, 10))}
 
 # ---- variants: name -> (element of v2, what it becomes, [(pattern, replacement, expected count)]) -------------------
 STRONG_LINE = '    return pd.DataFrame({"G": g, "R": r, "R_ema": r_ema, "strong": r >= r_ema, "F": fractions})\n'
@@ -304,6 +307,26 @@ VARIANTS.update({
     "rlow25_newlow_rvol": ("added: rlow25_newlow + rvol", "new-low-release BTC lock and rvol", RLOCK(rvol=True, newlow=True)),
 })
 
+# ---- EXP-182 (written 2026-10-19 before any of them ran; Dino chose option 1: v2's own elements may change too): stacks
+# of the components that held out of sample in EXP-178 / 179 (keep50, f2low, rvol), the ETH-kept share pushed further
+# (spec 6.1 tested 0 / 25 / 50%), on `0x4585` IS + OOS and on Arbitrum WBTC/WETH 0.05% `0x2f5e` (never used in this search).
+def KEEP(x: str) -> list:
+    return [('ETH_KEEP = Decimal("0.25")\n', f'ETH_KEEP = Decimal("{x}")\n', 1)]
+
+
+F2LOW, RVOL = VARIANTS["f2low"][2], VARIANTS["rvol"][2]
+VARIANTS.update({
+    "k50_rvol": ("ETH kept 50% + rvol", "keep50 and the rvol filter", KEEP("0.5") + RVOL),
+    "k50_f2low": ("ETH kept 50% + F second-lowest", "keep50 and f2low", KEEP("0.5") + F2LOW),
+    "k50_f2low_rvol": ("ETH kept 50% + F second-lowest + rvol", "keep50, f2low and rvol", KEEP("0.5") + F2LOW + RVOL),
+    "keep75": ("ETH kept outside the LP while strong", "75% of F instead of 25%", KEEP("0.75")),
+    "k75_rvol": ("ETH kept 75% + rvol", "keep75 and rvol", KEEP("0.75") + RVOL),
+    "k75_f2low_rvol": ("ETH kept 75% + F second-lowest + rvol", "keep75, f2low and rvol", KEEP("0.75") + F2LOW + RVOL),
+    "keep100": ("ETH kept outside the LP while strong", "100% of F (no LP while ETH is strong; boundary case)", KEEP("1")),
+})
+ARB = "0x2f5e87C9312fa29aed5C179E456625D79015299c"
+MAKER_POOL = '    contract_address, fee, chain_name = "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0", 0.05, ChainType.ethereum.name  # wbtc/weth\n'
+
 # Logging only (no change in behaviour): write the per-minute net value (ETH, incl. collected rewards in the wallet) as
 # daily closes plus minute-level drawdowns, and the spec metrics, to <folder>/v2goal_<mode>.json
 MET_LINE = '    metrics["lp_avg_share"] = strat.lp_share_sum / strat.lp_share_days if strat.lp_share_days else ZERO\n'
@@ -335,6 +358,8 @@ def patch(text: str, seg: str, variant: str) -> str:
     assert n == 1
     text = sub(new, "if __name__ == \"__main__\":\n    _self_check()\n",
                "if __name__ == \"__main__\":\n    pass  # _self_check() skipped: it asserts the default parameters\n", 1)
+    if seg.startswith("arb"):   # EXP-182: Arbitrum WBTC/WETH 0.05% (same token order and spacing as 0x4585)
+        text = sub(text, MAKER_POOL, MAKER_POOL.replace("0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0", ARB), 1)
     for pattern, repl, n_expected in VARIANTS[variant][2]:
         text = sub(text, pattern, repl, n_expected)
     return sub(text, MET_LINE, MET_MORE, 1)
