@@ -82,6 +82,74 @@ def FRAME_EMA_S(span: int) -> tuple:
 SHARE_ON_EMA_S = ('    share = SHARE_ABOVE_EMA if row["close"] > row["ema"] else SHARE_BELOW_EMA',
                   '    share = SHARE_ABOVE_EMA if row["close"] > row["ema_s"] else SHARE_BELOW_EMA', 1)
 
+STRONG = '        _row = daily_row_for(self.daily_ema, {ts})[1]\n        strong = _row["close"] > _row["ema"]  # ETH strong: R > EMA100(R)\n'
+SHAPE_INIT = "            shape, upper_ratio, lower_ratio, _utils.params.tick_spacing, half_gap, _utils.lp_market.pool_info.is_token0_quote)\n"
+# EXP-177 hold25 (ETH-cbBTC spec 2.5): while ETH is strong the LP gets F x 75% and F x 25% stays in ETH outside the LP;
+# a range-exit rebuild keeps the LP size it is given and the ETH already held; the follow check also tests the held ETH
+HOLD25 = [
+    ("        self.reserve_quote = ZERO        # quote parked",
+     "        self.reserve_base = ZERO         # v3_goal hold25: ETH held outside the bands\n"
+     "        self.reserve_quote = ZERO        # quote parked", 1),
+    ("        self.deployed_at_build = fraction\n"
+     "        self.reserve_quote = (ONE - fraction) * (base * price + quote)\n"
+     "        if share is None:  # sgeo, only reachable with fraction 1 (constructor check)\n"
+     "            return self.calculate_swap_amount(current_tick, lower_boundary, upper_boundary, base, quote)\n"
+     "        # bands get share x F of total value in base and (1 - share) x F in quote; the reserve stays quote\n"
+     "        return swap_to_value_share(base, quote, price, share * fraction)\n",
+     STRONG.format(ts="timestamp") +
+     "        total = base * price + quote\n"
+     "        if self.build_fraction is not None:  # range exit: LP size as given, held ETH unchanged\n"
+     "            lp, hold = fraction, min(self.reserve_base * price, total * (ONE - fraction))\n"
+     "        else:\n"
+     '            lp = fraction * Decimal("0.75") if strong else fraction\n'
+     "            hold = (fraction - lp) * total\n"
+     "        self.reserve_base = hold / price\n"
+     "        self.deployed_at_build = lp\n"
+     "        self.reserve_quote = total - lp * total - hold\n"
+     "        return swap_to_value_share(base, quote, price, (share * lp * total + hold) / total)\n", 1),
+    ("self.band_amounts(base, quote_for_bands, config[2])", "self.band_amounts(base - self.reserve_base, quote_for_bands, config[2])", 1),
+    ("self.band_amounts(final_base, quote_for_bands, config[2])",
+     "self.band_amounts(final_base - self.reserve_base, quote_for_bands, config[2])", 1),
+    ("        target = target_fraction_for(self.daily_ema, row_data.timestamp)\n"
+     "        due = (abs(target - current) >= FOLLOW_THRESHOLD\n",
+     "        target_f = target_fraction_for(self.daily_ema, row_data.timestamp)\n" + STRONG.format(ts="row_data.timestamp") +
+     '        target = target_f * Decimal("0.75") if strong else target_f\n'
+     "        _lpv = lp_market.get_market_balance().liquidity_value if len(lp_market.positions) > 0 else ZERO\n"
+     "        _fb = lp_market.broker.get_token_balance(self.gp.base_token) - self.total_base_fee\n"
+     "        _fq = lp_market.broker.get_token_balance(self.gp.quote_token) - self.held_quote_fee\n"
+     "        held = _fb * price / (_lpv + _fb * price + _fq)\n"
+     "        due = (abs(target - current) >= FOLLOW_THRESHOLD or abs(target_f - target - held) >= FOLLOW_THRESHOLD\n", 1),
+]
+# EXP-177 width10s (ETH-cbBTC spec 2.2): the real ladder is +-10% while ETH is strong, +-20% while weak, chosen at each
+# (re)build; a strength flip alone does not rebuild
+WIDTH10S = [
+    (SHAPE_INIT, SHAPE_INIT +
+     "        self.shape_wide = self.shape_config  # v3_goal width10s\n"
+     "        self.shape_narrow = shape_config_for(shape, upper_ratio / 2, lower_ratio / 2, _utils.params.tick_spacing, half_gap,\n"
+     "                                             _utils.lp_market.pool_info.is_token0_quote)\n", 1),
+    ("    def initialize(self):\n",
+     "    def shape_for(self, timestamp):\n" + STRONG.format(ts="timestamp") +
+     "        return self.shape_narrow if strong else self.shape_wide\n\n"
+     "    def initialize(self):\n", 1),
+    ("\n            lowest, highest = self.shape_config[0][0], self.shape_config[-1][1]\n",
+     "\n            self.shape_config = self.shape_for(row_data.timestamp)\n"
+     "            lowest, highest = self.shape_config[0][0], self.shape_config[-1][1]\n", 1),
+    ("\n        lowest, highest = self.shape_config[0][0], self.shape_config[-1][1]\n",
+     "\n        self.shape_config = self.shape_for(row_data.timestamp)\n"
+     "        lowest, highest = self.shape_config[0][0], self.shape_config[-1][1]\n", 1),
+]
+# EXP-177 uniform1 (ETH-cbBTC spec 2.2): one uniform band from base price x 0.80 to x 1.20; the pre-placement swap goes
+# to that band's own ETH value share at its centre, (1 - 1/sqrt 1.2) / ((1 - 1/sqrt 1.2) + (1 - sqrt 0.8)) = 0.4522
+UNIFORM1 = [
+    (SHAPE_INIT, SHAPE_INIT +
+     "        _ts, _up, _dn = _utils.params.tick_spacing, math.log(1.2) / math.log(1.0001), math.log(0.8) / math.log(1.0001)\n"
+     "        _lo, _hi = (-_up, -_dn) if _utils.lp_market.pool_info.is_token0_quote else (_dn, _up)\n"
+     "        self.shape_config = [[round(_lo / _ts) * _ts, round(_hi / _ts) * _ts, ONE]]  # v3_goal uniform1\n", 1),
+    ("        share = self.resolve_share(timestamp)\n",
+     "        share = self.resolve_share(timestamp)\n"
+     '        share = Decimal("0.4522")  # v3_goal uniform1: the band\'s own ETH share\n', 1),
+]
+
 VARIANTS: dict[str, tuple[str, str, list]] = {
     "v3": ("-", "v3 unchanged", []),
     # signal 1: EMA exit
@@ -252,6 +320,23 @@ VARIANTS: dict[str, tuple[str, str, list]] = {
     "share30": ("6 real ETH share", "fixed 30% (no EMA100 switch)", [(SHARE, 'SHARE_ABOVE_EMA, SHARE_BELOW_EMA = Decimal("0.3"), Decimal("0.3")', 1)]),
     "divon125": ("10 divergence trigger", "ON at +12.5% (OFF +6.25%) instead of +40% / +20%", [(DIV, "DIVERGENCE_ON, DIVERGENCE_OFF = 0.125, 0.0625", 1)]),
     "divon30b": ("10 divergence trigger", "ON at +30% (OFF +20%) instead of +40%", [(DIV, "DIVERGENCE_ON, DIVERGENCE_OFF = 0.30, 0.20", 1)]),
+    # ---- EXP-177 (QUAN-1165, written 2026-10-19 before any run): elements of Isao's ETH-cbBTC specs (MGL v2 and
+    # "WB + ETH-strong 25%", same signal logic) that v3 lacks; BTC pool. Strong = R > EMA100(R) with R = ETHBTC, which on
+    # 0x4585 is v3's own close > EMA100 test.
+    "sigG": ("F engine price", "virtual accounts / F on G = sqrt(ETHUSDT x BTCUSDT) instead of ETHBTC "
+             "(share switch and divergence stay on ETHBTC)",
+             [("    return daily_ema_frame(close)\n",
+               "    frame = daily_ema_frame(close)\n"
+               '    g = pd.read_csv(Path(__file__).with_name("binance_g_ext.csv"), parse_dates=["date"]).set_index("date")["close"]\n'
+               "    g = g.loc[:pd.Timestamp(ded)]\n"
+               "    assert g.index[0] == close.index[0] and g.index[-1] == close.index[-1], (g.index[0], close.index[0])\n"
+               '    frame["F"] = daily_ema_frame(g)["F"].to_numpy()  # v3_goal EXP-177: F from G\n'
+               '    frame["Fp"] = frame["F"].where(frame["diverged"] == 0, 0.0)\n'
+               "    return frame\n", 1)]),
+    "hold25": ("real allocation while ETH strong", "ETH strong: LP F x 75% + F x 25% held as ETH outside the LP "
+               "(follow also rebuilds when the held ETH is >= 12.5% off its target)", HOLD25),
+    "width10s": ("real LP width", "+-10% while ETH strong, +-20% while weak (judged at each rebuild)", WIDTH10S),
+    "uniform1": ("real LP shape", "one uniform band over +-20% (spec LP), swapped to the band's own ETH share 45.2%", UNIFORM1),
 }
 # uniform / gaussian (batch 1) cannot run: equal-price bands need a shape with zero centre weight (ValueError in v3)
 INFEASIBLE = {"uniform", "gaussian"}
@@ -322,6 +407,21 @@ def binance_files(dst: Path):
         out.rename_axis("date").reset_index().assign(date=lambda f: f["date"].dt.strftime("%Y-%m-%d")).to_csv(dst / name, index=False)
 
 
+def g_file(dst: Path):
+    """EXP-177: G = sqrt(ETHUSDT x BTCUSDT) daily closes (ETH-cbBTC spec section 2), from Maker's two files (2017-08-17 on)
+    extended to END from samples/binance_daily_closes.csv like binance_files."""
+    long = pd.read_csv(MAIN / "samples/binance_daily_closes.csv", parse_dates=["date"]).set_index("date")
+    end = pd.Timestamp(*END)
+    legs = []
+    for src, col in (("binance_ethusdt_1d.csv", "ETHUSDT"), ("binance_btcusdt_1d.csv", "BTCUSDT")):
+        s = pd.read_csv(dst / src, parse_dates=["date"]).set_index("date")["close"]
+        legs.append(pd.concat([s, long[col].loc[s.index[-1] + pd.Timedelta(days=1):end]]))
+    g = (legs[0] * legs[1]).pow(0.5).dropna().rename("close")
+    assert g.index[0] == pd.Timestamp(2017, 8, 17) and g.index[-1] == end
+    assert (g.index[1:] - g.index[:-1]).max() == pd.Timedelta(days=1)
+    g.rename_axis("date").reset_index().assign(date=lambda f: f["date"].dt.strftime("%Y-%m-%d")).to_csv(dst / "binance_g_ext.csv", index=False)
+
+
 def source() -> Path:
     src = WORK / "_src"
     if not src.exists():
@@ -329,6 +429,8 @@ def source() -> Path:
                               check=True, capture_output=True).stdout
         tarfile.open(fileobj=io.BytesIO(blob)).extractall(src)
         binance_files(src / "samples/strategy-example")
+    if not (src / "samples/strategy-example/binance_g_ext.csv").exists():
+        g_file(src / "samples/strategy-example")
     return src
 
 
