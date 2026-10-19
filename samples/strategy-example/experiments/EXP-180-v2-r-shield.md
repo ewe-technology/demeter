@@ -1,7 +1,7 @@
 # EXP-180: ETH/BTC shield added to ETH-cbBTC MGL v2 (v2 untouched), significant-gain bar, `0x4585`
 
 - Jira: QUAN-1174 (subtask of QUAN-1107)
-- Status: pre-registered
+- Status: fail (0 of 24 added layers significant in-sample; best `rlow25_rvol` CAGR +1.66 pts, max DD 6.0 pts shallower)
 - Pre-registration commit: ______ · Result commit: ______
 
 Goal (Dino, 2026-10-19): "我要你繼續找因子新增到v2優化v2，報酬跟回撤要有顯著的增進" — keep adding elements to v2 (v2's
@@ -113,6 +113,25 @@ The BTC lock with a guard against trending declines, and stacked with `rvol`:
 | `rlow25_e100` | rlow25 held until R > EMA100(R) |
 | `rlow25_lp` | rlow25, the LP share is also held as ETH while locked |
 | `rlow25_rvol`, `rlow25_conf_rvol`, `rlow25_newlow_rvol` | with the EXP-179 `rvol` filter |
+
+Batch 5 IS:
+
+| variant | IS ETH x / CAGR / max DD / Calmar | significant |
+|---|---|---|
+| `rlow25_rvol` | 4.338 / 58.99% / −20.4% / 2.892 | no (CAGR +1.66 < +2; DD 6.0 pts shallower) |
+| `rlow25_lp` | 4.301 / 58.56% / −20.7% / 2.828 | no |
+| `rlow25_e100` | 4.269 / 58.19% / −20.4% / 2.854 | no (identical to `rlow25`) |
+| `rlow20` | 4.017 / 55.17% / −17.9% / 3.076 | no |
+| `rlow25_conf_rvol` | 4.093 / 56.09% / −26.1% / 2.150 | no |
+| `rlow25_conf` | 4.032 / 55.35% / −26.4% / 2.095 | no |
+| `rlow25_newlow_rvol` | 4.006 / 55.03% / −23.0% / 2.388 | no |
+| `rlow25_newlow` | 3.974 / 54.64% / −22.9% / 2.389 | no |
+
+Verdict: **fail** on the pre-registered significant bar — 24 added layers in three batches, none reaches CAGR +2 pts
+with DD 3 pts shallower in-sample, so none got an OOS run. Closest: `rlow25_rvol`, +1.66 pts CAGR and 6.0 pts shallower
+max DD (Calmar 2.892 vs 2.170). The ETH/BTC-low BTC lock is the strongest drawdown cut found for v2 (−26.4% -> −20.4%,
+rlow20 −17.9%); guards against trending declines (`conf`, `newlow`) undo it. Its out-of-sample check is pre-registered
+separately as EXP-181.
 
 ## Deviations
 
