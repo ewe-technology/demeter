@@ -2,7 +2,7 @@
 
 - Jira: QUAN-1172 (subtask of QUAN-1107)
 - Status: pass (2 of 10 count: `keep50` IS +0.82 / OOS +1.47 pts CAGR in ETH, `f2low` +4.13 / +0.35)
-- Pre-registration commit: f0a0917 · Result commit: see registry
+- Pre-registration commit: f0a0917 · Result commit: f29910a
 
 /goal 2026-10-19 (Dino): "在v2上新增一些因子或濾網，找到比v2好的策略".
 
