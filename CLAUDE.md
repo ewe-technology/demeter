@@ -74,6 +74,12 @@ BTC and WBTC/ETH wins +0.06 / +0.04 pt) and it scores below v6.75 alone (5/7): t
 top while F = 1) give the largest ETH and WBTC/ETH gains but deeper mainnet DD and lose both BTC/USD pools; no width change has
 raised CAGR on a BTC/USD pool.
 
+EXP-176 (QUAN-1149) moved the baseline to Maker's defense v3 for one-element tests (`experiments/v3_goal.py`, IS to
+2024-12-31 / OOS 2025-26 on `0x88e6` and `0x4585`). EXP-177 (QUAN-1165, 2026-10-19): the elements of Isao's ETH-cbBTC specs
+(MGL v2, WB + ETH-strong 25%) on v3 at `0x4585`: **fail**, 0 of 4 new ones count. `sigG` (F engine on G = sqrt(ETH x BTC)
+in USD) wins IS by +6 pts (avg F 0.56 vs 0.17) but loses OOS on Calmar; `hold25`, `width10s` lose IS; `uniform1` loses OOS.
+The retreat-to-USDC element needs a third asset in the book (not run).
+
 ## Handoff 2026-10-06 (two sessions closed; a new session starts here)
 
 Done since round 4, all committed, Jira and dashboard in sync:

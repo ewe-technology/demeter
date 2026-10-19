@@ -1,8 +1,8 @@
 # EXP-177: ETH-cbBTC spec elements on v3, WBTC/WETH `0x4585`, in-sample to 2024 / out-of-sample 2025-26
 
 - Jira: QUAN-1165 (subtask of QUAN-1107)
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Status: fail (0 of 4 new elements beat v3 on IS and OOS; `sigG` won IS by +6.05 pts, lost OOS on Calmar)
+- Pre-registration commit: bac5e12 · Result commit: see registry
 
 Task (Dino, 2026-10-19): continue the BTC/ETH AMM strategy; look for new filters or signals in Isao's two ETH-cbBTC
 specs, "ETH-cbBTC MGL 規格書 v2（標準模式／複利模式）" (2026-09-30) and "ETH-cbBTC 防禦邏輯 規格書（WB＋ETH強勢25%）"
@@ -72,7 +72,48 @@ test.
 
 ## Result
 
-(pending)
+Run 2026-10-19, `v3_goal.py is btc v3,sigG,hold25,width10s,uniform1` then `oos btc v3,sigG,uniform1` (Rust engine; raw
+runs in the main checkout's `result/v3_goal/btc-{is,oos}-*`). v3 reproduces EXP-176 exactly on both halves.
+
+| variant | IS total / CAGR / max DD / Calmar | beats v3 IS | OOS total / CAGR / max DD / Calmar | beats v3 OOS |
+|---|---|---|---|---|
+| v3 | −0.7% / −0.21% / −25.8% / −0.008 | – | +15.4% / 8.72% / −14.9% / 0.585 | – |
+| `sigG` | +19.7% / 5.84% / −19.8% / 0.295 | yes (+6.05 pts) | +15.9% / 8.99% / −16.0% / 0.562 | **no** (CAGR +0.27 pt, Calmar lower) |
+| `uniform1` | +0.2% / 0.05% / −19.5% / 0.003 | yes (+0.26 pt) | +9.3% / 5.36% / −10.7% / 0.502 | no (CAGR −3.36 pts) |
+| `hold25` | −3.9% / −1.26% / −29.3% / −0.043 | no | not run | – |
+| `width10s` | −4.8% / −1.55% / −24.7% / −0.063 | no | not run | – |
+
+P&L attribution (`v3_goal.attrib`, share of the 2 BTC book: directional / timing / fees / LVR-IL / costs = total):
+
+| run | split | avg F | rebuilds (follow / upper / lower) |
+|---|---|---|---|
+| v3 IS | −5.7 / +9.2 / +8.7 / −12.2 / −0.6 = −0.7% | 0.17 | 43 / 1 / 0 |
+| `sigG` IS | −20.9 / +48.8 / +14.3 / −21.6 / −0.8 = +19.7% | 0.56 | 80 / 1 / 0 |
+| `uniform1` IS | −3.6 / +9.1 / +10.9 / −15.8 / −0.4 = +0.2% | 0.17 | 43 / 1 / 0 |
+| `hold25` IS | −6.6 / +6.0 / +6.9 / −9.6 / −0.6 = −3.9% | 0.14 | 42 / 1 / 0 |
+| `width10s` IS | −5.7 / +12.0 / +12.1 / −22.6 / −0.7 = −4.8% | 0.17 | 43 / 3 / 1 |
+| v3 OOS | +0.2 / +20.4 / +2.2 / −5.5 / −1.9 = +15.4% | 0.20 | 24 / 1 / 0 |
+| `sigG` OOS | +0.5 / +24.0 / +6.7 / −13.1 / −2.2 = +15.9% | 0.46 | 37 / 3 / 0 |
+| `uniform1` OOS | +0.2 / +13.0 / +7.2 / −9.6 / −1.4 = +9.3% | 0.19 | 24 / 1 / 0 |
+
+Verdict: **fail** — none of the four spec elements beats v3 on both halves of `0x4585`.
+
+- `sigG` (G engine) is the only new signal with a real effect. On G the accounts are invested about three times as
+  long (avg F 0.56 vs 0.17): ETHBTC fell through 2022-24, so v3's own engine stays mostly out, while G follows the USD
+  market and stays in. The IS gain is timing (+39.6 pts) bought with more ETH while ETHBTC fell (directional −15.2)
+  and a larger LP loss (LP net −7.3 vs −3.5). Out of sample it keeps +0.27 pt CAGR but max DD is 1.1 pt deeper and
+  Calmar 0.562 vs 0.585, so it misses the bar. It is a different engine (market trend instead of ETH-vs-BTC trend),
+  not a filter on v3, and it nearly doubles the follow rebuilds (80 vs 43 IS).
+- `uniform1`: one uniform band earns more fees but loses more to LVR; IS +0.26 pt, OOS −3.4 pts (less timing gain).
+- `hold25` and `width10s` lose in-sample. Holding 25% of F in ETH outside the LP improves the LP leg a little (LP net
+  −2.7 vs −3.5) but loses timing (+6.0 vs +9.2): ETH held outside the LP is not sold on the way down by the LP; the ±10%
+  LP while strong earns +3.4 pts fees but loses +10.4 pts more to LVR, and adds range-exit rebuilds.
+- Together with EXP-176's runs of the other spec elements (`exitslope`, `ladderv1`, `lowrecentre`, `nodiv`,
+  `compound`: none beat v3 on BTC IS), no element of the ETH-cbBTC design improves v3 on `0x4585` as a single change.
+  The design may still work as a whole (its own numbers are in ETH, with a USDC retreat this book cannot hold); that is
+  a combined-strategy test, not a one-element one.
+- Next if the BTC/ETH line continues: the retreat-to-USDC element (needs a third asset in the book, open decision 4 in
+  CLAUDE.md), and `sigG` on another BTC/ETH pool (Base `0x7aea`, Arbitrum `0x2f5e`) before any further use.
 
 ## Deviations
 
