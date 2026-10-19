@@ -1,8 +1,8 @@
 # EXP-178: factors and filters on ETH-cbBTC MGL v2, WBTC/WETH `0x4585`, in-sample to 2024 / out-of-sample 2025-26
 
 - Jira: QUAN-1172 (subtask of QUAN-1107)
-- Status: pre-registered
-- Pre-registration commit: ______ · Result commit: ______
+- Status: pass (2 of 10 count: `keep50` IS +0.82 / OOS +1.47 pts CAGR in ETH, `f2low` +4.13 / +0.35)
+- Pre-registration commit: f0a0917 · Result commit: see registry
 
 /goal 2026-10-19 (Dino): "在v2上新增一些因子或濾網，找到比v2好的策略".
 
@@ -58,7 +58,52 @@ Batch 1 (10 variants, one element each, written 2026-10-19 before any variant ru
 
 ## Result
 
-(pending)
+Run 2026-10-19, `v2_goal.py is all 3` then `oos v2,f2low,keep50,noslope,follow0625 3` (Rust engine; raw runs in the main
+checkout's `result/v2_goal/{is,oos}-*`, table `result/v2_goal/runs.csv`). All numbers in ETH, rewards included.
+
+| variant | IS ETH x / CAGR / max DD / Calmar | beats v2 IS | OOS ETH x / CAGR / max DD / Calmar | beats v2 OOS |
+|---|---|---|---|---|
+| v2 | 4.197 / 57.33% / −26.4% / 2.170 | – | 1.384 / 20.90% / −37.2% / 0.562 | – |
+| **`keep50`** | 4.266 / 58.15% / −24.9% / 2.339 | yes (+0.82 pt) | 1.413 / 22.37% / −33.6% / 0.666 | **yes (+1.47 pts)** |
+| **`f2low`** | 4.556 / 61.46% / −27.9% / 2.206 | yes (+4.13 pts) | 1.391 / 21.25% / −37.2% / 0.571 | **yes (+0.35 pt)** |
+| `noslope` | 4.445 / 60.21% / −26.5% / 2.276 | yes | 1.258 / 14.33% / −43.6% / 0.329 | no |
+| `follow0625` | 4.198 / 57.35% / −26.4% / 2.170 | yes (+0.02 pt, noise) | 1.381 / 20.78% / −37.2% / 0.559 | no |
+| `wide20` | 4.146 / 56.72% / −27.4% / 2.069 | no | – | – |
+| `confirm5` | 4.048 / 55.55% / −28.3% / 1.962 | no | – | – |
+| `divG` | 3.901 / 53.74% / −26.4% / 2.034 | no | – | – |
+| `btctrend` | 3.893 / 53.65% / −40.8% / 1.316 | no | – | – |
+| `rconfirm3` | 3.667 / 50.76% / −27.7% / 1.836 | no | – | – |
+| `rspan20` | 2.822 / 38.79% / −28.5% / 1.359 | no | – | – |
+
+USD view (reported, not judged): v2 IS x3.233 / USD max DD −53.7%, OOS x1.016 / −53.9%; `keep50` x3.287 / −52.3%, x1.037 /
+−54.9%; `f2low` x3.509 / −52.0%, x1.021 / −53.3%. Rebuilds IS / OOS: v2 137 / 76, `keep50` 137 / 76, `f2low` 116 / 68.
+
+ETH ratio by calendar year (2021 = 11-02..12-31, 2026 = to 09-17):
+
+| year | v2 | `keep50` | `f2low` |
+|---|---|---|---|
+| 2021 | 1.009 | 1.028 | 1.012 |
+| 2022 | 2.726 | 2.790 | 2.898 |
+| 2023 | 1.295 | 1.282 | 1.308 |
+| 2024 | 1.190 | 1.168 | 1.199 |
+| 2025 | 1.139 | 1.154 | 1.138 |
+| 2026 | 1.212 | 1.222 | 1.219 |
+
+Verdict: **pass** — two variants count with margins of 0.1 pt or more on both halves; goal reached after batch 1.
+
+- **`keep50` (ETH kept outside the LP while strong: 50% of F instead of 25%)** is the cleaner one: CAGR up on both
+  halves (+0.82 / +1.47 pts), max DD shallower on both (−24.9 vs −26.4, −33.6 vs −37.2), Calmar up on both, same
+  rebuild count. It wins 4 of 6 calendar years and loses 2023-24 (ETH weak against BTC). The spec's own sensitivity
+  (6.1) found the same direction (8 years 5.35 vs 3.11 ETH, 4 years 4.87 vs 4.88). Mechanism: while ETH is strong more of
+  the book sits in plain ETH, which neither leaks LVR nor sells ETH into a rally.
+- **`f2low` (F = second-lowest account)** wins IS by +4.13 pts, almost all in 2022 (x2.898 vs 2.726: it retreats earlier
+  and refills later), and OOS by only +0.35 pt with the same max DD; it also cuts rebuilds (116 vs 137). The OOS margin
+  is small; read it as "no worse, fewer rebuilds" rather than a clear gain. It was also an EXP-176 finding on v3 (ETH).
+- `noslope` (no 20-day falling-EMA test) wins IS but loses OOS badly (14.3% vs 20.9%, DD −43.6%): the slope filter of
+  the spec earns its place. `btctrend` (USDC when BTC/USD falls) deepens ETH max DD to −40.8%; shorter or debounced
+  strength lines (`rspan20`, `rconfirm3`) lose clearly: the EMA100 strength line holds.
+- Caveats: one pool, 11 tries (two counted, about what chance gives for small margins); 0.1% flat swap cost as the spec,
+  no gas. Next: the two winners together, and on another BTC/ETH pool (Base `0x7aea`, Arbitrum `0x2f5e`).
 
 ## Deviations
 

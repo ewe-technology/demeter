@@ -80,6 +80,13 @@ EXP-176 (QUAN-1149) moved the baseline to Maker's defense v3 for one-element tes
 in USD) wins IS by +6 pts (avg F 0.56 vs 0.17) but loses OOS on Calmar; `hold25`, `width10s` lose IS; `uniform1` loses OOS.
 The retreat-to-USDC element needs a third asset in the book (not run).
 
+ETH-cbBTC MGL v2 itself is implemented on `maker-defense` as `gamma_maker_defense_btceth_v1.py` (Maker, WB spec = MGL v2
+standard mode; BTC / ETH / USDC book, results in ETH). `experiments/v2_goal.py` runs it on the Rust engine with one-element
+variants (reproduces Maker's 2023 x1.300 / 2025 x1.157 exactly). EXP-178 (QUAN-1172, 2026-10-19, `0x4585`, IS to 2024 / OOS
+2025-26, in ETH): **pass**, 2 of 10 count. `keep50` (keep 50% of F as ETH while strong, not 25%): CAGR +0.82 / +1.47 pts,
+max DD shallower on both halves (OOS −33.6% vs −37.2%); `f2low` (F = second-lowest account): +4.13 / +0.35 pts, fewer
+rebuilds. `noslope` wins IS, loses OOS badly; shorter / debounced strength lines, `divG`, `btctrend`, `wide20` lose IS.
+
 ## Handoff 2026-10-06 (two sessions closed; a new session starts here)
 
 Done since round 4, all committed, Jira and dashboard in sync:
