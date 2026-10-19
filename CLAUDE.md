@@ -86,6 +86,10 @@ variants (reproduces Maker's 2023 x1.300 / 2025 x1.157 exactly). EXP-178 (QUAN-1
 2025-26, in ETH): **pass**, 2 of 10 count. `keep50` (keep 50% of F as ETH while strong, not 25%): CAGR +0.82 / +1.47 pts,
 max DD shallower on both halves (OOS −33.6% vs −37.2%); `f2low` (F = second-lowest account): +4.13 / +0.35 pts, fewer
 rebuilds. `noslope` wins IS, loses OOS badly; shorter / debounced strength lines, `divG`, `btctrend`, `wide20` lose IS.
+Dino then ruled that v2's elements stay untouched and only new elements may be added (keep50 / f2low change existing
+ones). EXP-179 (QUAN-1173): **pass**, 1 of 8 added elements counts: `rvol` (F x 0.5 while G's 30-day realized vol >
+1.5 x its 365-day median), +0.57 / +0.60 pt CAGR in ETH, same DD; small, from ~6 vol spikes. Funding, DVOL, stablecoin
+flow, SMA200, weekly, ETH-momentum and rebuild-cooldown layers all lose IS.
 
 ## Handoff 2026-10-06 (two sessions closed; a new session starts here)
 
