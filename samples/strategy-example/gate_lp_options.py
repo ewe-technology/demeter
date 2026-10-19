@@ -350,7 +350,10 @@ def run(c: ConfigG, start: date, end: date, bar: str | None = "1h", kind: str = 
     actuator.broker.set_balance(p.quote, Decimal(initial))
     actuator.set_price(pd.DataFrame({base.name: price, p.quote.name: 1.0}, index=price.index), p.quote)
     gate = gate_series(c.gate_spec, c.gate_hour)  # H49's slices read and switch at their own hour (delay = gate_hour)
-    strategy = GatedPool(c, gate) if c.hourly_check else robust.RobustGated(c, gate)
+    if c.hourly_check:
+        strategy = GatedPool(c, gate)
+    else:
+        strategy = (HalfRobust if c.off == "half" else robust.RobustGated)(c, gate)
     actuator.strategy = strategy
     actuator.run(print_result=False)
 
@@ -858,6 +861,138 @@ def report_h50():
         json.dump(out, f, indent=1, default=float)
 
 
+# ---------------------------------------------------------------- H51, H52: slices with gas, C1's half ladder
+
+class HalfRobust(robust.RobustGated):
+    """RobustGated whose gate-off range (off == "half") holds half the book, the rest in the quote; every off placement
+    first sells any WBTC (pool_lp_gdown.HalfGated on the daily check)."""
+
+    def go(self, on: bool, price: Decimal, t):
+        cfg = self.cfg
+        if on or cfg.off != "half":
+            return super().go(on, price, t)
+        if self.bounds is not None:
+            self.remove()
+        self.state, self.mode = on, "range"
+        self.k = (1 + cfg.off_width, 1 + (cfg.off_up or cfg.off_width))
+        self.place(price, 0.0, "off", t)
+
+    def place(self, price: Decimal, width: float, kind: str, t):
+        cfg = self.cfg
+        if self.state is not False or cfg.off != "half":
+            return super().place(price, width, kind, t)
+        m = self.markets[KEY]
+        btc = self.broker.get_token_balance(cfg.base)
+        if btc > 0:
+            m.swap(btc, cfg.base, cfg.quote)
+        lo, hi = price / Decimal(self.k[0]), price * Decimal(self.k[1])
+        t1, t2 = m.price_to_tick(lo), m.price_to_tick(hi)
+        m.add_liquidity_by_value(min(t1, t2), max(t1, t2), self.broker.get_token_balance(cfg.quote) / 2)
+        self.bounds = (lo, hi)
+        self.events.append((t, kind))
+
+
+SLICES = (1, 3, 6)
+
+
+def h51_bases() -> list[tuple[str, str, str, ConfigG]]:
+    """(option, pool, version, config at 1 slice, 00 h, $100k): H48's A1, A2 picks, C1's two shapes, H52's half
+    ladder, and their controls."""
+    with open(f"{RESULT_DIR}/h46_choice.json") as f:
+        ch = json.load(f)
+    base = {(c.option, c.pool_key, c.name): c for c in h48_configs(ch["btc"], ch["eth"])}
+    out = [("A1", "e8f7", v, base[("A1", "e8f7", v)]) for v in ("w0.25", "ctl")]
+    out += [("A2", "1098", v, base[("A2", "1098", v)]) for v in ("up_02_08", "ctl")]
+    for pk in ("99ac", "9db9"):
+        out += [("C1", pk, v, base[("C1", pk, v)]) for v in ("sd_33_10", "ladder", "ctl")]
+        out.append(("C1", pk, "half", gcfg("C1", pk, "half", ch["btc"], on="spot", off="half", off_width=0.40,
+                                           off_up=0.01)))
+    return out
+
+
+def slice_hours(n: int, h0: int) -> list[int]:
+    return [h0 + k * 24 // n for k in range(n)]
+
+
+def h51_name(v: str, n: int, h: int, tag: str) -> str:
+    return f"{v}_n{n}_h{h:02d}_{tag}"
+
+
+def h51_tasks() -> list[tuple]:
+    out = []
+    for opt, pk, v, c0 in h51_bases():
+        ws = windows(opt)
+        cs, ce = continuous(opt)
+        for tag, cap in CAPITALS.items():
+            for n in SLICES:
+                hours = range(24) if tag == "100k" else slice_hours(n, 0)
+                for h in hours:
+                    c = dataclasses.replace(c0, name=h51_name(v, n, h, tag), initial=cap / n, gate_hour=h, delay=h,
+                                            option=f"H51{opt}")
+                    out.append((c, cs, ce, "continuous"))
+                    if h in slice_hours(n, 0):
+                        out += [(c, s, e, "window") for s, e in ws]
+    return out
+
+
+def cagr(nav: pd.Series) -> float:
+    days = (nav.index[-1] - nav.index[0]).total_seconds() / 86400
+    return float((nav.iloc[-1] / nav.iloc[0]) ** (365.25 / days) - 1)
+
+
+def h51_stats(opt: str, pk: str, v: str, ctl: str, n: int, tag: str = "100k") -> dict:
+    o = f"H51{opt}"
+    cs, _ = continuous(opt)
+    starts = [s for s, _ in windows(opt)]
+    rets = []
+    if tag == "100k":
+        for h0 in range(24 // n):
+            rets.append(cagr(book_nav(o, pk, [h51_name(v, n, h, tag) for h in slice_hours(n, h0)], cs, "continuous")))
+    names_v = [h51_name(v, n, h, tag) for h in slice_hours(n, 0)]
+    names_c = [h51_name(ctl, n, h, tag) for h in slice_hours(n, 0)]
+    x = pd.Series({s: total(book_nav(o, pk, names_v, s)) - total(book_nav(o, pk, names_c, s)) for s in starts})
+    lp0, ctl0 = book_nav(o, pk, names_v, cs, "continuous"), book_nav(o, pk, names_c, cs, "continuous")
+    c = judge(x, max_dd(lp0), max_dd(ctl0))
+    h = math.ceil(len(x) / 2)
+    gas = np.mean([json.load(open(f"{ROWS_DIR}/{o}_{pk}_{nm}_continuous_{cs}.json"))["gas"] for nm in names_v])
+    return {"opt": opt, "pool": pk, "version": v, "n": n, "capital": tag,
+            "W": min(rets) if rets else np.nan, "M": float(np.median(rets)) if rets else np.nan,
+            "best": max(rets) if rets else np.nan, "cagr_h0": cagr(lp0), "cagr_ctl_h0": cagr(ctl0),
+            "median": x.median(), "positive": int((x > 0).sum()), "windows": len(x),
+            "first_half": x.iloc[:h].median(), "second_half": x.iloc[h:].median(),
+            "dd_lp": max_dd(lp0), "dd_ctl": max_dd(ctl0), "four_checks": all(c.values()),
+            "failed": "; ".join(k for k, ok in c.items() if not ok), "gas_per_slice": float(gas)}
+
+
+def report_h51():
+    rows = []
+    for opt, pk, v, _ in h51_bases():
+        if v == "ctl":
+            continue
+        for tag in CAPITALS:
+            for n in SLICES:
+                rows.append(h51_stats(opt, pk, v, "ctl", n, tag))
+    t = pd.DataFrame(rows)
+    t.to_csv(f"{RESULT_DIR}/h51_summary.csv", index=False)
+    show(t)
+    verdict = {}
+    for (opt, pk, v), g in t[t["capital"] == "100k"].groupby(["opt", "pool", "version"], sort=False):
+        g = g.set_index("n")
+        ok = {n: bool(g.loc[n, "W"] >= g.loc[1, "W"] + 0.01 and g.loc[n, "M"] >= g.loc[1, "M"] - 0.005
+                      and g.loc[n, "four_checks"]) for n in (3, 6)}
+        verdict[f"{opt}_{pk}_{v}"] = {"use": 3 if ok[3] else 6 if ok[6] else 1, "qualifies": ok,
+                                      "one_slice_four_checks": bool(g.loc[1, "four_checks"])}
+    for v in ("sd_33_10", "ladder", "half"):  # C1 / H52 turn over only on both pools at the chosen n
+        main = verdict[f"C1_99ac_{v}"]
+        n = main["use"]
+        rep = t[(t["capital"] == "100k") & (t["pool"] == "9db9") & (t["version"] == v) & (t["n"] == n)].iloc[0]
+        main["passes"] = bool(n > 1 and rep["four_checks"])
+        main["rep_four_checks_at_n"] = bool(rep["four_checks"])
+    print(json.dumps(verdict, indent=1))
+    with open(f"{RESULT_DIR}/h51_verdict.json", "w") as f:
+        json.dump(verdict, f, indent=1)
+
+
 # ---------------------------------------------------------------- acceptance
 
 def accept():
@@ -911,6 +1046,7 @@ def main():
     a.add_argument("--h48", action="store_true")
     a.add_argument("--h49", action="store_true")
     a.add_argument("--h50", action="store_true")
+    a.add_argument("--h51", action="store_true", help="H51 and H52 (the half ladder is a C1 version)")
     a.add_argument("--report", action="store_true")
     a.add_argument("--only", nargs="*", default=None)
     a.add_argument("--workers", type=int, default=2)
@@ -947,6 +1083,15 @@ def main():
         with multiprocessing.Pool(a.workers, maxtasksperchild=1) as pool:
             pool.starmap(task, tasks, chunksize=1)
         report_h50()
+    if a.h51:
+        tasks = h51_tasks()
+        if a.limit:
+            tasks = tasks[:a.limit]
+        print(f"{len(tasks)} tasks", flush=True)
+        with multiprocessing.Pool(a.workers, maxtasksperchild=1) as pool:
+            pool.starmap(task, tasks, chunksize=1)
+        if not a.limit:
+            report_h51()
 
 
 if __name__ == "__main__":
