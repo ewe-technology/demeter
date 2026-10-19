@@ -100,6 +100,66 @@ VARIANTS: dict[str, tuple[str, str, list]] = {
                    [('FOLLOW_THRESHOLD = Decimal("0.125")', 'FOLLOW_THRESHOLD = Decimal("0.0625")', 1)]),
 }
 
+# ---- EXP-179 batch 2 (written 2026-10-19 before any of them ran): ADDED elements only (Dino: "原來的元素不動的情況下，
+# 新增其他元素"). Every v2 constant and rule stays as is; each variant adds one new layer on v2's output. The filters all
+# use the same action, fixed here: F' = F x 0.5 while the filter is on (the halved part follows v2's own allocation, i.e.
+# to USDC while ETH is strong, to BTC while weak). A flag judged on day D's close acts on D+1 00:00, like v2's F.
+SAMPLES = MAIN / "samples"
+
+
+def HALVE(flag_code: str) -> list:
+    """F x 0.5 on the days `flag` (a boolean Series on g's daily index, built by flag_code) is True."""
+    return [(STRONG_LINE,
+             '    out = pd.DataFrame({"G": g, "R": r, "R_ema": r_ema, "strong": r >= r_ema, "F": fractions})  # v2_goal EXP-179\n'
+             + flag_code +
+             '    out["F"] = out["F"].where(~flag.reindex(out.index).fillna(False).astype(bool), out["F"] * 0.5)\n'
+             "    return out\n", 1)]
+
+
+VARIANTS.update({
+    "fundhot": ("added: funding overheat filter", "F x 0.5 while ETHUSDT perp funding, 7-day mean of the day's prints, > 0.03% / 8h",
+                HALVE(f'    _f = pd.read_csv("{SAMPLES}/binance_funding_ETHUSDT_long.csv", parse_dates=["timestamp"])\n'
+                      '    _f = _f.groupby(_f["timestamp"].dt.normalize())["rate"].mean().rolling(7, min_periods=7).mean()\n'
+                      "    flag = _f > 0.0003\n")),
+    "dvolhi": ("added: implied-volatility filter", "F x 0.5 while Deribit ETH DVOL > its trailing 365-day 80th percentile (min 90 days)",
+               HALVE(f'    _d = pd.read_csv("{SAMPLES}/deribit_dvol_daily.csv", parse_dates=["date"]).set_index("date")["ETH"]\n'
+                     "    flag = _d > _d.rolling(365, min_periods=90).quantile(0.8)\n")),
+    "stableflow": ("added: stablecoin liquidity factor", "F x 0.5 while the stablecoin market cap is below its value 30 days earlier",
+                   HALVE(f'    _s = pd.read_csv("{SAMPLES}/flow_daily.csv", parse_dates=["date"]).set_index("date")["stable_mcap"]\n'
+                         "    flag = _s < _s.shift(30)\n")),
+    "rvol": ("added: realized-volatility filter", "F x 0.5 while G's 30-day realized vol > 1.5 x its trailing 365-day median",
+             HALVE("    import numpy as _np\n"
+                   "    _v = _np.log(g).diff().rolling(30).std()\n"
+                   "    flag = _v > 1.5 * _v.rolling(365, min_periods=180).median()\n")),
+    "sma200": ("added: long-trend filter", "F x 0.5 while G < SMA200(G) and SMA200 is below its value 20 days earlier",
+               HALVE("    _m = g.rolling(200).mean()\n"
+                     "    flag = (g < _m) & (_m < _m.shift(20))\n")),
+    "weekly": ("added: weekly confirmation filter", "F x 0.5 while G's last Sunday close is below the 20-week EMA of weekly closes",
+               HALVE('    _w = g.resample("W-SUN").last()\n'
+                     "    _wb = _w < _w.ewm(span=20, adjust=False).mean()\n"
+                     '    flag = _wb.reindex(g.index, method="ffill")\n')),
+    "ethmom": ("added: ETH momentum override", "while ETH is strong and ETH/USD > EMA20 > EMA50 (ETH/USD = G x sqrt(R)), the "
+               "USDC reserve is held as ETH outside the LP",
+               [(STRONG_LINE,
+                 '    out = pd.DataFrame({"G": g, "R": r, "R_ema": r_ema, "strong": r >= r_ema, "F": fractions})  # v2_goal ethmom\n'
+                 "    _e = g * r ** 0.5\n"
+                 "    _e20, _e50 = _e.ewm(span=20, adjust=False).mean(), _e.ewm(span=50, adjust=False).mean()\n"
+                 '    out["ethmom"] = out["strong"] & (_e > _e20) & (_e20 > _e50)\n'
+                 "    return out\n", 1),
+                (ALLOC_CALL, ALLOC_CALL +
+                 '        if strong and bool(row["ethmom"]):  # v2_goal ethmom: USDC reserve held as ETH\n'
+                 '            shares = {"lp": shares["lp"], "eth": shares["eth"] + shares["usdc"], "btc": ZERO, "usdc": ZERO}\n', 1)]),
+    "cooldown7": ("added: rebuild cooldown", "a drift rebuild (>= 12.5% off target) needs 7 days since the last rebuild; "
+                  "the out-of-range and target LP 0 / 100% / USDC 0 rebuilds are unchanged",
+                  [("        self.rebuild_count = self.out_of_range_rebuilds = 0\n",
+                    "        self.rebuild_count = self.out_of_range_rebuilds = 0\n"
+                    "        self.last_rebuild = datetime(2000, 1, 1)  # v2_goal cooldown7\n", 1),
+                   ("        self.rebuild_count += 1\n", "        self.rebuild_count += 1\n        self.last_rebuild = row_data.timestamp\n", 1),
+                   ("        elif any(abs(cur[k] - shares[k]) >= FOLLOW_THRESHOLD for k in cur):\n",
+                    "        elif any(abs(cur[k] - shares[k]) >= FOLLOW_THRESHOLD for k in cur) and \\\n"
+                    "                row_data.timestamp - self.last_rebuild >= timedelta(days=7):\n", 1)]),
+})
+
 # Logging only (no change in behaviour): write the per-minute net value (ETH, incl. collected rewards in the wallet) as
 # daily closes plus minute-level drawdowns, and the spec metrics, to <folder>/v2goal_<mode>.json
 MET_LINE = '    metrics["lp_avg_share"] = strat.lp_share_sum / strat.lp_share_days if strat.lp_share_days else ZERO\n'
