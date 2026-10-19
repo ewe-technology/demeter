@@ -2,7 +2,7 @@
 
 - Jira: QUAN-1165 (subtask of QUAN-1107)
 - Status: fail (0 of 4 new elements beat v3 on IS and OOS; `sigG` won IS by +6.05 pts, lost OOS on Calmar)
-- Pre-registration commit: bac5e12 · Result commit: see registry
+- Pre-registration commit: bac5e12 · Result commit: 7febf00
 
 Task (Dino, 2026-10-19): continue the BTC/ETH AMM strategy; look for new filters or signals in Isao's two ETH-cbBTC
 specs, "ETH-cbBTC MGL 規格書 v2（標準模式／複利模式）" (2026-09-30) and "ETH-cbBTC 防禦邏輯 規格書（WB＋ETH強勢25%）"
