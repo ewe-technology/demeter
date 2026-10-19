@@ -90,6 +90,11 @@ Dino then ruled that v2's elements stay untouched and only new elements may be a
 ones). EXP-179 (QUAN-1173): **pass**, 1 of 8 added elements counts: `rvol` (F x 0.5 while G's 30-day realized vol >
 1.5 x its 365-day median), +0.57 / +0.60 pt CAGR in ETH, same DD; small, from ~6 vol spikes. Funding, DVOL, stablecoin
 flow, SMA200, weekly, ETH-momentum and rebuild-cooldown layers all lose IS.
+Dino then asked for a significant gain (bar: CAGR +2 pts AND max DD 3 pts shallower, both halves). EXP-180 (QUAN-1174):
+**fail**, 0 of 24 added layers in three batches (ETH/BTC breakout shields, USDC / BTC "locks", stacks with rvol). v2's
+ETH drawdowns come from holding BTC / USDC through ETH rebounds. The BTC lock `rlow25` (BTC held as ETH once ETH/BTC is
+25% under its 90-day high) cut IS DD −26.4% -> −20.4% with CAGR +0.9..1.7, but EXP-181 (QUAN-1175) OOS: **fail**, CAGR
+3.4% vs 20.9% (ETH/BTC kept falling in 2025 Q1): an ETH/BTC mean-reversion bet, not an edge.
 
 ## Handoff 2026-10-06 (two sessions closed; a new session starts here)
 
