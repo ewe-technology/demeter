@@ -1,0 +1,726 @@
+"""
+H46 - H48 of reports/plan_2026-10-19_gate_lp_options.md (registered in 3eeef95): a gate x one-pool LP, seven options.
+H49 and H50 are added once H48 has results, as the plan says.
+
+  H46  the gate, on spot books only (no Demeter): BTC and ETH candidates, out of sample on Binance daily closes
+       (2018-04-01 .. 2021-12-31) and in sample on the pools' hourly closes (2022-01-01 .. 2026-09-30, 24 decision
+       hours). The rule of plan 2.3 picks one gate per asset; written to result/gate-lp-options/h46_choice.json.
+  H47  1, 3 or 6 slices, on spot books with the H46 gate; the rule of plan 3.2; h47_choice.json.
+  H48  the seven options in Demeter on hourly bars, 1 slice at UTC 00, out of range checked once a day at 00:00,
+       each against its spot control with the same gate (plan 1.4); the rules of plan 1.6 and 4.3.
+
+Gates (state known at day d + hour h, from the close of the day that ends then; pool_lp_batch.gate's convention):
+  ema N   close > ewm(span=N, adjust=False)      sma N   close > mean of the last N closes
+  ts N    close > the close N days before
+A spec is "<pool>:<kind>:<N>"; 99ac is BTC in USD, 88e6 ETH in USD. An ETH book may use a BTC spec (cross-asset).
+
+Spot books (H46, H47): on = 100% of the asset, off = stablecoin. A switch decided at t trades at the close before t;
+costs 10 bps (BTC) or 11 bps (ETH) of the traded value, no gas (H43). Hourly marks for drawdowns.
+
+Demeter runs (H48), costs as pool_lp_batch.run: Demeter's swap fee, impact N x N / (L sqrt P) uncapped, gas at each
+year's gwei (2026: 3) converted into the quote (net_3gwei also kept). Pools quoted in a stablecoin are counted in it
+(USDT taken as USD). Pools quoted in WBTC or WETH (A1, A2, B1) leave the pool for USDC while off: Demeter runs the
+book in the quote with off = all quote token, and the USD book converts at each switch, paying 10 bps (WBTC) or 11
+bps (WETH) plus one swap's gas; while off the USD value stays put. Their controls go through the same conversion.
+B1 takes 4585 as its main pool and 0xCBCd as the replication pool, as C1 - C4 do with their 0.3% / other pools.
+
+Run from samples/strategy-example (minute CSVs in ../real-data/<pool>/):
+  PYTHONPATH=../.. python gate_lp_options.py --cache          # closes and hourly market data, one pool at a time
+  PYTHONPATH=../.. python gate_lp_options.py --accept         # must match H4b and H26 before anything else
+  PYTHONPATH=../.. python gate_lp_options.py --h46            # then --h47
+  PYTHONPATH=../.. python gate_lp_options.py --h48 --workers 2 [--only C1 C2] [--limit n]
+  PYTHONPATH=../.. python gate_lp_options.py --report
+"""
+import argparse
+import dataclasses
+import glob
+import json
+import math
+import multiprocessing
+import os
+import pickle
+import time
+from datetime import date
+from decimal import Decimal
+
+import numpy as np
+import pandas as pd
+
+from demeter import Actuator, TokenInfo
+from demeter.uniswap import UniLpMarket
+import pool_lp_batch as batch
+import pool_lp_robust as robust
+import pool_lp_windows as windows_mod
+from pool_lp_batch import Pool
+from pool_lp_windows import GatedPool, eth_daily, share_of
+from single_pool_backtest import KEY
+from tri_btc_eth_gate import GAS_GWEI, GAS_UNITS, load_market, usdc, usdt, wbtc, weth
+
+RESULT_DIR = "result/gate-lp-options"
+ROWS_DIR = f"{RESULT_DIR}/rows"
+CACHE_DIR = f"{RESULT_DIR}/cache"
+LAST_DAY = date(2026, 9, 30)
+IN_FROM, IN_TO = "2022-01-01", "2026-09-30 23:00"
+OOS_FROM, OOS_TO = "2018-04-01", "2021-12-31"
+BINANCE = {"btc": "binance_btcusdt_1d.csv", "eth": "binance_ethusdt_1d.csv"}
+SPOT_BPS = {"btc": 10, "eth": 11}
+USD = 100_000
+
+cbbtc = TokenInfo(name="cbbtc", decimal=8)
+wsteth = TokenInfo(name="wsteth", decimal=18)
+batch.POOLS.update({
+    "8ad5": Pool("0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8", "ethereum", usdc, weth, usdc, 0.3, 60, date(2021, 5, 5)),
+    "cbcd": Pool("0xCBCdF9626bC03E24f779434178A73a0B4bad62eD", "ethereum", wbtc, weth, weth, 0.3, 60, date(2021, 5, 5)),
+    "e8f7": Pool("0xe8f7c89C5eFa061e340f2d2F206EC78FD8f7e124", "ethereum", wbtc, cbbtc, wbtc, 0.01, 1, date(2024, 10, 13)),
+    "1098": Pool("0x109830a1AAaD605BbF02a9dFA7B0B92EC2FB7dAa", "ethereum", wsteth, weth, weth, 0.01, 1, date(2024, 1, 1)),
+})
+ASSET_SRC = {"btc": "99ac", "eth": "88e6"}
+
+
+# ---------------------------------------------------------------- closes and gates
+
+def hourly_close(src: str) -> pd.Series:
+    """Base price in the quote at the end of each hour (label = hour start), from closeTick as pool_lp_batch.gate."""
+    path = f"{CACHE_DIR}/close_{src}.csv"
+    if not os.path.exists(path):
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        p = batch.POOLS[src]
+        files = sorted(glob.glob(f"../real-data/{p.address}/*.minute.csv"))
+        df = pd.concat((pd.read_csv(f, usecols=["timestamp", "closeTick"]) for f in files), ignore_index=True)
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+        tick = pd.to_numeric(df.set_index("timestamp").sort_index()["closeTick"], errors="coerce").dropna()
+        quote_is_1, scale = batch.raw_price_scale(p)
+        raw = np.power(1.0001, tick) * scale
+        (raw if quote_is_1 else 1 / raw).resample("1h").last().rename("close").to_csv(path)
+    return pd.read_csv(path, index_col=0, parse_dates=True)["close"]
+
+
+def daily_close(src: str, hour: int) -> pd.Series:
+    """The close of each day running from `hour`, labelled at the day's start (pool_lp_batch.gate's resample)."""
+    return hourly_close(src).resample("1D", offset=f"{hour}h").last().ffill()
+
+
+def signal(close: pd.Series, kind: str, n: int) -> pd.Series:
+    if kind == "ema":
+        ref = close.ewm(span=n, adjust=False).mean()
+    elif kind == "sma":
+        ref = close.rolling(n).mean()
+    elif kind == "ts":
+        ref = close.shift(n)
+    else:
+        raise ValueError(kind)
+    return (close > ref).fillna(False).astype(bool)
+
+
+def gate_series(spec: str, hour: int = 0) -> pd.Series:
+    """On from the time the day's close is known (the next label), as pool_lp_batch.gate."""
+    src, kind, n = spec.split(":")
+    on = signal(daily_close(src, hour), kind, int(n))
+    return on.shift(1, fill_value=False).astype(bool)
+
+
+def binance_close(asset: str) -> pd.Series:
+    df = pd.read_csv(BINANCE[asset], parse_dates=["date"]).set_index("date")
+    return df["close"].astype(float)
+
+
+# ---------------------------------------------------------------- spot books (H46, H47)
+
+def spot_book_hourly(price: pd.Series, gate: pd.Series, bps: float, lo: str, hi: str) -> pd.Series:
+    """Hourly NAV from 1 in cash. A state known at t holds from the hour labelled t; trades at the close before t."""
+    p = price.loc[:hi].ffill()
+    p = p.loc[pd.Timestamp(lo) - pd.Timedelta(hours=1):]
+    hold = gate.reindex(p.index, method="ffill").fillna(False).astype(float).iloc[1:]
+    r = (p / p.shift(1) - 1).iloc[1:]
+    switch = hold.diff().abs().fillna(hold.iloc[0])
+    return ((1 + r * hold) * (1 - switch * bps * 1e-4)).cumprod()
+
+
+def spot_book_daily(close: pd.Series, on: pd.Series, bps: float, lo: str, hi: str) -> pd.Series:
+    """Daily NAV from 1 in cash: day d holds on[d] (decided on the close of d-1), trading at that close (H43)."""
+    c = close.loc[:hi]
+    c = c.loc[pd.Timestamp(lo) - pd.Timedelta(days=1):]
+    hold = on.reindex(c.index).fillna(False).astype(float).iloc[1:]
+    r = (c / c.shift(1) - 1).iloc[1:]
+    switch = hold.diff().abs().fillna(hold.iloc[0])
+    return ((1 + r * hold) * (1 - switch * bps * 1e-4)).cumprod()
+
+
+def max_dd(nav: pd.Series) -> float:
+    return float((nav / nav.cummax() - 1).min())
+
+
+def total(nav: pd.Series) -> float:
+    """Spot books start from 1 before the first bar, so the last value minus 1 includes the entry cost."""
+    return float(nav.iloc[-1] - 1)
+
+
+def candidates(asset: str, btc_pick: str | None = None) -> dict[str, tuple[str, str, int]]:
+    """name -> (signal asset, kind, n). ETH adds BTC EMA100 and BTC's pick (if it is not EMA100)."""
+    own = {f"{k}{n}": (asset, k, n) for k, n in (("ema", 50), ("ema", 100), ("ema", 200), ("sma", 200),
+                                                    ("ts", 30), ("ts", 90), ("ts", 180))}
+    if asset == "eth":
+        own["btc_ema100"] = ("btc", "ema", 100)
+        if btc_pick and btc_pick != "ema100":
+            k, n = split_name(btc_pick)
+            own[f"btc_{btc_pick}"] = ("btc", k, n)
+    return own
+
+
+def split_name(name: str) -> tuple[str, int]:
+    k = name.rstrip("0123456789")
+    return k, int(name[len(k):])
+
+
+def spec_of(cand: tuple[str, str, int]) -> str:
+    sig_asset, k, n = cand
+    return f"{ASSET_SRC[sig_asset]}:{k}:{n}"
+
+
+def h46_metrics(asset: str, cands: dict) -> pd.DataFrame:
+    bps = SPOT_BPS[asset]
+    price = hourly_close(ASSET_SRC[asset])
+    hold_h = price.loc[pd.Timestamp(IN_FROM) - pd.Timedelta(hours=1):IN_TO].ffill()
+    hold_h = hold_h / hold_h.iloc[0]
+    b = binance_close(asset)
+    hold_d = b.loc[pd.Timestamp(OOS_FROM) - pd.Timedelta(days=1):OOS_TO]
+    hold_d = hold_d / hold_d.iloc[0]
+    ref = gate_series(f"{ASSET_SRC[asset]}:ema:100", 0).loc[IN_FROM:IN_TO]
+    rows = []
+    for name, cand in cands.items():
+        oos_on = signal(binance_close(cand[0]), cand[1], cand[2]).shift(1, fill_value=False)
+        oos = spot_book_daily(b, oos_on, bps, OOS_FROM, OOS_TO)
+        books = {h: spot_book_hourly(price, gate_series(spec_of(cand), h), bps, IN_FROM, IN_TO) for h in range(24)}
+        tot = pd.Series({h: total(n) for h, n in books.items()})
+        dds = pd.Series({h: max_dd(n) for h, n in books.items()})
+        g0 = gate_series(spec_of(cand), 0).loc[IN_FROM:IN_TO]
+        rows.append({"asset": asset, "gate": name, "M1_oos_total": total(oos), "M2_oos_dd": max_dd(oos),
+                     "M3_in_total_median": tot.median(), "M4_in_total_worst": tot.min(),
+                     "M5_in_dd_median": dds.median(), "in_dd_worst": dds.min(), "in_total_h00": tot[0],
+                     "switches_h00": int(g0.astype(int).diff().abs().sum()),
+                     "same_state_as_own_ema100": float((g0 == ref.reindex(g0.index)).mean())})
+    t = pd.DataFrame(rows)
+    t["hold_oos_total"], t["hold_oos_dd"] = total(hold_d), max_dd(hold_d)
+    t["hold_in_total"], t["hold_in_dd"] = total(hold_h), max_dd(hold_h)
+    return t
+
+
+METRICS = ["M1_oos_total", "M3_in_total_median", "M4_in_total_worst", "M5_in_dd_median"]  # higher is better
+
+
+def h46_pick(t: pd.DataFrame, incumbent: str) -> tuple[str, pd.DataFrame]:
+    """Plan 2.3: eligibility, mean rank over M1, M3, M4, M5, and the incumbent stays unless beaten on >= 3 of 4."""
+    t = t.copy()
+    t["eligible"] = ((t["M1_oos_total"] > t["hold_oos_total"]) & (t["M2_oos_dd"] >= t["hold_oos_dd"] + 0.10)
+                     & (t["M5_in_dd_median"] >= t["hold_in_dd"] + 0.10))
+    e = t[t["eligible"]].copy()
+    t["rank"] = np.nan
+    if e.empty:
+        return incumbent, t
+    e["rank"] = e[METRICS].rank(ascending=False, method="average").mean(axis=1)
+    t.loc[e.index, "rank"] = e["rank"]
+    e = e.sort_values(["rank", "switches_h00"])
+    top = e.iloc[0]
+    if top["gate"] == incumbent:
+        return incumbent, t
+    inc = t[t["gate"] == incumbent].iloc[0]
+    if not inc["eligible"]:
+        return str(top["gate"]), t
+    better = sum(top[m] > inc[m] for m in METRICS)
+    return (str(top["gate"]) if better >= 3 else incumbent), t
+
+
+def run_h46():
+    tb = h46_metrics("btc", candidates("btc"))
+    btc_pick, tb = h46_pick(tb, "ema100")
+    te = h46_metrics("eth", candidates("eth", btc_pick))
+    eth_pick, te = h46_pick(te, "btc_ema100")
+    t = pd.concat([tb, te], ignore_index=True)
+    t.to_csv(f"{RESULT_DIR}/h46_metrics.csv", index=False)
+    choice = {"btc": spec_of(candidates("btc")[btc_pick]), "eth": spec_of(candidates("eth", btc_pick)[eth_pick]),
+              "btc_name": btc_pick, "eth_name": eth_pick}
+    with open(f"{RESULT_DIR}/h46_choice.json", "w") as f:
+        json.dump(choice, f, indent=1)
+    show(t)
+    print(choice)
+
+
+def run_h47():
+    with open(f"{RESULT_DIR}/h46_choice.json") as f:
+        choice = json.load(f)
+    rows, picks = [], {}
+    for asset in ("btc", "eth"):
+        price = hourly_close(ASSET_SRC[asset])
+        books = {h: spot_book_hourly(price, gate_series(choice[asset], h), SPOT_BPS[asset], IN_FROM, IN_TO)
+                 for h in range(24)}
+        res = {}
+        for n in (1, 3, 6):
+            step = 24 // n
+            g = []
+            for h in range(step):
+                nav = pd.concat([books[h + k * step] for k in range(n)], axis=1).mean(axis=1)
+                g.append({"asset": asset, "n": n, "offset": h, "total": total(nav), "dd": max_dd(nav)})
+            rows += g
+            g = pd.DataFrame(g)
+            res[n] = (g["total"].min(), g["dd"].min(), g["total"].median(), g["dd"].median())
+        w6, d6 = res[6][0], res[6][1]
+        picks[asset] = next(n for n in (1, 3, 6) if res[n][0] >= w6 - 0.05 and res[n][1] >= d6 - 0.02)
+        for n, (w, d, tm, dm) in res.items():
+            print(f"H47 {asset} n={n}: worst total {w:+.4f}, worst dd {d:+.4f}, median total {tm:+.4f}, "
+                  f"median dd {dm:+.4f}")
+        print(f"H47 {asset} -> {picks[asset]} slice(s)")
+    pd.DataFrame(rows).to_csv(f"{RESULT_DIR}/h47_offsets.csv", index=False)
+    with open(f"{RESULT_DIR}/h47_choice.json", "w") as f:
+        json.dump(picks, f)
+
+
+# ---------------------------------------------------------------- Demeter runs (H48)
+
+@dataclasses.dataclass(frozen=True)
+class ConfigG(robust.ConfigR):
+    gate_spec: str = "99ac:ema:100"
+    option: str = ""
+    hourly_check: bool = False  # acceptance only: GatedPool's hourly out-of-range check (H4b)
+
+
+def gcfg(option: str, pool_key: str, name: str, gate_spec: str, width: float = 0.0, up: float = 0.0,
+         hourly_check: bool = False, **kw) -> ConfigG:
+    p = batch.POOLS[pool_key]
+    return ConfigG(name, p.address, p.token0, p.token1, p.quote, USD, width, up=up, pool_key=pool_key, gated=True,
+                   daily_check=not hourly_check, hourly_check=hourly_check, gate_spec=gate_spec, option=option, **kw)
+
+
+def quote_usd(token: TokenInfo) -> pd.Series | None:
+    """USD per quote token by hour (label = hour start), None for stablecoins."""
+    if token in (usdc, usdt):
+        return None
+    return hourly_close("99ac" if token == wbtc else "88e6")
+
+
+def hourly_market(pool_key: str, start: date, end: date) -> pd.DataFrame:
+    """Hourly Demeter data from a per-year cache (each year loaded alone from the minute files)."""
+    p = batch.POOLS[pool_key]
+    parts = []
+    for y in range(start.year, end.year + 1):
+        path = f"{CACHE_DIR}/market_{pool_key}_{y}.pkl"
+        if not os.path.exists(path):
+            os.makedirs(CACHE_DIR, exist_ok=True)
+            lo, hi = max(date(y, 1, 1), p.first), min(date(y, 12, 31), LAST_DAY)
+            pool = batch.ConfigX("x", p.address, p.token0, p.token1, p.quote, 1, 0, pool_key=pool_key).pool()
+            data, _ = load_market(KEY, pool, p.address, lo, hi, "1h", chain=p.chain)
+            tmp = f"{path}.{os.getpid()}"
+            with open(tmp, "wb") as f:
+                pickle.dump(data, f)
+            os.replace(tmp, path)
+        with open(path, "rb") as f:
+            parts.append(pickle.load(f))
+    d = pd.concat(parts)
+    return d.loc[pd.Timestamp(start):pd.Timestamp(end) + pd.Timedelta(hours=23)]
+
+
+def gas_quote(ts: pd.Timestamp, name: str, p: Pool, eth: pd.Series, q_usd: pd.Series | None,
+              gwei: float | None) -> float:
+    """One action's gas in the quote: ETH for WETH books (pool_lp_batch.run), USD / (USD per quote) otherwise."""
+    units = GAS_UNITS.get(name)
+    if not units:
+        return 0.0
+    in_eth = units * (gwei if gwei is not None else GAS_GWEI.get(ts.year, GAS_GWEI[2025])) * 1e-9
+    if p.quote == weth:
+        return in_eth
+    usd_cost = in_eth * float(eth.asof(ts.normalize()))
+    return usd_cost if q_usd is None else usd_cost / float(q_usd.asof(ts))
+
+
+def run(c: ConfigG, start: date, end: date, bar: str | None = "1h") -> dict:
+    started = time.time()
+    p = batch.POOLS[c.pool_key]
+    base = p.token1 if p.quote == p.token0 else p.token0
+    q_usd = quote_usd(p.quote)
+    if bar is None:
+        data, _ = load_market(KEY, c.pool(), p.address, start, end, None, chain=p.chain)
+    else:
+        data = hourly_market(c.pool_key, start, end)
+    price = data["price"].astype(float)
+    initial = c.initial if q_usd is None else c.initial / float(q_usd.asof(price.index[0]))
+    market = UniLpMarket(KEY, c.pool())
+    market.data = data
+    actuator = Actuator()
+    actuator.broker.add_market(market)
+    actuator.broker.set_balance(p.quote, Decimal(initial))
+    actuator.set_price(pd.DataFrame({base.name: price, p.quote.name: 1.0}, index=price.index), p.quote)
+    gate = gate_series(c.gate_spec, 0)
+    strategy = GatedPool(c, gate) if c.hourly_check else robust.RobustGated(c, gate)
+    actuator.strategy = strategy
+    actuator.run(print_result=False)
+
+    nav = actuator.account_status_df[("net_value", "")].astype(float)
+    nav.index = pd.DatetimeIndex(nav.index)
+    eth = eth_daily()
+    liq = data["currentLiquidity"].astype(float)
+    quote_is_1, scale = batch.raw_price_scale(p)
+    costs, costs3, swap_fee, impact = {}, {}, 0.0, 0.0
+    for a in actuator.actions:
+        ts = pd.Timestamp(a.timestamp)
+        name = type(a).__name__
+        cost = gas_quote(ts, name, p, eth, q_usd, None)
+        cost3 = gas_quote(ts, name, p, eth, q_usd, 3)
+        if name == "SwapAction":
+            px = float(price.asof(ts))
+            notional = float(a.amount) * (px if a.amount.unit.upper() == base.name.upper() else 1.0)  # in quote
+            swap_fee += float(a.fee) * (px if a.fee.unit.upper() == base.name.upper() else 1.0)
+            p_raw = (px if quote_is_1 else 1 / px) / scale  # token1 raw per token0 raw
+            raw1 = notional * (1.0 if quote_is_1 else 1 / px) * 10 ** p.token1.decimal
+            hit = notional * raw1 / (float(liq.asof(ts)) * math.sqrt(p_raw))
+            impact += hit
+            cost += hit
+            cost3 += hit
+        costs[ts] = costs.get(ts, 0.0) + cost
+        costs3[ts] = costs3.get(ts, 0.0) + cost3
+
+    def after(cs: dict) -> pd.Series:
+        paid = pd.Series(cs, dtype=float).sort_index().cumsum()
+        return nav - (paid.reindex(nav.index, method="ffill").fillna(0.0) if len(paid) else 0.0)
+
+    net_q, net_q3 = after(costs), after(costs3)
+    ev = pd.DataFrame(strategy.events, columns=["t", "kind"])
+    if q_usd is None:
+        usd, usd3 = net_q, net_q3
+    else:
+        state = on_state(ev, net_q.index)
+        asset = "btc" if p.quote == wbtc else "eth"
+        usd = to_usd(net_q, state, q_usd, asset, eth, None, initial)
+        usd3 = to_usd(net_q3, state, q_usd, asset, eth, 3, initial)
+    tag = f"{c.option}_{c.pool_key}_{c.name}_{start}"
+    os.makedirs(f"{RESULT_DIR}/nav", exist_ok=True)
+    pd.DataFrame({"usd": usd, "usd_3gwei": usd3, "price": price.reindex(usd.index)}).to_parquet(
+        f"{RESULT_DIR}/nav/{tag}.parquet")
+    ev.to_csv(f"{RESULT_DIR}/nav/events_{tag}.csv", index=False)
+    paid_all = sum(costs.values())
+    return {"option": c.option, "pool": c.pool_key, "version": c.name, "gate": c.gate_spec, "start": str(start),
+            "end": str(end), "net": float(usd.iloc[-1] / usd.iloc[0] - 1),
+            "net_3gwei": float(usd3.iloc[-1] / usd3.iloc[0] - 1),
+            "swap_fee": swap_fee / initial, "impact": impact / initial, "gas": (paid_all - impact) / initial,
+            "recentres": int((ev["kind"] == "recentre").sum()), "switches": int(ev["kind"].isin(["on", "off"]).sum()),
+            "maxDD": max_dd(usd), "secs": round(time.time() - started)}
+
+
+def on_state(ev: pd.DataFrame, index: pd.DatetimeIndex) -> pd.Series:
+    sw = ev[ev["kind"].isin(["on", "off"])].copy()
+    s = pd.Series((sw["kind"] == "on").to_numpy(), index=pd.DatetimeIndex(pd.to_datetime(sw["t"])))
+    s = s.groupby(level=0).last()
+    return s.reindex(index, method="ffill").fillna(False).astype(bool)
+
+
+def to_usd(net_q: pd.Series, on: pd.Series, q_usd: pd.Series, asset: str, eth: pd.Series, gwei: float | None,
+           initial: float) -> pd.Series:
+    """
+    The USD book of a pool quoted in WBTC or WETH: while on it follows net_q x USD per quote; a switch converts at that
+    bar, paying the spot bps and one swap's gas; while off it stays put (net_q's own costs still come off).
+    """
+    idx = net_q.index
+    q = q_usd.reindex(idx, method="ffill").to_numpy()
+    eth_px = eth.reindex(idx.normalize(), method="ffill").to_numpy()
+    g = np.array([gwei if gwei is not None else GAS_GWEI.get(y, GAS_GWEI[2025]) for y in idx.year], dtype=float)
+    swap_gas = GAS_UNITS["SwapAction"] * g * 1e-9 * eth_px
+    nq, st = net_q.to_numpy(), on.to_numpy()
+    out = np.empty(len(nq))
+    usd_prev, nq_prev, was_on, scale = float(USD), float(initial), False, 1.0
+    bps = SPOT_BPS[asset] * 1e-4
+    for i in range(len(nq)):
+        if st[i]:
+            if not was_on:  # USDC -> quote token at this bar; Demeter's book scaled from its value before the entry
+                scale = (usd_prev * (1 - bps) - swap_gas[i]) / (q[i] * nq_prev)
+            out[i] = nq[i] * q[i] * scale
+        elif was_on:  # quote token -> USDC at this bar
+            out[i] = nq[i] * q[i] * scale * (1 - bps) - swap_gas[i]
+        else:
+            out[i] = usd_prev * (nq[i] / nq_prev if nq_prev else 1.0)
+        usd_prev, nq_prev, was_on = out[i], nq[i], bool(st[i])
+    return pd.Series(out, index=idx)
+
+
+# ---------------------------------------------------------------- H48 grid
+
+MAIN_REP = {"A1": ("e8f7", None), "A2": ("1098", None), "B1": ("4585", "cbcd"), "C1": ("99ac", "9db9"),
+            "C2": ("99ac", "9db9"), "C3": ("8ad5", "88e6"), "C4": ("8ad5", "88e6")}
+CENTRED = {"A1": ["w0.1", "w0.25", "w0.5", "w1"], "A2": ["w0.25", "w0.5", "w1"], "B1": ["w10", "w20", "w50"],
+           "C1": ["w10", "w20", "w30"], "C2": ["w10", "w20", "w30"], "C3": ["w10", "w20"],
+           "C4": ["w10", "w20", "w30"]}
+SHAPES = {"A2": ["up_02_08"], "C1": ["sd_33_10", "ladder"], "C2": ["sd_33_10"], "C4": ["sd_33_10"]}
+LISTED = {("C3", "ladder"), ("A2", "hold_wsteth")}
+
+
+def ladder(w_down: float, w_up: float) -> dict:
+    """Gate-off range [p / (1 + w_down), p (1 + w_up)]; w_up is set even when equal (RobustGated reads 0 as p x 1.00)."""
+    return dict(off="range", off_width=w_down, off_up=w_up)
+
+
+def h48_configs(btc_gate: str, eth_gate: str) -> list[ConfigG]:
+    out = []
+    for w in (0.001, 0.0025, 0.005, 0.01):  # A1 WBTC/cbBTC: on LP, off USDC; control on WBTC (cash in the quote)
+        out.append(gcfg("A1", "e8f7", f"w{w * 100:g}", btc_gate, width=w, on="range"))
+    out.append(gcfg("A1", "e8f7", "ctl", btc_gate, on="cash"))
+    for w in (0.0025, 0.005, 0.01):  # A2 wstETH/WETH: on LP, off USDC; control on WETH; listed: on wstETH
+        out.append(gcfg("A2", "1098", f"w{w * 100:g}", eth_gate, width=w, on="range"))
+    out.append(gcfg("A2", "1098", "up_02_08", eth_gate, width=0.002, up=0.008, on="range"))
+    out.append(gcfg("A2", "1098", "ctl", eth_gate, on="cash"))
+    out.append(gcfg("A2", "1098", "hold_wsteth", eth_gate, on="spot"))
+    for pk in ("4585", "cbcd"):  # B1 WBTC/WETH: on LP, off USDC; control on the LP's first mix (0.5 WBTC)
+        for w in (0.10, 0.20, 0.50):
+            out.append(gcfg("B1", pk, f"w{w * 100:g}", btc_gate, width=w, on="range"))
+        out.append(gcfg("B1", pk, "ctl", btc_gate, on="spot", spot_weight=0.5))
+    for pk in MAIN_REP["C1"]:
+        for w in (0.10, 0.20, 0.30):  # C1 on WBTC, off an LP in the pool; control g_spot100
+            out.append(gcfg("C1", pk, f"w{w * 100:g}", btc_gate, on="spot", **ladder(w, w)))
+        out.append(gcfg("C1", pk, "sd_33_10", btc_gate, on="spot", **ladder(0.33, 0.10)))
+        out.append(gcfg("C1", pk, "ladder", btc_gate, on="spot", **ladder(0.40, 0.01)))
+        out.append(gcfg("C1", pk, "ctl", btc_gate, on="spot"))
+        for w in (0.10, 0.20, 0.30):  # C2 on an LP in the pool, off the stablecoin; controls at the LP's WBTC share
+            out.append(gcfg("C2", pk, f"w{w * 100:g}", btc_gate, width=w, on="range"))
+        out.append(gcfg("C2", pk, "sd_33_10", btc_gate, width=0.33, up=0.10, on="range"))
+        out.append(gcfg("C2", pk, "ctl50", btc_gate, on="spot", spot_weight=0.5))
+        out.append(gcfg("C2", pk, "ctl26", btc_gate, on="spot", spot_weight=share_of(1.33, 1.10)))
+    for pk in MAIN_REP["C3"]:
+        for w in (0.10, 0.20):  # C3 on WETH, off an LP in the pool
+            out.append(gcfg("C3", pk, f"w{w * 100:g}", eth_gate, on="spot", **ladder(w, w)))
+        out.append(gcfg("C3", pk, "ladder", eth_gate, on="spot", **ladder(0.40, 0.01)))
+        out.append(gcfg("C3", pk, "ctl", eth_gate, on="spot"))
+        for w in (0.10, 0.20, 0.30):  # C4 on an LP in the pool, off the stablecoin
+            out.append(gcfg("C4", pk, f"w{w * 100:g}", eth_gate, width=w, on="range"))
+        out.append(gcfg("C4", pk, "sd_33_10", eth_gate, width=0.33, up=0.10, on="range"))
+        out.append(gcfg("C4", pk, "ctl50", eth_gate, on="spot", spot_weight=0.5))
+        out.append(gcfg("C4", pk, "ctl26", eth_gate, on="spot", spot_weight=share_of(1.33, 1.10)))
+    return out
+
+
+def control_of(option: str, version: str) -> str:
+    if option in ("C2", "C4"):
+        return "ctl26" if version == "sd_33_10" else "ctl50"
+    return "ctl"
+
+
+def six_months(start: date) -> date:
+    return min((pd.Timestamp(start) + pd.DateOffset(months=6) - pd.Timedelta(days=1)).date(), LAST_DAY)
+
+
+def windows(option: str) -> list[tuple[date, date]]:
+    if option in ("A1", "A2"):
+        first = date(2024, 10, 13) if option == "A1" else date(2024, 1, 1)
+        starts = [s for s in (date(y, m, 1) for y in (2024, 2025, 2026) for m in (1, 4, 7, 10))
+                  if first <= s <= date(2026, 4, 1)]
+        if option == "A1":
+            starts = [first] + starts
+        return [(s, six_months(s)) for s in starts]
+    return [(s, batch.window_end(s)) for s in batch.window_starts("99ac")]
+
+
+def continuous(option: str) -> tuple[date, date]:
+    return {"A1": date(2024, 10, 13), "A2": date(2024, 1, 1)}.get(option, date(2022, 1, 1)), LAST_DAY
+
+
+def row_path(c: ConfigG, start: date, kind: str) -> str:
+    return f"{ROWS_DIR}/{c.option}_{c.pool_key}_{c.name}_{kind}_{start}.json"
+
+
+def task(c: ConfigG, start: date, end: date, kind: str) -> dict:
+    path = row_path(c, start, kind)
+    if os.path.exists(path):
+        with open(path) as f:
+            return json.load(f)
+    r = run(c, start, end)
+    r["kind"] = kind
+    os.makedirs(ROWS_DIR, exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(r, f)
+    print(f"{time.strftime('%H:%M:%S')} {c.option} {c.pool_key} {c.name} {kind} {start} net {r['net']:+.4f} "
+          f"{r['secs']}s", flush=True)
+    return r
+
+
+def h48_tasks(only: list[str] | None) -> list[tuple]:
+    with open(f"{RESULT_DIR}/h46_choice.json") as f:
+        ch = json.load(f)
+    out = []
+    for c in h48_configs(ch["btc"], ch["eth"]):
+        if only and c.option not in only:
+            continue
+        out += [(c, s, e, "window") for s, e in windows(c.option)]
+        s, e = continuous(c.option)
+        out.append((c, s, e, "continuous"))
+    order = ["C1", "C2", "C3", "C4", "B1", "A1", "A2"]  # plan 7
+    return sorted(out, key=lambda t: order.index(t[0].option))
+
+
+def judge(x: pd.Series, dd_lp: float, dd_ctl: float) -> dict:
+    n, h = len(x), math.ceil(len(x) / 2)
+    return {"median > 0": x.median() > 0, ">= 75% > 0": (x > 0).sum() >= math.ceil(0.75 * n),
+            "halves > 0": x.iloc[:h].median() > 0 and x.iloc[h:].median() > 0,
+            "dd within 2 pt": dd_lp >= dd_ctl - 0.02}
+
+
+def report_h48():
+    rows = [json.load(open(f)) for f in glob.glob(f"{ROWS_DIR}/*.json")]
+    if not rows:
+        print("no H48 rows")
+        return
+    t = pd.DataFrame(rows)
+    t.to_csv(f"{RESULT_DIR}/h48_rows.csv", index=False)
+    w = t[t["kind"] == "window"]
+    cont = t[t["kind"] == "continuous"].set_index(["option", "pool", "version"])
+    out = []
+    for (opt, pk), g in w.groupby(["option", "pool"]):
+        nets = g.pivot(index="start", columns="version", values="net").sort_index()
+        nets3 = g.pivot(index="start", columns="version", values="net_3gwei").sort_index()
+        for v in nets.columns:
+            ctl = control_of(opt, v)
+            if v.startswith("ctl") or ctl not in nets:
+                continue
+            x = (nets[v] - nets[ctl]).dropna()
+            h = math.ceil(len(x) / 2)
+            dd_lp, dd_c = cont["maxDD"].get((opt, pk, v), np.nan), cont["maxDD"].get((opt, pk, ctl), np.nan)
+            c = judge(x, dd_lp, dd_c)
+            gv = g[g["version"] == v]
+            out.append({"option": opt, "pool": pk, "version": v, "vs": ctl, "n": len(x), "median": x.median(),
+                        "positive": int((x > 0).sum()), "first_half": x.iloc[:h].median(),
+                        "second_half": x.iloc[h:].median(), "cont_lp": cont["net"].get((opt, pk, v), np.nan),
+                        "cont_ctl": cont["net"].get((opt, pk, ctl), np.nan), "dd_lp": dd_lp, "dd_ctl": dd_c,
+                        "pass": all(c.values()), "failed": "; ".join(k for k, ok in c.items() if not ok),
+                        "listed": (opt, v) in LISTED, "recentres_med": gv["recentres"].median(),
+                        "gas_med": gv["gas"].median(), "impact_med": gv["impact"].median(),
+                        "swap_fee_med": gv["swap_fee"].median(),
+                        "median_3gwei": (nets3[v] - nets3[ctl]).median()})
+    s = pd.DataFrame(out)
+    s.to_csv(f"{RESULT_DIR}/h48_summary.csv", index=False)
+    show(s)
+    picks = h48_pick(s)
+    with open(f"{RESULT_DIR}/h48_picks.json", "w") as f:
+        json.dump(picks, f, indent=1)
+    print(json.dumps(picks, indent=1))
+
+
+def first3(r) -> bool:
+    return bool(r["median"] > 0 and r["positive"] >= math.ceil(0.75 * r["n"]) and r["first_half"] > 0
+                and r["second_half"] > 0)
+
+
+def no_worse(a, b) -> bool:
+    """a no worse than b on the four checks of plan 1.6 (A2's up-skew against the centred pick)."""
+    return bool(a["median"] >= b["median"] and a["positive"] >= b["positive"] and a["first_half"] >= b["first_half"]
+                and a["second_half"] >= b["second_half"] and a["dd_lp"] - a["dd_ctl"] >= b["dd_lp"] - b["dd_ctl"])
+
+
+def h48_pick(s: pd.DataFrame) -> dict:
+    """Plan 4.3: centred widths need a run of >= 2 passing on the main pool (its middle, the wider of two) and the
+    replication pool's first three checks on that cell; shapes need a pass on both pools; then the best continuous
+    total among what passes."""
+    picks = {}
+    for opt, (main, rep) in MAIN_REP.items():
+        sub = s[s["option"] == opt]
+        if sub.empty:
+            continue
+        r = {(x.pool, x.version): x for _, x in sub.iterrows()}
+        best, run_ = [], []
+        for v in CENTRED[opt]:
+            run_ = run_ + [v] if (main, v) in r and r[(main, v)]["pass"] else []
+            if len(run_) > len(best):
+                best = run_
+        passing = []
+        if len(best) >= 2:
+            mid = best[len(best) // 2]
+            if rep is None or ((rep, mid) in r and first3(r[(rep, mid)])):
+                passing.append(mid)
+        for v in SHAPES.get(opt, []):
+            if (main, v) not in r or not r[(main, v)]["pass"]:
+                continue
+            if opt == "A2":
+                if passing and no_worse(r[(main, v)], r[(main, passing[0])]):
+                    passing = [v]
+                elif not passing:
+                    passing.append(v)
+                continue
+            if rep is not None and (rep, v) in r and r[(rep, v)]["pass"]:
+                passing.append(v)
+        pick = max(passing, key=lambda v: r[(main, v)]["cont_lp"]) if passing else None
+        picks[opt] = {"pick": pick, "passing": passing, "centred_run": best}
+    return picks
+
+
+# ---------------------------------------------------------------- acceptance
+
+def accept():
+    """H4b's g_down, g_spot100 and g_sym on 2023-01 (minute bars, hourly check) and H26's g_down_d1x on 2022-07."""
+    ref = {("g_down", "2023-01-01"): 0.7236676732498697, ("g_spot100", "2023-01-01"): 0.6959534051126905,
+           ("g_sym", "2023-01-01"): 0.164677232801288, ("g_down_d1x", "2022-07-01"): 0.6069492293916303}
+    g_new, g_old = gate_series("99ac:ema:100"), batch.gate("99ac", 100)
+    same = bool((g_new.reindex(g_old.index).fillna(False) == g_old).all())
+    print(f"gate 99ac ema100 equals pool_lp_batch.gate: {same}")
+    spec = "99ac:ema:100"
+    cfgs = {"g_down": gcfg("acc", "99ac", "g_down", spec, on="spot", hourly_check=True, **ladder(0.40, 0.01)),
+            "g_spot100": gcfg("acc", "99ac", "g_spot100", spec, on="spot", hourly_check=True),
+            "g_sym": gcfg("acc", "99ac", "g_sym", spec, width=0.20, on="range", hourly_check=True),
+            "g_down_d1x": gcfg("acc", "99ac", "g_down_d1x", spec, on="spot", **ladder(0.40, 0.01))}
+    args = [(cfgs[v], date.fromisoformat(s), batch.window_end(date.fromisoformat(s)), None) for v, s in ref]
+    with multiprocessing.Pool(2, maxtasksperchild=1) as pool:
+        res = pool.starmap(run, args, chunksize=1)
+    ok = same
+    for (v, s), r in zip(ref, res):
+        d = r["net"] - ref[(v, s)]
+        ok &= abs(d) < 1e-9
+        print(f"{v} {s}: {r['net']:.10f} vs {ref[(v, s)]:.10f} diff {d:+.2e} {r['secs']}s")
+    print("ACCEPT" if ok else "MISMATCH")
+
+
+def show(t: pd.DataFrame):
+    pd.set_option("display.width", 250)
+    pd.set_option("display.max_columns", 40)
+    print(t.to_string(index=False, float_format=lambda x: f"{x:.4f}"), flush=True)
+
+
+def build_cache():
+    os.makedirs(windows_mod.RESULT_DIR, exist_ok=True)
+    for src in ("99ac", "88e6"):
+        hourly_close(src)
+    eth_daily()
+    for pk in ("e8f7", "1098", "4585", "cbcd", "99ac", "9db9", "8ad5", "88e6"):
+        p = batch.POOLS[pk]
+        for y in range(max(2022, p.first.year), 2027):
+            s = max(date(y, 1, 1), p.first)
+            hourly_market(pk, s, s)
+            print(f"{time.strftime('%H:%M:%S')} cached {pk} {y}", flush=True)
+
+
+def main():
+    a = argparse.ArgumentParser()
+    a.add_argument("--cache", action="store_true")
+    a.add_argument("--accept", action="store_true")
+    a.add_argument("--h46", action="store_true")
+    a.add_argument("--h47", action="store_true")
+    a.add_argument("--h48", action="store_true")
+    a.add_argument("--report", action="store_true")
+    a.add_argument("--only", nargs="*", default=None)
+    a.add_argument("--workers", type=int, default=2)
+    a.add_argument("--limit", type=int, default=0, help="run only the first n tasks (timing)")
+    a = a.parse_args()
+    os.makedirs(RESULT_DIR, exist_ok=True)
+    os.makedirs(windows_mod.RESULT_DIR, exist_ok=True)
+    if a.cache:
+        build_cache()
+    if a.accept:
+        accept()
+    if a.h46:
+        run_h46()
+    if a.h47:
+        run_h47()
+    if a.h48:
+        tasks = h48_tasks(a.only)
+        if a.limit:
+            tasks = tasks[:a.limit]
+        print(f"{len(tasks)} tasks", flush=True)
+        with multiprocessing.Pool(a.workers, maxtasksperchild=1) as pool:
+            pool.starmap(task, tasks, chunksize=1)
+    if a.report or a.h48:
+        report_h48()
+
+
+if __name__ == "__main__":
+    main()
