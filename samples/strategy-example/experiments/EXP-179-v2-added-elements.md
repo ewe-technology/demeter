@@ -2,7 +2,7 @@
 
 - Jira: QUAN-1173 (subtask of QUAN-1107)
 - Status: pass (1 of 8 added elements counts: `rvol` realized-vol filter, IS +0.57 / OOS +0.60 pt CAGR in ETH)
-- Pre-registration commit: 9da3d3c · Result commit: see registry
+- Pre-registration commit: 9da3d3c · Result commit: e7abc44
 
 Goal (Dino, 2026-10-19): "在v2上新增一些因子或濾網，找到比v2好的策略", clarified after EXP-178: "原來的元素不動的情況下，
 新增其他元素" — every v2 element stays as it is; a variant may only add a new element. EXP-178's two counted variants
