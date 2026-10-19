@@ -1,6 +1,7 @@
 """
 H46 - H48 of reports/plan_2026-10-19_gate_lp_options.md (registered in 3eeef95): a gate x one-pool LP, seven options.
-H49 and H50 are added once H48 has results, as the plan says.
+H49 (added after H48, as the plan says): each H48 pick and its control in H47's n slices at $10k, $100k and $1M,
+against 1 slice; the book is the mean of the slices. H50 is added once H49 has results.
 
   H46  the gate, on spot books only (no Demeter): BTC and ETH candidates, out of sample on Binance daily closes
        (2018-04-01 .. 2021-12-31) and in sample on the pools' hourly closes (2022-01-01 .. 2026-09-30, 24 decision
@@ -294,7 +295,7 @@ def quote_usd(token: TokenInfo) -> pd.Series | None:
     """USD per quote token by hour (label = hour start), None for stablecoins."""
     if token in (usdc, usdt):
         return None
-    return hourly_close("99ac" if token == wbtc else "88e6")
+    return hourly_close("99ac" if token == wbtc else "88e6").ffill()  # hours without a trade are NaN in the closes
 
 
 def hourly_market(pool_key: str, start: date, end: date) -> pd.DataFrame:
@@ -331,7 +332,7 @@ def gas_quote(ts: pd.Timestamp, name: str, p: Pool, eth: pd.Series, q_usd: pd.Se
     return usd_cost if q_usd is None else usd_cost / float(q_usd.asof(ts))
 
 
-def run(c: ConfigG, start: date, end: date, bar: str | None = "1h") -> dict:
+def run(c: ConfigG, start: date, end: date, bar: str | None = "1h", kind: str = "window") -> dict:
     started = time.time()
     p = batch.POOLS[c.pool_key]
     base = p.token1 if p.quote == p.token0 else p.token0
@@ -348,7 +349,7 @@ def run(c: ConfigG, start: date, end: date, bar: str | None = "1h") -> dict:
     actuator.broker.add_market(market)
     actuator.broker.set_balance(p.quote, Decimal(initial))
     actuator.set_price(pd.DataFrame({base.name: price, p.quote.name: 1.0}, index=price.index), p.quote)
-    gate = gate_series(c.gate_spec, 0)
+    gate = gate_series(c.gate_spec, c.gate_hour)  # H49's slices read and switch at their own hour (delay = gate_hour)
     strategy = GatedPool(c, gate) if c.hourly_check else robust.RobustGated(c, gate)
     actuator.strategy = strategy
     actuator.run(print_result=False)
@@ -390,7 +391,7 @@ def run(c: ConfigG, start: date, end: date, bar: str | None = "1h") -> dict:
         asset = "btc" if p.quote == wbtc else "eth"
         usd = to_usd(net_q, state, q_usd, asset, eth, None, initial)
         usd3 = to_usd(net_q3, state, q_usd, asset, eth, 3, initial)
-    tag = f"{c.option}_{c.pool_key}_{c.name}_{start}"
+    tag = f"{c.option}_{c.pool_key}_{c.name}_{kind}_{start}"  # a continuous book starts on its first window's day
     os.makedirs(f"{RESULT_DIR}/nav", exist_ok=True)
     pd.DataFrame({"usd": usd, "usd_3gwei": usd3, "price": price.reindex(usd.index)}).to_parquet(
         f"{RESULT_DIR}/nav/{tag}.parquet")
@@ -424,7 +425,7 @@ def to_usd(net_q: pd.Series, on: pd.Series, q_usd: pd.Series, asset: str, eth: p
     swap_gas = GAS_UNITS["SwapAction"] * g * 1e-9 * eth_px
     nq, st = net_q.to_numpy(), on.to_numpy()
     out = np.empty(len(nq))
-    usd_prev, nq_prev, was_on, scale = float(USD), float(initial), False, 1.0
+    usd_prev, nq_prev, was_on, scale = float(initial * q[0]), float(initial), False, 1.0  # the run's own capital
     bps = SPOT_BPS[asset] * 1e-4
     for i in range(len(nq)):
         if st[i]:
@@ -527,7 +528,7 @@ def task(c: ConfigG, start: date, end: date, kind: str) -> dict:
     if os.path.exists(path):
         with open(path) as f:
             return json.load(f)
-    r = run(c, start, end)
+    r = run(c, start, end, None if kind == "minute" else "1h", kind)
     r["kind"] = kind
     os.makedirs(ROWS_DIR, exist_ok=True)
     with open(path, "w") as f:
@@ -645,6 +646,218 @@ def h48_pick(s: pd.DataFrame) -> dict:
     return picks
 
 
+# ---------------------------------------------------------------- H49: slices on what H48 picked
+
+CAPITALS = {"10k": 10_000, "100k": 100_000, "1m": 1_000_000}
+ASSET_OF = {"A1": "btc", "B1": "btc", "C1": "btc", "C2": "btc", "A2": "eth", "C3": "eth", "C4": "eth"}
+
+
+def h49_configs() -> list[tuple[ConfigG, int, str]]:
+    """(config, slices, capital tag) for each H48 pick and its control: n slices at UTC h, h + 24/n, ... (each its own
+    run with 1/n of the capital, gate read and the book switched at its hour), plus 1 slice at $10k and $1M."""
+    with open(f"{RESULT_DIR}/h46_choice.json") as f:
+        ch = json.load(f)
+    with open(f"{RESULT_DIR}/h47_choice.json") as f:
+        nsl = json.load(f)
+    with open(f"{RESULT_DIR}/h48_picks.json") as f:
+        picks = json.load(f)
+    base = {(c.option, c.pool_key, c.name): c for c in h48_configs(ch["btc"], ch["eth"])}
+    out = []
+    for opt, p in picks.items():
+        if not p["pick"]:
+            continue
+        n = int(nsl[ASSET_OF[opt]])
+        pk = MAIN_REP[opt][0]
+        for v in (p["pick"], control_of(opt, p["pick"])):
+            c0 = base[(opt, pk, v)]
+            for tag, cap in CAPITALS.items():
+                if n > 1:
+                    for k in range(n):
+                        h = k * 24 // n
+                        out.append((dataclasses.replace(c0, name=f"{v}_n{n}_h{h:02d}_{tag}", initial=cap / n,
+                                                        gate_hour=h, delay=h, option=f"H49{opt}"), n, tag))
+                if tag != "100k":
+                    out.append((dataclasses.replace(c0, name=f"{v}_n1_h00_{tag}", initial=cap, option=f"H49{opt}"),
+                                1, tag))
+    return out
+
+
+def h49_tasks() -> list[tuple]:
+    out = []
+    for c, _, _ in h49_configs():
+        opt = c.option[3:]
+        out += [(c, s, e, "window") for s, e in windows(opt)]
+        s, e = continuous(opt)
+        out.append((c, s, e, "continuous"))
+    return out
+
+
+def book_nav(option: str, pool: str, names: list[str], start: date, kind: str = "window") -> pd.Series:
+    """The book of equal slices: the mean of each slice's USD NAV normalised to its first bar."""
+    navs = [pd.read_parquet(f"{RESULT_DIR}/nav/{option}_{pool}_{v}_{kind}_{start}.parquet")["usd"] for v in names]
+    return pd.concat([n / n.iloc[0] for n in navs], axis=1).ffill().mean(axis=1)
+
+
+def report_h49():
+    with open(f"{RESULT_DIR}/h48_picks.json") as f:
+        picks = json.load(f)
+    with open(f"{RESULT_DIR}/h47_choice.json") as f:
+        nsl = json.load(f)
+    out = {}
+    for opt, p in picks.items():
+        if not p["pick"]:
+            continue
+        n = int(nsl[ASSET_OF[opt]])
+        if n == 1:
+            continue
+        pk, v, ctl = MAIN_REP[opt][0], p["pick"], control_of(opt, p["pick"])
+        ws = windows(opt)
+        cs, _ = continuous(opt)
+        for tag in CAPITALS:
+            res = {}
+            for k in (n, 1):
+                if k == 1 and tag == "100k":
+                    names = {v: [v], ctl: [ctl]}
+                    o = opt
+                else:
+                    names = {x: ([f"{x}_n{k}_h{h * 24 // k:02d}_{tag}" for h in range(k)] if k > 1
+                                 else [f"{x}_n1_h00_{tag}"]) for x in (v, ctl)}
+                    o = f"H49{opt}"
+                x = pd.Series({s: total(book_nav(o, pk, names[v], s)) - total(book_nav(o, pk, names[ctl], s))
+                               for s, _ in ws})
+                dd_lp = max_dd(book_nav(o, pk, names[v], cs, "continuous"))
+                dd_c = max_dd(book_nav(o, pk, names[ctl], cs, "continuous"))
+                c = judge(x, dd_lp, dd_c)
+                h = math.ceil(len(x) / 2)
+                res[k] = {"median": x.median(), "positive": int((x > 0).sum()), "n": len(x),
+                          "halves": (x.iloc[:h].median(), x.iloc[h:].median()), "dd": (dd_lp, dd_c),
+                          "pass": all(c.values()), "failed": [kk for kk, ok in c.items() if not ok]}
+                print(f"H49 {opt} {v} {k} slice(s) ${tag}: median {x.median():+.4f}, {(x > 0).sum()}/{len(x)}, "
+                      f"halves {x.iloc[:h].median():+.4f} / {x.iloc[h:].median():+.4f}, dd {dd_lp:+.4f} vs "
+                      f"{dd_c:+.4f} -> {'PASS' if all(c.values()) else 'fail: ' + '; '.join(res[k]['failed'])}")
+            out[f"{opt}_{tag}"] = res
+        use = n if out[f"{opt}_100k"][n]["pass"] else 1
+        out[f"{opt}_use"] = use
+        print(f"H49 {opt} -> {use} slice(s)")
+    with open(f"{RESULT_DIR}/h49_result.json", "w") as f:
+        json.dump(out, f, indent=1, default=float)
+
+
+# ---------------------------------------------------------------- H50: robustness of what passed H49
+
+H50_NEIGHBOURS = {"A2": {"up_01_09": (0.001, 0.009), "up_03_07": (0.003, 0.007), "up_01_04": (0.001, 0.004),
+                         "up_04_16": (0.004, 0.016)}}  # A1's neighbours (w0.1, w0.5) are H48 cells
+
+
+def h50_items() -> list[tuple[str, str, str]]:
+    """(option, pick, control) for every H48 pick that H49 kept (at its slice count; 1 slice here)."""
+    with open(f"{RESULT_DIR}/h48_picks.json") as f:
+        picks = json.load(f)
+    out = []
+    for opt, p in picks.items():
+        if p["pick"]:
+            out.append((opt, p["pick"], control_of(opt, p["pick"])))
+    return out
+
+
+def h50_configs() -> list[tuple[ConfigG, str]]:
+    with open(f"{RESULT_DIR}/h46_choice.json") as f:
+        ch = json.load(f)
+    base = {(c.option, c.pool_key, c.name): c for c in h48_configs(ch["btc"], ch["eth"])}
+    out = []
+    for opt, v, ctl in h50_items():
+        pk = MAIN_REP[opt][0]
+        for x in (v, ctl):
+            c0 = base[(opt, pk, x)]
+            for k in robust.placebo_shifts():
+                out.append((dataclasses.replace(c0, name=f"{x}_s{k:+d}", shift=k, option=f"H50{opt}"), "window"))
+            out.append((dataclasses.replace(c0, name=f"{x}_d1", delay=1, option=f"H50{opt}"), "window"))
+            out.append((dataclasses.replace(c0, name=f"{x}_min", option=f"H50{opt}"), "minute"))
+        for name, (lo, hi) in H50_NEIGHBOURS.get(opt, {}).items():
+            out.append((dataclasses.replace(base[(opt, pk, v)], name=name, width=lo, up=hi, option=f"H50{opt}"),
+                        "window"))
+    return out
+
+
+def h50_tasks() -> list[tuple]:
+    out = []
+    for c, kind in h50_configs():
+        ws = windows(c.option[3:])
+        if kind == "minute":
+            out += [(c, s, e, "minute") for s, e in (ws[0], ws[-1])]
+        else:
+            out += [(c, s, e, "window") for s, e in ws]
+    return out
+
+
+def h50_net(option: str, pool: str, name: str, kind: str, starts: list[date]) -> pd.Series:
+    rows = {}
+    for s in starts:
+        with open(f"{ROWS_DIR}/{option}_{pool}_{name}_{kind}_{s}.json") as f:
+            rows[s] = json.load(f)["net"]
+    return pd.Series(rows)
+
+
+def bootstrap(opt: str, pk: str, v: str, ctl: str, draws: int = 10_000, block: int = 30) -> tuple[float, float, float]:
+    """H28's block bootstrap on the continuous books' daily returns: annualised (LP - control), 90% interval."""
+    s, _ = continuous(opt)
+    r = pd.concat([book_nav(opt, pk, [x], s, "continuous").resample("1D").last().pct_change() for x in (v, ctl)],
+                  axis=1)
+    r = r.dropna().to_numpy()
+    n = len(r)
+
+    def ann(a: np.ndarray) -> float:
+        g = np.prod(1 + a, axis=0) ** (365 / len(a)) - 1
+        return float(g[0] - g[1])
+
+    rng = np.random.default_rng(28)
+    k = -(-n // block)
+    stats = np.array([ann(r[((rng.integers(0, n, k)[:, None] + np.arange(block)).ravel()[:n]) % n])
+                      for _ in range(draws)])
+    lo, hi = np.percentile(stats, [5, 95])
+    return ann(r), float(lo), float(hi)
+
+
+def report_h50():
+    out = {}
+    for opt, v, ctl in h50_items():
+        pk = MAIN_REP[opt][0]
+        o = f"H50{opt}"
+        ws = windows(opt)
+        starts = [s for s, _ in ws]
+        real = (h50_net(opt, pk, v, "window", starts) - h50_net(opt, pk, ctl, "window", starts)).median()
+        meds = pd.Series({k: (h50_net(o, pk, f"{v}_s{k:+d}", "window", starts)
+                              - h50_net(o, pk, f"{ctl}_s{k:+d}", "window", starts)).median()
+                          for k in robust.placebo_shifts()})
+        d1 = h50_net(o, pk, f"{v}_d1", "window", starts) - h50_net(o, pk, f"{ctl}_d1", "window", starts)
+        ends = [starts[0], starts[-1]]
+        x_min = h50_net(o, pk, f"{v}_min", "minute", ends) - h50_net(o, pk, f"{ctl}_min", "minute", ends)
+        x_hour = h50_net(opt, pk, v, "window", ends) - h50_net(opt, pk, ctl, "window", ends)
+        gap = (x_hour - x_min).abs().max()
+        ann, lo, hi = bootstrap(opt, pk, v, ctl)
+        nb = {}
+        for name in H50_NEIGHBOURS.get(opt, {}):
+            x = h50_net(o, pk, name, "window", starts) - h50_net(opt, pk, ctl, "window", starts)
+            nb[name] = (float(x.median()), int((x > 0).sum()))
+        for name in CENTRED[opt]:
+            if name != v:
+                x = h50_net(opt, pk, name, "window", starts) - h50_net(opt, pk, ctl, "window", starts)
+                nb[name] = (float(x.median()), int((x > 0).sum()))
+        print(f"H50 {opt} {v}: real median {real:+.4f}; placebos >= real {int((meds >= real).sum())}/20, "
+              f"median of placebo medians {meds.median():+.4f}")
+        print("  placebo medians:", " ".join(f"{k:+d}:{m * 100:+.2f}" for k, m in meds.sort_index().items()))
+        print(f"  delay 1 h: median {d1.median():+.4f}, {(d1 > 0).sum()}/{len(d1)} (vs {real:+.4f})")
+        print(f"  neighbours (median, > 0): {nb}")
+        print(f"  bootstrap: annualised {ann:+.4f}, 90% [{lo:+.4f}, {hi:+.4f}]")
+        print(f"  minute vs hourly (LP - control) on {ends}: minute {list(x_min.round(4))}, hourly "
+              f"{list(x_hour.round(4))}, max gap {gap:.4f} -> {'within 2 pt' if gap <= 0.02 else 'OVER 2 pt'}")
+        out[opt] = {"real": real, "placebo_ge": int((meds >= real).sum()), "placebo_median": meds.median(),
+                    "delay1_median": d1.median(), "delay1_pos": int((d1 > 0).sum()), "neighbours": nb,
+                    "boot": [ann, lo, hi], "minute_gap": gap}
+    with open(f"{RESULT_DIR}/h50_result.json", "w") as f:
+        json.dump(out, f, indent=1, default=float)
+
+
 # ---------------------------------------------------------------- acceptance
 
 def accept():
@@ -696,6 +909,8 @@ def main():
     a.add_argument("--h46", action="store_true")
     a.add_argument("--h47", action="store_true")
     a.add_argument("--h48", action="store_true")
+    a.add_argument("--h49", action="store_true")
+    a.add_argument("--h50", action="store_true")
     a.add_argument("--report", action="store_true")
     a.add_argument("--only", nargs="*", default=None)
     a.add_argument("--workers", type=int, default=2)
@@ -720,6 +935,18 @@ def main():
             pool.starmap(task, tasks, chunksize=1)
     if a.report or a.h48:
         report_h48()
+    if a.h49:
+        tasks = h49_tasks()
+        print(f"{len(tasks)} tasks", flush=True)
+        with multiprocessing.Pool(a.workers, maxtasksperchild=1) as pool:
+            pool.starmap(task, tasks, chunksize=1)
+        report_h49()
+    if a.h50:
+        tasks = h50_tasks()
+        print(f"{len(tasks)} tasks", flush=True)
+        with multiprocessing.Pool(a.workers, maxtasksperchild=1) as pool:
+            pool.starmap(task, tasks, chunksize=1)
+        report_h50()
 
 
 if __name__ == "__main__":

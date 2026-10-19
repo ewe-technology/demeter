@@ -1,0 +1,48 @@
+{
+ "A1": {
+  "pick": "w0.25",
+  "passing": [
+   "w0.25"
+  ],
+  "centred_run": [
+   "w0.1",
+   "w0.25"
+  ]
+ },
+ "A2": {
+  "pick": "up_02_08",
+  "passing": [
+   "up_02_08"
+  ],
+  "centred_run": [
+   "w0.25",
+   "w0.5",
+   "w1"
+  ]
+ },
+ "B1": {
+  "pick": null,
+  "passing": [],
+  "centred_run": []
+ },
+ "C1": {
+  "pick": null,
+  "passing": [],
+  "centred_run": []
+ },
+ "C2": {
+  "pick": null,
+  "passing": [],
+  "centred_run": []
+ },
+ "C3": {
+  "pick": null,
+  "passing": [],
+  "centred_run": []
+ },
+ "C4": {
+  "pick": null,
+  "passing": [],
+  "centred_run": []
+ }
+}
