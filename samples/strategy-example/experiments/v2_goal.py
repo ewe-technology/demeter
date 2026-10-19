@@ -260,6 +260,50 @@ VARIANTS.update({
                               LOCKS(capit=0.60, rlow=0.75, rbreak=True)),
 })
 
+# ---- EXP-180 batch 5, the last (written 2026-10-19 after batch 4's IS runs, before any batch 5 run): rlow25 cut IS max
+# DD by 6 pts (−20.4%) with CAGR +0.86: it won 2022 (R rebounded after the lock, x2.887 vs 2.726) and lost 2024 (R kept
+# falling 0.054 -> 0.035 after the lock, x1.143 vs 1.190). Batch 5 adds a confirmation or an early release to the BTC
+# lock so it stays out of trending declines, and stacks rvol (the one added layer with a return gain).
+def _rlock(x: float = 0.75, conf: bool = False, newlow: bool = False, span: int = 50) -> str:
+    """BTC lock on R: on at R <= x * 90-day high (with conf: and R >= 1.05 x its 10-day low), held while R <= EMA(span);
+    with newlow: released at once when R closes below its previous 20-day low."""
+    on = f"(_x <= {x} * _h)" + (" and (_x >= 1.05 * _l10)" if conf else "")
+    rule = f"({on} or (_on and _x <= _mm))" + (" and not (_x < _l20)" if newlow else "")   # a new low blocks entry too
+    return ("    _s = r\n"
+            f"    _hi, _m = _s.rolling(90, min_periods=1).max(), _s.ewm(span={span}, adjust=False).mean()\n"
+            "    _lo10, _lo20 = _s.rolling(10, min_periods=1).min(), _s.shift(1).rolling(20, min_periods=1).min()\n"
+            "    _on, _fl = False, []\n"
+            "    for _x, _h, _mm, _l10, _l20 in zip(_s, _hi, _m, _lo10, _lo20):\n"
+            f"        _on = {rule}\n"
+            "        _fl.append(_on)\n"
+            '    out["bflag"] = pd.Series(_fl, index=_s.index).reindex(out.index).fillna(False).astype(bool)\n')
+
+
+def RLOCK(rvol: bool = False, lp: bool = False, **kw) -> list:
+    code = ('    out = pd.DataFrame({"G": g, "R": r, "R_ema": r_ema, "strong": r >= r_ema, "F": fractions})  # v2_goal EXP-180 b5\n'
+            + (RVOL_CODE if rvol else "") + _rlock(**kw) + "    return out\n")
+    moved = '_sh["btc"] + _sh["lp"]' if lp else '_sh["btc"]'
+    alloc = (ALLOC_CALL +
+             "        _sh = dict(shares)  # v2_goal EXP-180 b5: BTC lock\n"
+             '        if bool(row.get("bflag", False)):\n'
+             f'            _sh["eth"], _sh["btc"] = _sh["eth"] + {moved}, ZERO\n'
+             + ('            _sh["lp"] = ZERO\n' if lp else "") +
+             "        shares = _sh\n")
+    return [(STRONG_LINE, code, 1), (ALLOC_CALL, alloc, 1)]
+
+
+VARIANTS.update({
+    "rlow25_conf": ("added: R-low BTC lock, confirmed", "rlow25, entry also needs R >= 1.05 x its 10-day low", RLOCK(conf=True)),
+    "rlow25_newlow": ("added: R-low BTC lock, new-low release", "rlow25, released when R closes below its previous 20-day low",
+                      RLOCK(newlow=True)),
+    "rlow20": ("added: R-low BTC lock", "R <= 0.80 x 90-day high -> BTC share held as ETH until R > EMA50(R)", RLOCK(x=0.80)),
+    "rlow25_e100": ("added: R-low BTC lock, slow release", "rlow25 held until R > EMA100(R)", RLOCK(span=100)),
+    "rlow25_lp": ("added: R-low lock (BTC + LP)", "rlow25, the LP share is also held as ETH while locked", RLOCK(lp=True)),
+    "rlow25_rvol": ("added: rlow25 + rvol", "BTC lock and the EXP-179 rvol filter", RLOCK(rvol=True)),
+    "rlow25_conf_rvol": ("added: rlow25_conf + rvol", "confirmed BTC lock and rvol", RLOCK(rvol=True, conf=True)),
+    "rlow25_newlow_rvol": ("added: rlow25_newlow + rvol", "new-low-release BTC lock and rvol", RLOCK(rvol=True, newlow=True)),
+})
+
 # Logging only (no change in behaviour): write the per-minute net value (ETH, incl. collected rewards in the wallet) as
 # daily closes plus minute-level drawdowns, and the spec metrics, to <folder>/v2goal_<mode>.json
 MET_LINE = '    metrics["lp_avg_share"] = strat.lp_share_sum / strat.lp_share_days if strat.lp_share_days else ZERO\n'

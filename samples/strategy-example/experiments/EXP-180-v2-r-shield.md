@@ -84,6 +84,36 @@ when ETH recovers above its EMA50:
 
 Same bar and procedure; ETH/USD = G x sqrt(R).
 
+Batch 4 IS (v2 from the batch 3 run, same code and data):
+
+| variant | IS ETH x / CAGR / max DD / Calmar | significant |
+|---|---|---|
+| `rlow25` | 4.269 / 58.19% / −20.4% / 2.854 | no (CAGR +0.86 < +2; DD 6.0 pts shallower) |
+| `rlow15` | 3.935 / 54.17% / −17.9% / 3.019 | no |
+| `capit40_rlow25_rvol` | 4.174 / 57.07% / −20.4% / 2.798 | no |
+| `capit40_rlow25` | 4.109 / 56.28% / −20.4% / 2.760 | no |
+| `capit40_rlow25_rbreak` | 4.050 / 55.57% / −24.6% / 2.261 | no |
+| `capit40` | 4.038 / 55.43% / −26.4% / 2.098 | no |
+| `capit30_rlow15` | 2.746 / 37.59% / −17.9% / 2.094 | no |
+| `capit30` | 2.902 / 40.03% / −26.4% / 1.516 | no |
+
+The BTC lock (`rlow`) is the first added layer that cuts the ETH drawdown a lot (−20.4% / −17.9%); the USDC lock
+(`capit`) only costs return. `rlow25` by year vs v2: 2022 x2.887 vs 2.726 (R rebounded after the lock), 2024 x1.143 vs
+1.190 (R kept falling, 0.054 -> 0.035, after the lock), 2021 / 2023 equal.
+
+### Batch 5, the last (written after batch 4's IS results, before any batch 5 run)
+
+The BTC lock with a guard against trending declines, and stacked with `rvol`:
+
+| variant | added layer(s) |
+|---|---|
+| `rlow25_conf` | rlow25, entry also needs R >= 1.05 x its 10-day low |
+| `rlow25_newlow` | rlow25, released (and entry blocked) on a close below R's previous 20-day low |
+| `rlow20` | lock at R <= 0.80 x 90-day high |
+| `rlow25_e100` | rlow25 held until R > EMA100(R) |
+| `rlow25_lp` | rlow25, the LP share is also held as ETH while locked |
+| `rlow25_rvol`, `rlow25_conf_rvol`, `rlow25_newlow_rvol` | with the EXP-179 `rvol` filter |
+
 ## Deviations
 
 - The flags were chosen after looking at v2's in-sample drawdowns (stated in the hypothesis); IS results are therefore
