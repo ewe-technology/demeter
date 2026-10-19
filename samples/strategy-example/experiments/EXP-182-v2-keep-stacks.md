@@ -3,7 +3,7 @@
 - Jira: QUAN-1176 (subtask of QUAN-1107)
 - Status: fail on the significant bar (none significant IS); `k75_f2low_rvol` beats v2 on IS, OOS and Arbitrum
   (CAGR +7.1 / +4.1 / +1.5 pts, max DD 1.2 / 7.2 / 7.6 pts shallower), significant OOS
-- Pre-registration commit: a6207ac · Result commit: see registry
+- Pre-registration commit: a6207ac · Result commit: ef677c7
 
 Dino (2026-10-19), after EXP-180 / 181 found no added element with a significant gain: option 1 — v2's own elements may
 change too; build on `keep50` and stack the other components. The significant bar of EXP-180 stays.
