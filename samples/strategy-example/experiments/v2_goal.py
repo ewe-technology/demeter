@@ -160,6 +160,59 @@ VARIANTS.update({
                     "                row_data.timestamp - self.last_rebuild >= timedelta(days=7):\n", 1)]),
 })
 
+# ---- EXP-180 batch 3 (written 2026-10-19 after an in-sample drawdown analysis of v2, before any of them ran): ADDED
+# elements only, aimed at v2's ETH drawdowns, which all came while ETH rose against BTC (IS: 2022-06..11 −25.8% with
+# BTC per ETH +48%, 2024-05..07 −20.5% with +19%). An "R shield" adds a flag on R = ETH/BTC; while it is on, the LP share
+# of v2's target is held as plain ETH instead of an LP (`_all`: the BTC reserve too); v2's F, strength, USDC share, ranges
+# and rebuild rules are unchanged (a changed target rebuilds through v2's own drift / target-LP-0 rules).
+RVOL_CODE = ("    import numpy as _np\n"
+             "    _v = _np.log(g).diff().rolling(30).std()\n"
+             "    _vf = _v > 1.5 * _v.rolling(365, min_periods=180).median()\n"
+             '    out["F"] = out["F"].where(~_vf.reindex(out.index).fillna(False).astype(bool), out["F"] * 0.5)\n')
+RFLAGS = {
+    # breakout: R at least 10% above its 20-day low
+    "break": "    rflag = r >= 1.10 * r.rolling(20, min_periods=1).min()\n",
+    # momentum: R above EMA20(R) above EMA50(R)
+    "mom": ("    _r20, _r50 = r.ewm(span=20, adjust=False).mean(), r.ewm(span=50, adjust=False).mean()\n"
+            "    rflag = (r > _r20) & (_r20 > _r50)\n"),
+    # breakout held: on at a 10% breakout above the 20-day low, off at the first close below EMA20(R)
+    "ext": ("    _lo, _r20, _on, _fl = r.rolling(20, min_periods=1).min(), r.ewm(span=20, adjust=False).mean(), False, []\n"
+            "    for _x, _l, _e in zip(r, _lo, _r20):\n"
+            "        _on = (_x >= 1.10 * _l) or (_on and _x >= _e)\n"
+            "        _fl.append(_on)\n"
+            "    rflag = pd.Series(_fl, index=r.index)\n"),
+}
+
+
+def RSHIELD(kind: str, btc_too: bool, rvol: bool = False) -> list:
+    """While the R flag is on, v2's LP share (and with btc_too its BTC reserve) is held as ETH."""
+    moved = '(shares["lp"] + shares["btc"])' if btc_too else 'shares["lp"]'
+    return [(STRONG_LINE,
+             '    out = pd.DataFrame({"G": g, "R": r, "R_ema": r_ema, "strong": r >= r_ema, "F": fractions})  # v2_goal EXP-180\n'
+             + (RVOL_CODE if rvol else "") + RFLAGS[kind] +
+             '    out["rflag"] = rflag.reindex(out.index).fillna(False).astype(bool)\n'
+             "    return out\n", 1),
+            (ALLOC_CALL, ALLOC_CALL +
+             '        if bool(row["rflag"]):  # v2_goal EXP-180 R shield: held as ETH instead\n'
+             f'            shares = {{"lp": ZERO, "eth": shares["eth"] + {moved}, '
+             f'"btc": {"ZERO" if btc_too else "shares[" + chr(34) + "btc" + chr(34) + "]"}, "usdc": shares["usdc"]}}\n', 1)]
+
+
+VARIANTS.update({
+    "rbreak_lp": ("added: R breakout shield (LP)", "while R >= 1.10 x its 20-day low, the LP share is held as ETH", RSHIELD("break", False)),
+    "rbreak_all": ("added: R breakout shield (LP + BTC)", "while R >= 1.10 x its 20-day low, the LP share and the BTC reserve are held as ETH",
+                   RSHIELD("break", True)),
+    "rmom_lp": ("added: R momentum shield (LP)", "while R > EMA20(R) > EMA50(R), the LP share is held as ETH", RSHIELD("mom", False)),
+    "rmom_all": ("added: R momentum shield (LP + BTC)", "while R > EMA20(R) > EMA50(R), the LP share and the BTC reserve are held as ETH",
+                 RSHIELD("mom", True)),
+    "rext_lp": ("added: held R breakout shield (LP)", "from a 10% breakout above R's 20-day low until R closes below EMA20(R), "
+                "the LP share is held as ETH", RSHIELD("ext", False)),
+    "rext_all": ("added: held R breakout shield (LP + BTC)", "from a 10% breakout above R's 20-day low until R closes below "
+                 "EMA20(R), the LP share and the BTC reserve are held as ETH", RSHIELD("ext", True)),
+    "rvol_rmom_all": ("added: rvol + R momentum shield (LP + BTC)", "EXP-179 rvol filter and rmom_all together", RSHIELD("mom", True, True)),
+    "rvol_rext_all": ("added: rvol + held R breakout shield (LP + BTC)", "EXP-179 rvol filter and rext_all together", RSHIELD("ext", True, True)),
+})
+
 # Logging only (no change in behaviour): write the per-minute net value (ETH, incl. collected rewards in the wallet) as
 # daily closes plus minute-level drawdowns, and the spec metrics, to <folder>/v2goal_<mode>.json
 MET_LINE = '    metrics["lp_avg_share"] = strat.lp_share_sum / strat.lp_share_days if strat.lp_share_days else ZERO\n'
@@ -268,6 +321,11 @@ def better(m: dict, b: dict) -> bool:
     return m["cagr"] > b["cagr"] and m["calmar"] >= b["calmar"] and m["mdd"] >= b["mdd"] - 0.03
 
 
+def significant(m: dict, b: dict) -> bool:
+    """EXP-180 bar (Dino: 報酬跟回撤要有顯著的增進): CAGR >= v2 + 2 pts and max DD at least 3 pts shallower (in ETH)."""
+    return m["cagr"] >= b["cagr"] + 0.02 and m["mdd"] >= b["mdd"] + 0.03 and m["calmar"] >= b["calmar"]
+
+
 def table() -> pd.DataFrame:
     rows = []
     for f in sorted(OUT.glob("*/v2goal_signal.json")):
@@ -279,7 +337,8 @@ def table() -> pd.DataFrame:
                                        "eth_ratio_receipt", "reward_eth", "btc_ratio", "usd_ratio", "mdd_usd",
                                        "swap_cost_eth", "lp_avg_share", "rebuilds", "out_of_range")} |
                     {"element": el, "change": to, "v2_cagr": b and b["cagr"], "v2_mdd": b and b["mdd"],
-                     "v2_calmar": b and b["calmar"], "beats_v2": bool(b) and variant != "v2" and better(m, b)})
+                     "v2_calmar": b and b["calmar"], "beats_v2": bool(b) and variant != "v2" and better(m, b),
+                     "significant": bool(b) and variant != "v2" and significant(m, b)})
     df = pd.DataFrame(rows)
     df.to_csv(OUT / "runs.csv", index=False)
     return df
