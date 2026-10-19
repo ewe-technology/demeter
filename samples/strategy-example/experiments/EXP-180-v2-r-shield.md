@@ -2,7 +2,7 @@
 
 - Jira: QUAN-1174 (subtask of QUAN-1107)
 - Status: fail (0 of 24 added layers significant in-sample; best `rlow25_rvol` CAGR +1.66 pts, max DD 6.0 pts shallower)
-- Pre-registration commit: ______ · Result commit: ______
+- Pre-registration commit: 3e7f8fa (batch 4 deecb78, batch 5 f7d361c) · Result commit: 50457b9
 
 Goal (Dino, 2026-10-19): "我要你繼續找因子新增到v2優化v2，報酬跟回撤要有顯著的增進" — keep adding elements to v2 (v2's
 own elements untouched, EXP-179 rule) until return and drawdown both improve significantly.

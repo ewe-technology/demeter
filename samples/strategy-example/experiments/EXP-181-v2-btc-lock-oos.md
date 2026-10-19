@@ -2,7 +2,7 @@
 
 - Jira: QUAN-1175 (subtask of QUAN-1107)
 - Status: fail (OOS CAGR 3.4-7.6% vs v2 20.9%; ETH/BTC kept falling after the lock in 2025 Q1)
-- Pre-registration commit: 50457b9 · Result commit: see registry
+- Pre-registration commit: 50457b9 · Result commit: 9d4d3aa
 
 ## Hypothesis
 
