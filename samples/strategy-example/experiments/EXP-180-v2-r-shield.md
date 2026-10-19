@@ -47,7 +47,42 @@ elements with EXP-179's `rvol` filter: `rvol_rmom_all`, `rvol_rext_all`.
 
 ## Result
 
-(pending)
+### Batch 3 (R shields), IS only
+
+| variant | IS ETH x / CAGR / max DD / Calmar | significant |
+|---|---|---|
+| v2 | 4.197 / 57.33% / −26.4% / 2.170 | – |
+| `rbreak_lp` | 4.150 / 56.77% / −24.6% / 2.310 | no |
+| `rbreak_all` | 4.153 / 56.81% / −24.6% / 2.312 | no |
+| `rmom_lp` | 3.970 / 54.59% / −24.6% / 2.220 | no |
+| `rmom_all` | 3.970 / 54.59% / −24.6% / 2.220 | no |
+| `rext_lp` | 3.933 / 54.14% / −24.7% / 2.191 | no |
+| `rext_all` | 3.937 / 54.19% / −24.7% / 2.193 | no |
+| `rvol_rmom_all` | 4.036 / 55.41% / −24.6% / 2.252 | no |
+| `rvol_rext_all` | 3.970 / 54.60% / −24.7% / 2.210 | no |
+
+None is significant (DD at most 1.8 pts shallower, CAGR lower); no OOS run. The shields fix the rally they target
+(`rbreak_all` IS 2022-06-17..08-12 −12.2% instead of the −25.8% v2 episode) but a new deepest episode remains,
+2022-08-29..11-05 −25.0%: v2 sat 77% in USDC at the ETH low of 2022-08-29 ($1427), so its ETH count peaked there, and the
+rebound, refills and the late-October ETH/BTC jump gave it back. `_all` = `_lp`: the BTC reserve is rarely held when
+the flag is on.
+
+### Batch 4 (locks; written after batch 3's IS results, before any batch 4 run)
+
+A lock holds a retreat asset as ETH once ETH is deeply oversold, keeping the ETH v2 has already won, and releases it
+when ETH recovers above its EMA50:
+
+| variant | added layer(s) |
+|---|---|
+| `capit40` | ETH/USD <= 0.60 x its 90-day high close -> USDC share held as ETH until ETH/USD > EMA50(ETH/USD) |
+| `capit30` | same at 0.70 |
+| `rlow25` | R <= 0.75 x its 90-day high -> BTC share held as ETH until R > EMA50(R) |
+| `rlow15` | same at 0.85 |
+| `capit40_rlow25`, `capit30_rlow15` | both locks |
+| `capit40_rlow25_rvol` | both locks + EXP-179 `rvol` |
+| `capit40_rlow25_rbreak` | both locks + `rbreak_all` shield |
+
+Same bar and procedure; ETH/USD = G x sqrt(R).
 
 ## Deviations
 

@@ -213,6 +213,53 @@ VARIANTS.update({
     "rvol_rext_all": ("added: rvol + held R breakout shield (LP + BTC)", "EXP-179 rvol filter and rext_all together", RSHIELD("ext", True, True)),
 })
 
+# ---- EXP-180 batch 4 (written 2026-10-19 after batch 3's IS runs, before any batch 4 run): ADDED "lock" layers. Batch 3
+# showed that much of v2's ETH drawdown is the give-back after v2 held USDC / BTC through an ETH low (IS 2022-08-29 peak:
+# 77% USDC at ETH $1427, then ETH rebounds). A lock holds a retreat asset as ETH once ETH is deeply oversold, keeping
+# the ETH already won; it is released when ETH recovers above its EMA50 and v2's own target applies again.
+#   capit X : ETH/USD <= X x its 90-day high close -> v2's USDC share held as ETH, until ETH/USD > EMA50(ETH/USD)
+#   rlow X  : R <= X x its 90-day high -> v2's BTC share held as ETH, until R > EMA50(R)
+# ETH/USD = G x sqrt(R) (Binance closes). Combinations of added layers allowed (rvol, rbreak shield).
+def _lock(name: str, series: str, x: float) -> str:
+    return (f"    _s = {series}\n"
+            "    _hi, _m, _on, _fl = _s.rolling(90, min_periods=1).max(), _s.ewm(span=50, adjust=False).mean(), False, []\n"
+            "    for _x, _h, _mm in zip(_s, _hi, _m):\n"
+            f"        _on = (_x <= {x} * _h) or (_on and _x <= _mm)\n"
+            "        _fl.append(_on)\n"
+            f'    out["{name}"] = pd.Series(_fl, index=_s.index).reindex(out.index).fillna(False).astype(bool)\n')
+
+
+def LOCKS(capit: float | None = None, rlow: float | None = None, rvol: bool = False, rbreak: bool = False) -> list:
+    code = ('    out = pd.DataFrame({"G": g, "R": r, "R_ema": r_ema, "strong": r >= r_ema, "F": fractions})  # v2_goal EXP-180 b4\n'
+            + (RVOL_CODE if rvol else "")
+            + (_lock("cflag", "g * r ** 0.5", capit) if capit else "")
+            + (_lock("bflag", "r", rlow) if rlow else "")
+            + (RFLAGS["break"] + '    out["rflag"] = rflag.reindex(out.index).fillna(False).astype(bool)\n' if rbreak else "")
+            + "    return out\n")
+    alloc = (ALLOC_CALL +
+             "        _sh = dict(shares)  # v2_goal EXP-180 locks: retreat assets held as ETH\n"
+             '        if bool(row.get("cflag", False)):\n'
+             '            _sh["eth"], _sh["usdc"] = _sh["eth"] + _sh["usdc"], ZERO\n'
+             '        if bool(row.get("bflag", False)):\n'
+             '            _sh["eth"], _sh["btc"] = _sh["eth"] + _sh["btc"], ZERO\n'
+             '        if bool(row.get("rflag", False)):\n'
+             '            _sh["eth"], _sh["lp"], _sh["btc"] = _sh["eth"] + _sh["lp"] + _sh["btc"], ZERO, ZERO\n'
+             "        shares = _sh\n")
+    return [(STRONG_LINE, code, 1), (ALLOC_CALL, alloc, 1)]
+
+
+VARIANTS.update({
+    "capit40": ("added: capitulation lock (USDC)", "ETH/USD <= 0.60 x 90-day high -> USDC share held as ETH until ETH/USD > EMA50", LOCKS(capit=0.60)),
+    "capit30": ("added: capitulation lock (USDC)", "ETH/USD <= 0.70 x 90-day high -> USDC share held as ETH until ETH/USD > EMA50", LOCKS(capit=0.70)),
+    "rlow25": ("added: ETH/BTC low lock (BTC)", "R <= 0.75 x 90-day high -> BTC share held as ETH until R > EMA50(R)", LOCKS(rlow=0.75)),
+    "rlow15": ("added: ETH/BTC low lock (BTC)", "R <= 0.85 x 90-day high -> BTC share held as ETH until R > EMA50(R)", LOCKS(rlow=0.85)),
+    "capit40_rlow25": ("added: capit40 + rlow25", "both locks", LOCKS(capit=0.60, rlow=0.75)),
+    "capit30_rlow15": ("added: capit30 + rlow15", "both locks", LOCKS(capit=0.70, rlow=0.85)),
+    "capit40_rlow25_rvol": ("added: capit40 + rlow25 + rvol", "both locks and the EXP-179 rvol filter", LOCKS(capit=0.60, rlow=0.75, rvol=True)),
+    "capit40_rlow25_rbreak": ("added: capit40 + rlow25 + rbreak shield", "both locks and the rbreak_all shield",
+                              LOCKS(capit=0.60, rlow=0.75, rbreak=True)),
+})
+
 # Logging only (no change in behaviour): write the per-minute net value (ETH, incl. collected rewards in the wallet) as
 # daily closes plus minute-level drawdowns, and the spec metrics, to <folder>/v2goal_<mode>.json
 MET_LINE = '    metrics["lp_avg_share"] = strat.lp_share_sum / strat.lp_share_days if strat.lp_share_days else ZERO\n'
