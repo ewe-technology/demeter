@@ -1,0 +1,72 @@
+{
+ "A1_e8f7_w0.25": {
+  "use": 1,
+  "qualifies": {
+   "3": false,
+   "6": false
+  },
+  "one_slice_four_checks": true
+ },
+ "A2_1098_up_02_08": {
+  "use": 1,
+  "qualifies": {
+   "3": false,
+   "6": false
+  },
+  "one_slice_four_checks": true
+ },
+ "C1_99ac_sd_33_10": {
+  "use": 1,
+  "qualifies": {
+   "3": false,
+   "6": false
+  },
+  "one_slice_four_checks": false,
+  "passes": false,
+  "rep_four_checks_at_n": false
+ },
+ "C1_99ac_ladder": {
+  "use": 1,
+  "qualifies": {
+   "3": false,
+   "6": false
+  },
+  "one_slice_four_checks": false,
+  "passes": false,
+  "rep_four_checks_at_n": false
+ },
+ "C1_99ac_half": {
+  "use": 3,
+  "qualifies": {
+   "3": true,
+   "6": false
+  },
+  "one_slice_four_checks": true,
+  "passes": false,
+  "rep_four_checks_at_n": false
+ },
+ "C1_9db9_sd_33_10": {
+  "use": 1,
+  "qualifies": {
+   "3": false,
+   "6": false
+  },
+  "one_slice_four_checks": false
+ },
+ "C1_9db9_ladder": {
+  "use": 1,
+  "qualifies": {
+   "3": false,
+   "6": false
+  },
+  "one_slice_four_checks": false
+ },
+ "C1_9db9_half": {
+  "use": 1,
+  "qualifies": {
+   "3": false,
+   "6": false
+  },
+  "one_slice_four_checks": false
+ }
+}
