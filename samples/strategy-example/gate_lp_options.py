@@ -1121,6 +1121,218 @@ def report_h53():
     print("H55 reading:", "the drawdown is not the gate's parameter" if not within else f"within 2 pt: {within} (not adopted)")
 
 
+# ---------------------------------------------------------------- H56, H57: gate x range together, 2026 held out
+
+IS_FROM, IS_TO = date(2022, 1, 1), date(2025, 12, 31)
+OOS_FROM_D, OOS_TO_D = date(2026, 1, 1), date(2026, 9, 30)
+H56_ORDER = ["C1", "C3", "C2", "C4", "B1"]
+GATES = {"btc": {"ema50": "99ac:ema:50", "ema100": "99ac:ema:100", "ema200": "99ac:ema:200", "sma200": "99ac:sma:200",
+                 "ts30": "99ac:ts:30", "ts90": "99ac:ts:90", "ts180": "99ac:ts:180"},
+         "eth": {"ema50": "88e6:ema:50", "ema100": "88e6:ema:100", "ema200": "88e6:ema:200", "sma200": "88e6:sma:200",
+                 "ts30": "88e6:ts:30", "ts90": "88e6:ts:90", "ts180": "88e6:ts:180", "btcema100": "99ac:ema:100"}}
+GATE_NB = {"ema50": ["ema100"], "ema100": ["ema50", "ema200", "btcema100"], "ema200": ["ema100", "sma200"],
+           "sma200": ["ema200"], "ts30": ["ts90"], "ts90": ["ts30", "ts180"], "ts180": ["ts90"], "btcema100": ["ema100"]}
+OFF_SHAPES = {"l120": (0.20, 0.01), "l140": (0.40, 0.01), "l160": (0.60, 0.01), "sd": (0.33, 0.10), "w20": (0.20, 0.20)}
+ON_SHAPES = {"w10": (0.10, 0.0), "w20": (0.20, 0.0), "w30": (0.30, 0.0), "sd": (0.33, 0.10)}
+B1_SHAPES = {"w10": (0.10, 0.0), "w20": (0.20, 0.0), "w50": (0.50, 0.0)}
+SHAPE_NB = {"C": {"l120": ["l140"], "l140": ["l120", "l160", "sd"], "l160": ["l140"], "sd": ["l140", "w20"],
+                  "w20": ["sd"]},
+            "O": {"w10": ["w20"], "w20": ["w10", "w30", "sd"], "w30": ["w20"], "sd": ["w20"]},
+            "B": {"w10": ["w20"], "w20": ["w10", "w50"], "w50": ["w20"]}}
+
+
+def h56_shapes(opt: str) -> tuple[dict, dict]:
+    if opt in ("C1", "C3"):
+        return OFF_SHAPES, SHAPE_NB["C"]
+    if opt in ("C2", "C4"):
+        return ON_SHAPES, SHAPE_NB["O"]
+    return B1_SHAPES, SHAPE_NB["B"]
+
+
+def h56_ctl_of(opt: str, shape: str) -> str:
+    if opt in ("C2", "C4"):
+        return "ctl26" if shape == "sd" else "ctl50"
+    return "ctl"
+
+
+def h56_configs(opt: str, pool: str, shift: int = 0) -> list[ConfigG]:
+    """Every gate x shape of an option in one pool, plus each gate's control(s); shift rolls the gate (placebo)."""
+    gates = GATES[ASSET_OF[opt]]
+    shapes, _ = h56_shapes(opt)
+    sfx = f"_s{shift:+d}" if shift else ""
+    o = f"H56{opt}"
+    out = []
+    for gt, spec in gates.items():
+        kw = dict(shift=shift) if shift else {}
+        for sh, (w, u) in shapes.items():
+            if opt in ("C1", "C3"):
+                out.append(gcfg(o, pool, f"{gt}_{sh}{sfx}", spec, on="spot", **ladder(w, u), **kw))
+            else:
+                out.append(gcfg(o, pool, f"{gt}_{sh}{sfx}", spec, width=w, up=u, on="range", **kw))
+        if opt in ("C1", "C3"):
+            out.append(gcfg(o, pool, f"{gt}_ctl{sfx}", spec, on="spot", **kw))
+        elif opt in ("C2", "C4"):
+            out.append(gcfg(o, pool, f"{gt}_ctl50{sfx}", spec, on="spot", spot_weight=0.5, **kw))
+            out.append(gcfg(o, pool, f"{gt}_ctl26{sfx}", spec, on="spot", spot_weight=share_of(1.33, 1.10), **kw))
+        else:
+            out.append(gcfg(o, pool, f"{gt}_ctl{sfx}", spec, on="spot", spot_weight=0.5, **kw))
+    return out
+
+
+def is_windows() -> list[tuple[date, date]]:
+    starts = [date(y, m, 1) for y in range(2022, 2026) for m in (1, 4, 7, 10) if date(y, m, 1) <= date(2025, 1, 1)]
+    return [(s, (pd.Timestamp(s) + pd.DateOffset(years=1) - pd.Timedelta(days=1)).date()) for s in starts]
+
+
+def run_tasks(tasks: list[tuple], workers: int):
+    tasks = [t for t in tasks if not os.path.exists(row_path(t[0], t[1], t[3]))]
+    print(f"{time.strftime('%H:%M:%S')} {len(tasks)} tasks", flush=True)
+    if tasks:
+        with multiprocessing.Pool(workers, maxtasksperchild=1) as pool:
+            pool.starmap(task, tasks, chunksize=1)
+
+
+def row_of(c: ConfigG, start: date, kind: str) -> dict:
+    with open(row_path(c, start, kind)) as f:
+        return json.load(f)
+
+
+def h56_table(opt: str) -> pd.DataFrame:
+    """In-sample checks of every combo in both pools."""
+    shapes, _ = h56_shapes(opt)
+    rows = []
+    for pk in MAIN_REP[opt]:
+        cs = {c.name: c for c in h56_configs(opt, pk)}
+        for gt in GATES[ASSET_OF[opt]]:
+            for sh in shapes:
+                lp, ctl = cs[f"{gt}_{sh}"], cs[f"{gt}_{h56_ctl_of(opt, sh)}"]
+                x = pd.Series({s: row_of(lp, s, "window")["net"] - row_of(ctl, s, "window")["net"] for s, _ in is_windows()})
+                rl, rc = row_of(lp, IS_FROM, "continuous"), row_of(ctl, IS_FROM, "continuous")
+                ch = judge(x, rl["maxDD"], rc["maxDD"])
+                h = math.ceil(len(x) / 2)
+                rows.append({"option": opt, "pool": pk, "gate": gt, "shape": sh, "median": x.median(),
+                             "positive": int((x > 0).sum()), "first_half": x.iloc[:h].median(),
+                             "second_half": x.iloc[h:].median(), "cont_lp": rl["net"], "cont_ctl": rc["net"],
+                             "cont_diff": rl["net"] - rc["net"], "dd_lp": rl["maxDD"], "dd_ctl": rc["maxDD"],
+                             "four": all(ch.values()), "three": all(v for k, v in ch.items() if k != "dd within 2 pt")})
+    return pd.DataFrame(rows)
+
+
+def h56_pick(t: pd.DataFrame, opt: str) -> tuple[str | None, pd.DataFrame]:
+    main, rep = MAIN_REP[opt]
+    _, snb = h56_shapes(opt)
+    m = t[t["pool"] == main].set_index(["gate", "shape"])
+    r = t[t["pool"] == rep].set_index(["gate", "shape"])
+    gates = list(GATES[ASSET_OF[opt]])
+    cand = []
+    for (gt, sh), row in m.iterrows():
+        if not row["four"]:
+            continue
+        gnb = [g_ for g_ in GATE_NB[gt] if g_ in gates]
+        ok_g = not gnb or any(m.loc[(g_, sh), "three"] for g_ in gnb)
+        ok_s = not snb[sh] or any(m.loc[(gt, s_), "three"] for s_ in snb[sh])
+        if ok_g and ok_s and r.loc[(gt, sh), "three"]:
+            cand.append((gt, sh, row["cont_diff"]))
+    t = t.copy()
+    t["candidate"] = [(row.pool == main and (row.gate, row.shape) in {(a, b) for a, b, _ in cand}) for row in t.itertuples()]
+    if not cand:
+        return None, t
+    gt, sh, _ = max(cand, key=lambda z: z[2])
+    return f"{gt}_{sh}", t
+
+
+def h56_luck(opt: str, pick: str, workers: int) -> dict:
+    main = MAIN_REP[opt][0]
+    shifts = robust.placebo_shifts()
+    tasks = [(c, IS_FROM, IS_TO, "continuous") for k in shifts for c in h56_configs(opt, main, k)]
+    run_tasks(tasks, workers)
+    shapes, _ = h56_shapes(opt)
+    maxima = {}
+    for k in shifts:
+        cs = {c.name: c for c in h56_configs(opt, main, k)}
+        sfx = f"_s{k:+d}"
+        best = max(row_of(cs[f"{gt}_{sh}{sfx}"], IS_FROM, "continuous")["net"]
+                   - row_of(cs[f"{gt}_{h56_ctl_of(opt, sh)}{sfx}"], IS_FROM, "continuous")["net"]
+                   for gt in GATES[ASSET_OF[opt]] for sh in shapes)
+        maxima[k] = best
+    cs = {c.name: c for c in h56_configs(opt, main)}
+    gt, sh = pick.split("_", 1)
+    real = (row_of(cs[pick], IS_FROM, "continuous")["net"]
+            - row_of(cs[f"{gt}_{h56_ctl_of(opt, sh)}"], IS_FROM, "continuous")["net"])
+    med = float(np.median(list(maxima.values())))
+    return {"real": real, "placebo_maxima": maxima, "median_of_maxima": med, "passes": real > med}
+
+
+def h57_run(opt: str, combo: str, workers: int) -> dict:
+    """2026-01-01 .. 09-30 from cash, the combo and its control, both pools."""
+    gt, sh = combo.split("_", 1)
+    out = {}
+    tasks = []
+    for pk in MAIN_REP[opt]:
+        cs = {c.name: c for c in h56_configs(opt, pk)}
+        for v in (combo, f"{gt}_{h56_ctl_of(opt, sh)}"):
+            tasks.append((cs[v], OOS_FROM_D, OOS_TO_D, "oos"))
+    run_tasks(tasks, workers)
+    for pk in MAIN_REP[opt]:
+        cs = {c.name: c for c in h56_configs(opt, pk)}
+        lp, ctl = row_of(cs[combo], OOS_FROM_D, "oos"), row_of(cs[f"{gt}_{h56_ctl_of(opt, sh)}"], OOS_FROM_D, "oos")
+        out[pk] = {"lp": lp["net"], "ctl": ctl["net"], "dd_lp": lp["maxDD"], "dd_ctl": ctl["maxDD"],
+                   "passes": bool(lp["net"] > ctl["net"] and lp["maxDD"] >= ctl["maxDD"] - 0.02)}
+    return out
+
+
+def h57_listed(workers: int) -> dict:
+    """Listed only: A2's pick and C1's H48 ladder (EMA100, p/1.40) in 2026, from cash."""
+    with open(f"{RESULT_DIR}/h46_choice.json") as f:
+        ch = json.load(f)
+    base = {(c.option, c.pool_key, c.name): c for c in h48_configs(ch["btc"], ch["eth"])}
+    pairs = {"A2": [base[("A2", "1098", "up_02_08")], base[("A2", "1098", "ctl")]]}
+    for pk in MAIN_REP["C1"]:
+        pairs[f"C1_{pk}"] = [base[("C1", pk, "ladder")], base[("C1", pk, "ctl")]]
+    run_tasks([(c, OOS_FROM_D, OOS_TO_D, "oos") for v in pairs.values() for c in v], workers)
+    out = {}
+    for k, (lp, ctl) in pairs.items():
+        a, b = row_of(lp, OOS_FROM_D, "oos"), row_of(ctl, OOS_FROM_D, "oos")
+        out[k] = {"lp": a["net"], "ctl": b["net"], "dd_lp": a["maxDD"], "dd_ctl": b["maxDD"]}
+    return out
+
+
+def run_h56(workers: int, only: list[str] | None):
+    result = {}
+    path = f"{RESULT_DIR}/h56_result.json"
+    if os.path.exists(path):
+        with open(path) as f:
+            result = json.load(f)
+    for opt in H56_ORDER:
+        if only and opt not in only:
+            continue
+        tasks = []
+        for pk in MAIN_REP[opt]:
+            for c in h56_configs(opt, pk):
+                tasks += [(c, s, e, "window") for s, e in is_windows()]
+                tasks.append((c, IS_FROM, IS_TO, "continuous"))
+        run_tasks(tasks, workers)
+        t = h56_table(opt)
+        pick, t = h56_pick(t, opt)
+        t.to_csv(f"{RESULT_DIR}/h56_{opt}.csv", index=False)
+        r = {"pick": pick, "candidates": t[t["candidate"]][["gate", "shape", "cont_diff"]].values.tolist()}
+        print(f"H56 {opt}: candidates {r['candidates']}, pick {pick}", flush=True)
+        if pick:
+            r["luck"] = h56_luck(opt, pick, workers)
+            print(f"H56 {opt} luck: real {r['luck']['real']:+.4f} vs median of placebo maxima "
+                  f"{r['luck']['median_of_maxima']:+.4f} -> {'pass' if r['luck']['passes'] else 'luck'}", flush=True)
+            if r["luck"]["passes"]:
+                r["oos"] = h57_run(opt, pick, workers)
+                print(f"H57 {opt}: {r['oos']}", flush=True)
+        result[opt] = r
+        with open(path, "w") as f:
+            json.dump(result, f, indent=1, default=float)
+    result["listed_2026"] = h57_listed(workers)
+    print("H57 listed:", result["listed_2026"], flush=True)
+    with open(path, "w") as f:
+        json.dump(result, f, indent=1, default=float)
+
+
 # ---------------------------------------------------------------- acceptance
 
 def accept():
@@ -1176,6 +1388,7 @@ def main():
     a.add_argument("--h50", action="store_true")
     a.add_argument("--h51", action="store_true", help="H51 and H52 (the half ladder is a C1 version)")
     a.add_argument("--h53", action="store_true", help="H53, H54 and H55 (C1's drawdown)")
+    a.add_argument("--h56", action="store_true", help="H56 and H57 (gate x range together, 2026 held out)")
     a.add_argument("--report", action="store_true")
     a.add_argument("--only", nargs="*", default=None)
     a.add_argument("--workers", type=int, default=2)
@@ -1227,6 +1440,8 @@ def main():
         with multiprocessing.Pool(a.workers, maxtasksperchild=1) as pool:
             pool.starmap(task, tasks, chunksize=1)
         report_h53()
+    if a.h56:
+        run_h56(a.workers, a.only)
 
 
 if __name__ == "__main__":
