@@ -1098,7 +1098,9 @@ def report_h53():
             x = xw - cw
             c = judge(x, xc["maxDD"], cc["maxDD"])
             h = math.ceil(len(x) / 2)
-            ev = pd.read_csv(f"{RESULT_DIR}/nav/events_{opt}_{pk}_{v}_continuous_{cs}.csv")
+            evf = f"{RESULT_DIR}/nav/events_{opt}_{pk}_{v}_continuous_{cs}.csv"
+            # H48's C1 runs predate the kind in file names; their brake / slow counts are 0 anyway
+            ev = pd.read_csv(evf) if os.path.exists(evf) else pd.DataFrame({"t": [], "kind": []})
             out.append({"case": opt, "version": v, "pool": pk, "median": x.median(), "positive": int((x > 0).sum()),
                         "first_half": x.iloc[:h].median(), "second_half": x.iloc[h:].median(),
                         "cont_lp": xc["net"], "cont_ctl": cc["net"], "dd_lp": xc["maxDD"], "dd_ctl": cc["maxDD"],
