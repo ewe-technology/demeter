@@ -282,6 +282,8 @@ class ConfigG(robust.ConfigR):
     gate_spec: str = "99ac:ema:100"
     option: str = ""
     hourly_check: bool = False  # acceptance only: GatedPool's hourly out-of-range check (H4b)
+    brake: bool = False  # H53: gate off and the price below the ladder at a check -> sell to the quote until gate on
+    slow_spec: str = ""  # H54: gate off, the ladder only while this slower gate is on, else the quote
 
 
 def gcfg(option: str, pool_key: str, name: str, gate_spec: str, width: float = 0.0, up: float = 0.0,
@@ -353,7 +355,12 @@ def run(c: ConfigG, start: date, end: date, bar: str | None = "1h", kind: str = 
     if c.hourly_check:
         strategy = GatedPool(c, gate)
     else:
-        strategy = (HalfRobust if c.off == "half" else robust.RobustGated)(c, gate)
+        if c.brake:
+            strategy = BrakeGated(c, gate)
+        elif c.slow_spec:
+            strategy = SlowGated(c, gate, gate_series(c.slow_spec, c.gate_hour))
+        else:
+            strategy = (HalfRobust if c.off == "half" else robust.RobustGated)(c, gate)
     actuator.strategy = strategy
     actuator.run(print_result=False)
 
@@ -993,6 +1000,125 @@ def report_h51():
         json.dump(verdict, f, indent=1)
 
 
+# ---------------------------------------------------------------- H53 - H55: C1's drawdown
+
+def to_quote(strategy, t, kind: str):
+    """Remove the position and sell every base token: the book holds only the quote."""
+    if strategy.bounds is not None:
+        strategy.remove()
+    base = strategy.broker.get_token_balance(strategy.cfg.base)
+    if base > 0:
+        strategy.markets[KEY].swap(base, strategy.cfg.base, strategy.cfg.quote)
+    strategy.mode = "cash"
+    strategy.events.append((t, kind))
+
+
+class BrakeGated(robust.RobustGated):
+    """H53: while the gate is off, a daily check that finds the price below the ladder sells to the quote and waits
+    for the gate to turn on; the next gate-off spell places a fresh ladder."""
+
+    def on_bar(self, snapshot):
+        t = snapshot.timestamp
+        price = self.markets[KEY].market_status.data.price
+        gate_bar = t.hour == self.cfg.delay and t.minute == 0
+        if (self.state is False and self.mode == "range" and gate_bar and self.bounds is not None
+                and price < self.bounds[0] and not bool(self.gate.asof(pd.Timestamp(t).normalize()))):
+            to_quote(self, t, "brake")
+        super().on_bar(snapshot)
+
+
+class SlowGated(robust.RobustGated):
+    """H54: while the gate is off, the ladder only while the slow gate is on; else the quote. Checked daily."""
+
+    def __init__(self, cfg, gate: pd.Series, slow: pd.Series):
+        super().__init__(cfg, gate)
+        self.slow = slow
+
+    def slow_on(self, t) -> bool:
+        return bool(self.slow.asof(pd.Timestamp(t).normalize()))
+
+    def go(self, on: bool, price: Decimal, t):
+        if on or self.slow_on(t):
+            return super().go(on, price, t)
+        self.state = False
+        to_quote(self, t, "off")
+
+    def on_bar(self, snapshot):
+        t = snapshot.timestamp
+        price = self.markets[KEY].market_status.data.price
+        gate_bar = t.hour == self.cfg.delay and t.minute == 0
+        if (self.state is False and gate_bar and not bool(self.gate.asof(pd.Timestamp(t).normalize()))):
+            if self.slow_on(t) and self.mode == "cash":
+                self.k = (1 + self.cfg.off_width, 1 + (self.cfg.off_up or self.cfg.off_width))
+                self.place(price, 0.0, "slow_on", t)
+                self.mode = "range"
+            elif not self.slow_on(t) and self.mode == "range":
+                to_quote(self, t, "slow_off")
+        super().on_bar(snapshot)
+
+
+def h53_configs() -> list[ConfigG]:
+    with open(f"{RESULT_DIR}/h46_choice.json") as f:
+        btc = json.load(f)["btc"]
+    out = []
+    for pk in MAIN_REP["C1"]:
+        out.append(gcfg("H53", pk, "brake", btc, on="spot", brake=True, **ladder(0.40, 0.01)))
+        out.append(gcfg("H54", pk, "slow200", btc, on="spot", slow_spec="99ac:ema:200", **ladder(0.40, 0.01)))
+        for tag, spec in (("ema50", "99ac:ema:50"), ("ema200", "99ac:ema:200"), ("ts30", "99ac:ts:30")):
+            out.append(gcfg("H55", pk, f"ladder_{tag}", spec, on="spot", **ladder(0.40, 0.01)))
+            out.append(gcfg("H55", pk, f"ctl_{tag}", spec, on="spot"))
+    return out
+
+
+def h53_tasks() -> list[tuple]:
+    out = []
+    for c in h53_configs():
+        out += [(c, s, e, "window") for s, e in windows("C1")]
+        s, e = continuous("C1")
+        out.append((c, s, e, "continuous"))
+    return out
+
+
+def rows_of(option: str, pool: str, version: str) -> tuple[pd.Series, dict]:
+    starts = [s for s, _ in windows("C1")]
+    w = pd.Series({s: json.load(open(f"{ROWS_DIR}/{option}_{pool}_{version}_window_{s}.json"))["net"] for s in starts})
+    cs, _ = continuous("C1")
+    return w, json.load(open(f"{ROWS_DIR}/{option}_{pool}_{version}_continuous_{cs}.json"))
+
+
+def report_h53():
+    out = []
+    cases = [("H53", "brake", "C1", "ctl"), ("H54", "slow200", "C1", "ctl"), ("C1", "ladder", "C1", "ctl")]
+    cases += [("H55", f"ladder_{t}", "H55", f"ctl_{t}") for t in ("ema50", "ema200", "ts30")]
+    cs, _ = continuous("C1")
+    for opt, v, copt, ctl in cases:
+        for pk in MAIN_REP["C1"]:
+            xw, xc = rows_of(opt, pk, v)
+            cw, cc = rows_of(copt, pk, ctl)
+            x = xw - cw
+            c = judge(x, xc["maxDD"], cc["maxDD"])
+            h = math.ceil(len(x) / 2)
+            ev = pd.read_csv(f"{RESULT_DIR}/nav/events_{opt}_{pk}_{v}_continuous_{cs}.csv")
+            out.append({"case": opt, "version": v, "pool": pk, "median": x.median(), "positive": int((x > 0).sum()),
+                        "first_half": x.iloc[:h].median(), "second_half": x.iloc[h:].median(),
+                        "cont_lp": xc["net"], "cont_ctl": cc["net"], "dd_lp": xc["maxDD"], "dd_ctl": cc["maxDD"],
+                        "dd_gap": xc["maxDD"] - cc["maxDD"], "four_checks": all(c.values()),
+                        "failed": "; ".join(k for k, ok in c.items() if not ok), "recentres": xc["recentres"],
+                        "switches": xc["switches"], "gas": xc["gas"], "brakes": int((ev["kind"] == "brake").sum()),
+                        "slow_offs": int((ev["kind"] == "slow_off").sum()) + int((ev["kind"] == "off").sum())
+                        if v == "slow200" else 0})
+    t = pd.DataFrame(out)
+    t.to_csv(f"{RESULT_DIR}/h53_summary.csv", index=False)
+    show(t)
+    for case in ("H53", "H54"):
+        s = t[t["case"] == case].set_index("pool")
+        print(f"{case}: 99ac four checks {bool(s.loc['99ac', 'four_checks'])}, 9db9 {bool(s.loc['9db9', 'four_checks'])} -> "
+              f"{'C1 turns over' if s['four_checks'].all() else 'only on the main pool' if s.loc['99ac', 'four_checks'] else 'no'}")
+    h55 = t[(t["case"] == "H55") & (t["pool"] == "99ac")]
+    within = h55[h55["dd_gap"] >= -0.02]["version"].tolist()
+    print("H55 reading:", "the drawdown is not the gate's parameter" if not within else f"within 2 pt: {within} (not adopted)")
+
+
 # ---------------------------------------------------------------- acceptance
 
 def accept():
@@ -1047,6 +1173,7 @@ def main():
     a.add_argument("--h49", action="store_true")
     a.add_argument("--h50", action="store_true")
     a.add_argument("--h51", action="store_true", help="H51 and H52 (the half ladder is a C1 version)")
+    a.add_argument("--h53", action="store_true", help="H53, H54 and H55 (C1's drawdown)")
     a.add_argument("--report", action="store_true")
     a.add_argument("--only", nargs="*", default=None)
     a.add_argument("--workers", type=int, default=2)
@@ -1092,6 +1219,12 @@ def main():
             pool.starmap(task, tasks, chunksize=1)
         if not a.limit:
             report_h51()
+    if a.h53:
+        tasks = h53_tasks()
+        print(f"{len(tasks)} tasks", flush=True)
+        with multiprocessing.Pool(a.workers, maxtasksperchild=1) as pool:
+            pool.starmap(task, tasks, chunksize=1)
+        report_h53()
 
 
 if __name__ == "__main__":
