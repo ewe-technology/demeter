@@ -1,0 +1,39 @@
+{
+ "sizes": {
+  "inv30": 0.65,
+  "inv50": 0.8,
+  "inv70": 0.8500000000000001,
+  "inv50_spell": 0.65
+ },
+ "verdict": {
+  "inv30": {
+   "dd within 2 pt (both)": false,
+   "return above dd30 (both)": false,
+   "passes": false,
+   "matched fixed ladder": "fix65",
+   "beats its fixed ladder (both)": false
+  },
+  "inv50": {
+   "dd within 2 pt (both)": false,
+   "return above dd30 (both)": true,
+   "passes": false,
+   "matched fixed ladder": "fix80",
+   "beats its fixed ladder (both)": false
+  },
+  "inv70": {
+   "dd within 2 pt (both)": false,
+   "return above dd30 (both)": true,
+   "passes": false,
+   "matched fixed ladder": "fix85",
+   "beats its fixed ladder (both)": false
+  },
+  "inv50_spell": {
+   "dd within 2 pt (both)": false,
+   "return above dd30 (both)": true,
+   "passes": false,
+   "matched fixed ladder": "fix65",
+   "beats its fixed ladder (both)": false
+  }
+ },
+ "pick": null
+}

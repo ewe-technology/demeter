@@ -1317,7 +1317,7 @@ class CapGated(robust.RobustGated):
             return
         k = min(1.0, max(0.0, 1 - c.inv_cap * v / in_pos))  # the book's other WBTC is sold below anyway
         for key, pos in list(m.positions.items()):
-            part = int(pos.liquidity * k)
+            part = int(int(pos.liquidity) * k)
             if 0 < part < pos.liquidity:
                 m.remove_liquidity(key, part)
         held = self.broker.get_token_balance(c.base)
