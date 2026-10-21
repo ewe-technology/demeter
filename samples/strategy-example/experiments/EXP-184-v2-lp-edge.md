@@ -78,6 +78,16 @@ plain BTC.
 Smoke run (2025-03-01..10, F = 0, weak): the LP starts all BTC just above the price, out-of-range rebuilds cost ~2e-6
 ETH, fees accrue daily.
 
+Batch 6 (after batch 5's IS results: the off-centre LP is run through by BTC trends, IL −1.016 / −0.623). Back to the
+base's IS position log: positions living >= 6 days made +0.374, the 39 shorter ones −0.05 (19 of them 1-2 days, from F
+stepping .375 → .5 → .75 → 1 on consecutive days, each step rebuilding the LP). Build the weak-side LP only once F has
+stopped moving; until then its share is held as 50 / 50 ETH / BTC tokens (the exposure of a fresh centred LP).
+
+| variant | change |
+|---|---|
+| `k100_reupE_lpwait2` | the weak-side LP is built only after F is unchanged for 2 closes |
+| `k100_reupE_lpwait3` | the same after 3 unchanged closes |
+
 ## Pre-registration
 
 - Pool `0x4585`, 1 ETH, in ETH incl. rewards. IS 2021-11-02..2024-12-31, OOS 2025-01-01..2026-09-30 (`oosf`).
@@ -119,6 +129,13 @@ Batch 4, IS (none passed): narrowing in calm or ranging R still raises IL faster
 | `volwidth` | 62.50% | −24.8% | 2.515 | 0.683 | −0.619 | +0.063 | 120 | loses, LP down |
 | `volwidth3` | 62.66% | −24.9% | 2.521 | 0.655 | −0.597 | +0.058 | 120 | loses, LP down |
 | `erwidth` | 62.18% | −24.8% | 2.504 | 0.733 | −0.761 | −0.028 | 121 | loses, LP down |
+
+Batch 5, IS (none passed):
+
+| variant | CAGR | max DD | Calmar | fees | IL | LP edge | rebuilds | vs base |
+|---|---|---|---|---|---|---|---|---|
+| `weakone` | 57.16% | −24.2% | 2.358 | 0.766 | −1.016 | −0.250 | 174 | loses, LP down |
+| `weakone30` | 60.08% | −24.5% | 2.452 | 0.558 | −0.623 | −0.065 | 149 | loses, LP down |
 
 ## Deviations
 

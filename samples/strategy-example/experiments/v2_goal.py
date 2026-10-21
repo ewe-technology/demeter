@@ -560,6 +560,28 @@ VARIANTS.update({
     "k100_reupE_weakone30": ("weak-side LP capital", "weakone with a +-30% span",
                              BASE184 + WEAKONE + [(RANGES, RANGES.replace('Decimal("0.20")', 'Decimal("0.30")'), 1)]),
 })
+# EXP-184 batch 6 (after batch 5's IS results: weakone / weakone30 lose, the off-centre LP is run through by BTC trends,
+# IL −1.016 / −0.623). Back to the base's position log on IS: positions living >= 6 days made +0.374, the 39 shorter
+# ones −0.05 (19 of them 1-2 days, from F stepping .375 -> .5 -> .75 -> 1 on consecutive days, each step rebuilding
+# the LP). Build the weak-side LP only once F has stopped moving; until then hold its share as 50 / 50 ETH / BTC
+# tokens (the same exposure as a fresh centred LP, no LP).
+
+
+def LPWAIT(n: int) -> list:
+    stable = " & ".join(f"(_fs == _fs.shift({k}))" for k in range(1, n + 1))
+    return BASE184 + [("    out['F'] = _res\n", "    out['F'] = _res\n"
+                       "    _fs = pd.Series(out['F'], index=out.index)  # v2_goal EXP-184 lpwait\n"
+                       f"    out['fstable'] = {stable}\n", 1),
+                      (ALLOC_CALL, ALLOC_CALL +
+                       '        if not strong and "fstable" in row and not bool(row["fstable"]) and shares["lp"] > ZERO:  # v2_goal EXP-184 lpwait\n'
+                       '            shares = {"lp": ZERO, "eth": shares["lp"] / 2, "btc": shares["btc"] + shares["lp"] / 2, "usdc": shares["usdc"]}\n', 1)]
+
+
+VARIANTS.update({
+    "k100_reupE_lpwait2": ("weak-side LP timing", "the LP is built only after F is unchanged for 2 closes; until then its "
+                           "share is held as 50 / 50 ETH / BTC tokens", LPWAIT(2)),
+    "k100_reupE_lpwait3": ("weak-side LP timing", "the same after 3 unchanged closes", LPWAIT(3)),
+})
 ARB = "0x2f5e87C9312fa29aed5C179E456625D79015299c"
 MAKER_POOL = '    contract_address, fee, chain_name = "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0", 0.05, ChainType.ethereum.name  # wbtc/weth\n'
 
