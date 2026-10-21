@@ -1,0 +1,29 @@
+{
+ "verdict": {
+  "w80_s40": {
+   "dd within 2 pt (both)": true,
+   "return above dd30 (both)": false,
+   "passes": false,
+   "neighbours passing": []
+  },
+  "w80_s60": {
+   "dd within 2 pt (both)": true,
+   "return above dd30 (both)": false,
+   "passes": false,
+   "neighbours passing": []
+  },
+  "w90_s40": {
+   "dd within 2 pt (both)": true,
+   "return above dd30 (both)": false,
+   "passes": false,
+   "neighbours passing": []
+  },
+  "w90_s60": {
+   "dd within 2 pt (both)": false,
+   "return above dd30 (both)": true,
+   "passes": false,
+   "neighbours passing": []
+  }
+ },
+ "pick": null
+}
