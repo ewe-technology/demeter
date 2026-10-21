@@ -2,7 +2,7 @@
 
 - Jira: QUAN-1180 (subtask of QUAN-1107)
 - Status: pass — `k100_f2low_rvol_reupE` beats `k75_f2low_rvol` on IS and OOS (CAGR +1.23 / +1.31 pts, DD 0.4 / 1.3 pts shallower)
-- Pre-registration commit: 4052e44 · Result commit: (next commit)
+- Pre-registration commit: 4052e44 · Result commit: 3a99b1a
 
 Dino (/goal 2026-10-21): "切25年以前is 以後oos，只能分析is的結果優化策略，is有比較好的結果才可以看oos，直到btceth池找到
 一個is oos績效都更好的策略。"
