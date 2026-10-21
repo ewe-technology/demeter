@@ -332,6 +332,10 @@ VARIANTS.update({
     "k75_f2low_rvol": ("ETH kept 75% + F second-lowest + rvol", "keep75, f2low and rvol", KEEP("0.75") + F2LOW + RVOL),
     "keep100": ("ETH kept outside the LP while strong", "100% of F (no LP while ETH is strong; boundary case)", KEEP("1")),
 })
+# 2026-10-21 (Dino: 最單純的lp策略): the spec's own "通常LP" control, Maker's MODE_PLAIN: 100% LP, one uniform +-10% band,
+# no signal, recentred when the price leaves it, same 0.1% swap cost
+VARIANTS["plain"] = ("whole strategy", "spec's plain LP control (MODE_PLAIN): 100% LP, uniform +-10%, rebuilt out of range",
+                     [("    modes = modes or [MODE_SIGNAL]", "    modes = [MODE_PLAIN]  # v2_goal plain", 1)])
 ARB = "0x2f5e87C9312fa29aed5C179E456625D79015299c"
 MAKER_POOL = '    contract_address, fee, chain_name = "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0", 0.05, ChainType.ethereum.name  # wbtc/weth\n'
 
@@ -423,9 +427,11 @@ def run(seg: str, variant: str) -> str:
     dst.mkdir(parents=True)
     with open(dst / "run.log", "w") as f:
         rc = subprocess.run([str(PY), script.name], cwd=se, env=env, stdout=f, stderr=subprocess.STDOUT).returncode
-    js = list((se / "result").rglob("v2goal_signal.json"))
-    for f in js + list((se / "result").rglob("*.csv")):
+    js = list((se / "result").rglob("v2goal_*.json"))   # v2goal_signal.json, or v2goal_plain.json for `plain`
+    for f in list((se / "result").rglob("*.csv")):
         shutil.copy(f, dst / f.name)
+    for f in js:   # one mode per run: stored under the signal name so metrics / table read every run alike
+        shutil.copy(f, dst / "v2goal_signal.json")
     shutil.rmtree(d.parent)
     if rc != 0 or not js:
         return f"{tag} FAILED rc={rc}"
