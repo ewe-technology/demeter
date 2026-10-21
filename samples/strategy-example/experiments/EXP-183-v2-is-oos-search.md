@@ -33,6 +33,16 @@ without giving up the retreat's gains.
 
 Later batches, if needed, are added to this file and committed before they run; each one may use IS results only.
 
+Batch 2 (written after batch 1, from IS numbers only): split by regime, the base's LP made +0.03 ETH over the 787 weak
+IS days (LP 68% of the book) where a 50/50 ETH/BTC hold of the same money made +0.14 and BTC +0.28 (2022 −0.47,
+2024 +0.71). The weak side is where the LP gives the least back.
+
+| variant | added element |
+|---|---|
+| `k75_f2low_rvol_bkeep25` | while weak, 25% of F held as BTC outside the LP (mirror of ETH_KEEP) |
+| `k75_f2low_rvol_bkeep50` | while weak, 50% of F held as BTC outside the LP |
+| `k75_f2low_rvol_weakhold` | while weak, F held as 50% ETH / 50% BTC tokens, no LP |
+
 ## Pre-registration
 
 - Pool: mainnet WBTC/WETH 0.05% `0x4585`, 1 ETH start, net value in ETH incl. rewards (as EXP-178..182); USD ratio and
@@ -46,7 +56,20 @@ Later batches, if needed, are added to this file and committed before they run; 
 
 ## Result
 
-(pending)
+In ETH; base `k75_f2low_rvol`. IS 2021-11-02..2024-12-31, OOS 2025-01-01..2026-09-30.
+
+Batch 1, IS:
+
+| variant | CAGR | max DD | Calmar | USD x / USD DD | vs base |
+|---|---|---|---|---|---|
+| base | 64.45% | −25.2% | 2.558 | 3.719 / −48.8% | |
+| `reupG` | 64.01% | −25.2% | 2.541 | 3.688 / −48.8% | loses |
+| `reupE` | 64.96% | −24.1% | 2.698 | 3.757 / −48.8% | **beats** |
+| `split50` | 41.67% | −31.9% | 1.306 | 2.320 / −49.9% | loses |
+| `ethmom` | 50.25% | −28.1% | 1.791 | 2.795 / −48.8% | loses |
+
+Batch 1, OOS (only `reupE` passed IS): base 24.49% / −30.0% / 0.818 (USD x1.180, USD DD −55.2%); `reupE` identical
+to the base (its rule never fires after 2024): not better, fails.
 
 ## Deviations
 

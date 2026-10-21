@@ -387,6 +387,24 @@ VARIANTS.update({
                                       '    out["ethmom"] = out["strong"] & (_e > _e20) & (_e20 > _e50)\n', 1),
                                      VARIANTS["ethmom"][2][1]]),
 })
+# EXP-183 batch 2 (written after batch 1's IS results and an IS-only split of the base's LP result by regime; reupE's OOS
+# was identical to the base, its rule never fired): while ETH is weak (787 of 1155 IS days, LP 68% of the book) the LP
+# made +0.03 ETH, a plain 50/50 ETH/BTC hold of the same money +0.14, BTC +0.28 (2022 −0.47, 2024 +0.71). Mirror of
+# keep75 on the weak side: keep part of F as BTC outside the LP, or hold the weak-side LP share as 50/50 tokens.
+
+
+def BKEEP(x: str) -> list:
+    return K75 + [(WEAK_ALLOC, WEAK_ALLOC.replace('"lp": f, "eth": ZERO, "btc": ONE - f',
+                                                  f'"lp": f * (ONE - Decimal("{x}")), "eth": ZERO, "btc": f * Decimal("{x}") + ONE - f'), 1)]
+
+
+VARIANTS.update({
+    "k75_f2low_rvol_bkeep25": ("added: BTC kept outside the LP while weak", "25% of F held as BTC (mirror of ETH_KEEP)", BKEEP("0.25")),
+    "k75_f2low_rvol_bkeep50": ("added: BTC kept outside the LP while weak", "50% of F held as BTC (mirror of ETH_KEEP)", BKEEP("0.5")),
+    "k75_f2low_rvol_weakhold": ("weak-side LP", "while weak, F is held as 50% ETH / 50% BTC tokens instead of an LP",
+                                K75 + [(WEAK_ALLOC, WEAK_ALLOC.replace('"lp": f, "eth": ZERO, "btc": ONE - f',
+                                                                      '"lp": ZERO, "eth": f / 2, "btc": f / 2 + ONE - f'), 1)]),
+})
 ARB = "0x2f5e87C9312fa29aed5C179E456625D79015299c"
 MAKER_POOL = '    contract_address, fee, chain_name = "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0", 0.05, ChainType.ethereum.name  # wbtc/weth\n'
 
