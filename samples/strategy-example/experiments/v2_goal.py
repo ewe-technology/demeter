@@ -676,6 +676,63 @@ MET_MORE = MET_LINE + (
     "               open(f'{params.folder}/v2goal_{mode}.json', 'w'))\n")
 
 
+# ---- EXP-185 (Dino 2026-10-21: "2,3,4都嘗試做看看" — the LP research note's directions 2, 3, 4; same IS / OOS rules as
+# EXP-183, base = k100_f2low_rvol_reupE = BASE184). One batch, written before any of it ran.
+W_LINE = "            w = lp_quote_share(current_tick, tick_lo, tick_hi)   # ETH / BTC halves that fill the range exactly\n"
+
+
+def FLIP(rule: str) -> list:
+    """Debounce only the weak -> strong flip (which removes the weak-side LP under keep100); strong -> weak stays at once."""
+    code = {"flip3": ("    _cur, _run, _fl = None, 0, []  # v2_goal EXP-185 flip3\n"
+                      "    for _x in out['strong'].tolist():\n"
+                      "        if _cur is None:\n"
+                      "            _cur = _x\n"
+                      "        elif _x and not _cur:\n"
+                      "            _run += 1\n"
+                      "            if _run >= 3:\n"
+                      "                _cur, _run = True, 0\n"
+                      "        else:\n"
+                      "            _cur, _run = _x, 0\n"
+                      "        _fl.append(bool(_cur))\n"
+                      "    out['strong'] = _fl\n"),
+            "flipband": ("    _cur, _fl = None, []  # v2_goal EXP-185 flipband\n"
+                         "    for _x, _e in zip(out['R'].tolist(), out['R_ema'].tolist()):\n"
+                         "        _cur = (_x >= _e) if _cur is None else ((_x >= _e) if _cur else (_x >= 1.02 * _e))\n"
+                         "        _fl.append(bool(_cur))\n"
+                         "    out['strong'] = _fl\n")}[rule]
+    return BASE184 + [(RVOL_LINE, code + RVOL_LINE, 1)]   # before rvol / reupE, so reupE sees the debounced flag
+
+
+VARIANTS.update({
+    "k100_reupE_nscentre": ("LP placement at a rebuild", "the weak-side +-20% range is shifted by up to +-5% (whole tick "
+                            "spacings) so its ETH share uses the ETH already in the wallet, instead of swapping to the "
+                            "centred split",
+                            BASE184 + [(W_LINE, W_LINE +
+                                        '            _avail = max(ZERO, eth - shares["eth"] * value) / lp_value  # v2_goal EXP-185 nscentre\n'
+                                        "            _sp = self.utils.params.tick_spacing\n"
+                                        "            _k = int(round(math.log(1.05) / LOG_TICK)) // _sp * _sp\n"
+                                        "            _best = (abs(w - _avail), 0)\n"
+                                        "            for _o in range(-_k, _k + 1, _sp):\n"
+                                        "                _w = lp_quote_share(current_tick, tick_lo + _o, tick_hi + _o)\n"
+                                        "                if abs(_w - _avail) < _best[0]:\n"
+                                        "                    _best = (abs(_w - _avail), _o)\n"
+                                        "            tick_lo, tick_hi = tick_lo + _best[1], tick_hi + _best[1]\n"
+                                        "            w = lp_quote_share(current_tick, tick_lo, tick_hi)\n", 1)]),
+    "k100_reupE_flip3": ("added: weak -> strong confirmation", "the strong flag turns on only after 3 consecutive closes "
+                         "with R >= EMA100(R); weak still comes at once", FLIP("flip3")),
+    "k100_reupE_flipband": ("added: weak -> strong band", "the strong flag turns on only at R >= 1.02 x EMA100(R); it "
+                            "turns off at R < EMA100(R) as before", FLIP("flipband")),
+    "k100_reupE_mrgate": ("LP recentring gate", "a drift rebuild keeps the old range (lpresize) only while R is mean "
+                          "reverting: 5-day variance ratio of log R over the last 60 closes < 1; else it recentres",
+                          BASE184 + [(RVOL_LINE, RVOL_LINE +
+                                      "    _lr = _np.log(r).diff()  # v2_goal EXP-185 mrgate\n"
+                                      "    _vr = _lr.rolling(5).sum().rolling(60).var() / (5 * _lr.rolling(60).var())\n"
+                                      "    out['mr'] = (_vr < 1.0).reindex(out.index).fillna(False).astype(bool)\n", 1),
+                                     (RANGE_LINE, RANGE_LINE +
+                                      "            _mr = bool(self.daily.loc[pd.Timestamp(row_data.timestamp - timedelta(days=1)).normalize()].get('mr', False))\n"
+                                      "            if _mr and old and old[0] <= current_tick < old[1] and old[1] - old[0] == tick_hi - tick_lo:\n"
+                                      "                tick_lo, tick_hi = old  # v2_goal EXP-185 mrgate\n", 1)]),
+})
 # Logging only (EXP-184, no change in behaviour): LP accounting per position lifetime, in ETH. When a position is removed
 # (a rebuild, after its fees were collected) or at the end: fees = rewards collected since it was added, IL = its value
 # minus the value of the tokens it was built from at today's price, pnl = value + fees - value when built.
