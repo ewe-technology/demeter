@@ -1,0 +1,15 @@
+{
+ "source": "samples/strategy-example/gate_lp_h56_compare.py on aws-strategy-ssm, 2026-10-20; pool 99ac, $100k. 2022-2025 = calendar years of the in-sample continuous book (2022-01-01 to 2025-12-31); 2026 = a separate book from cash, 2026-01-01 to 2026-09-30. ret and mdd as fractions, rounded to 4 places as the script printed them.",
+ "series": {
+  "ema50_l120": {"2022": {"ret": -0.3236, "mdd": -0.4066}, "2023": {"ret": 1.2734, "mdd": -0.2428}, "2024": {"ret": 1.1115, "mdd": -0.2861}, "2025": {"ret": 0.2467, "mdd": -0.2225}, "2026": {"ret": 0.0263, "mdd": -0.2538}},
+  "ema50_ctl": {"2022": {"ret": -0.4579, "mdd": -0.4743}, "2023": {"ret": 1.0388, "mdd": -0.2801}, "2024": {"ret": 0.5644, "mdd": -0.3862}, "2025": {"ret": 0.014, "mdd": -0.1911}, "2026": {"ret": -0.0384, "mdd": -0.2675}},
+  "ema100_l140": {"2022": {"ret": 0.1011, "mdd": -0.2734}, "2023": {"ret": 0.883, "mdd": -0.2658}, "2024": {"ret": 0.8958, "mdd": -0.3027}, "2025": {"ret": 0.054, "mdd": -0.3055}, "2026": {"ret": -0.0359, "mdd": -0.2816}},
+  "ema100_ctl": {"2022": {"ret": -0.0557, "mdd": -0.1186}, "2023": {"ret": 0.6979, "mdd": -0.2802}, "2024": {"ret": 0.6427, "mdd": -0.3913}, "2025": {"ret": -0.049, "mdd": -0.2549}, "2026": {"ret": 0.0591, "mdd": -0.1336}}
+ },
+ "in_sample": {
+  "ema50_l120": {"net": 3.0518, "mdd": -0.4066, "moves": 23, "switches": 101},
+  "ema50_ctl": {"net": 0.7534, "mdd": -0.4765, "moves": 0, "switches": 101},
+  "ema100_l140": {"net": 3.1466, "mdd": -0.3055, "moves": 13, "switches": 53},
+  "ema100_ctl": {"net": 1.5046, "mdd": -0.3913, "moves": 0, "switches": 53}
+ }
+}
