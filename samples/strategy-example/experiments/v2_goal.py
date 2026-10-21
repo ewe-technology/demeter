@@ -39,8 +39,10 @@ MAIN = Path("/Users/dinohuang/Desktop/demeter-momentum")
 OUT = Path(os.environ.get("OUT", MAIN / "samples/strategy-example/result/v2_goal"))
 WORK = Path(os.environ.get("WORK", OUT / "_work"))
 PY = MAIN / ".venv-rs/bin/python"
-REF = "5cec767"
-SCRIPT = "gamma_maker_defense_btceth_v1.py"
+REF = os.environ.get("REF", "5cec767")
+SCRIPT = os.environ.get("SCRIPT", "gamma_maker_defense_btceth_v1.py")
+# Sheet check 2026-10-21: REF=29e3dd9 SCRIPT=gamma_ig_gap_bands_defense_btceth.py OUT=<other dir> runs the remix branch's
+# earlier version of the same spec (pool-price signal, no Binance files); its runs must go to their own OUT.
 END = (2026, 9, 17)   # last day of minute data for both pools
 DATA = {"0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0": MAIN / "samples/holdout-data/0x4585fe77225b41b697c938b018e2ac67ac5a20c0",
         "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": MAIN / "samples/real-data/0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
@@ -48,7 +50,11 @@ DATA = {"0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0": MAIN / "samples/holdout-da
 SEGMENTS = {"is": ((2021, 11, 2), (2024, 12, 31)), "oos": ((2025, 1, 1), END), "smoke": ((2025, 3, 1), (2025, 3, 10)),
             "y2023": ((2023, 1, 2), (2023, 12, 31)), "y2025": ((2025, 1, 2), (2025, 12, 31)),  # Maker's check years
             "arb": ((2023, 1, 1), (2026, 1, 13)),   # EXP-182: Arbitrum 0x2f5e, all its minute data
-            "arbsmoke": ((2024, 3, 1), (2024, 3, 10)), "mainsmoke": ((2024, 3, 1), (2024, 3, 10))}
+            "arbsmoke": ((2024, 3, 1), (2024, 3, 10)), "mainsmoke": ((2024, 3, 1), (2024, 3, 10)),
+            # the windows of Maker's sheet "BTC/ETH gamma ig gap bands defence V1 slippage 0.1/fee 0.05" (2026 ends at
+            # our last minute-data day, the sheet's at 09-30)
+            "y2022": ((2022, 1, 2), (2022, 12, 31)), "y2024": ((2024, 1, 2), (2024, 12, 31)),
+            "c2225": ((2022, 1, 2), (2025, 12, 31)), "y2026": ((2026, 1, 2), END)}
 
 # ---- variants: name -> (element of v2, what it becomes, [(pattern, replacement, expected count)]) -------------------
 STRONG_LINE = '    return pd.DataFrame({"G": g, "R": r, "R_ema": r_ema, "strong": r >= r_ema, "F": fractions})\n'
@@ -384,7 +390,8 @@ def source() -> Path:
         blob = subprocess.run(["git", "-C", str(REPO), "archive", REF, "samples/strategy-example"],
                               check=True, capture_output=True).stdout
         tarfile.open(fileobj=io.BytesIO(blob)).extractall(src)
-        binance_files(src / "samples/strategy-example")
+        if (src / "samples/strategy-example/binance_ethbtc_1d.csv").exists():   # the remix version has no Binance files
+            binance_files(src / "samples/strategy-example")
     return src
 
 
