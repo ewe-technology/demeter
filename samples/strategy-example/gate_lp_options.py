@@ -31,6 +31,7 @@ Run from samples/strategy-example (minute CSVs in ../real-data/<pool>/):
   PYTHONPATH=../.. python gate_lp_options.py --h46            # then --h47
   PYTHONPATH=../.. python gate_lp_options.py --h48 --workers 2 [--only C1 C2] [--limit n]
   PYTHONPATH=../.. python gate_lp_options.py --report
+  PYTHONPATH=../.. python gate_lp_options.py --h59-check      # then --h59 (reports/plan_2026-10-21_c1_drawdown.md)
 """
 import argparse
 import dataclasses
@@ -286,6 +287,9 @@ class ConfigG(robust.ConfigR):
     hourly_check: bool = False  # acceptance only: GatedPool's hourly out-of-range check (H4b)
     brake: bool = False  # H53: gate off and the price below the ladder at a check -> sell to the quote until gate on
     slow_spec: str = ""  # H54: gate off, the ladder only while this slower gate is on, else the quote
+    dd_budget: float = 0.0  # H59: gate off, the ladder is the book x (1 - drawdown / dd_budget), clipped to [0, 1]
+    time_cap: int = 0  # H60: gate off for this many days -> sell to the quote until gate on
+    hourly_down: bool = False  # H62: below the ladder at any full hour -> re-centre (the upper edge stays daily)
 
 
 def gcfg(option: str, pool_key: str, name: str, gate_spec: str, width: float = 0.0, up: float = 0.0,
@@ -357,7 +361,9 @@ def run(c: ConfigG, start: date, end: date, bar: str | None = "1h", kind: str = 
     if c.hourly_check:
         strategy = GatedPool(c, gate)
     else:
-        if c.brake:
+        if c.dd_budget or c.time_cap or c.hourly_down:
+            strategy = CapGated(c, gate)
+        elif c.brake:
             strategy = BrakeGated(c, gate)
         elif c.slow_spec:
             strategy = SlowGated(c, gate, gate_series(c.slow_spec, c.gate_hour))
@@ -413,7 +419,8 @@ def run(c: ConfigG, start: date, end: date, bar: str | None = "1h", kind: str = 
             "end": str(end), "net": float(usd.iloc[-1] / usd.iloc[0] - 1),
             "net_3gwei": float(usd3.iloc[-1] / usd3.iloc[0] - 1),
             "swap_fee": swap_fee / initial, "impact": impact / initial, "gas": (paid_all - impact) / initial,
-            "recentres": int((ev["kind"] == "recentre").sum()), "switches": int(ev["kind"].isin(["on", "off"]).sum()),
+            "recentres": int(ev["kind"].isin(["recentre", "recentre_h"]).sum()),
+            "switches": int(ev["kind"].isin(["on", "off"]).sum()),
             "maxDD": max_dd(usd), "secs": round(time.time() - started)}
 
 
@@ -1123,6 +1130,192 @@ def report_h53():
     print("H55 reading:", "the drawdown is not the gate's parameter" if not within else f"within 2 pt: {within} (not adopted)")
 
 
+# ---------------------------------------------------------------- H59 - H62: C1's gate-off exposure capped
+# reports/plan_2026-10-21_c1_drawdown.md (registered in 22db440)
+
+class CapGated(robust.RobustGated):
+    """H59 - H62 on C1's ladder while the gate is off. dd_budget: every placement (the gate-off one and each re-centre)
+    holds the book x s, s = 1 - drawdown / dd_budget clipped to [0, 1], never more than the ladder just removed; the
+    rest stays in the quote, and s = 0 holds the quote until the gate turns on. time_cap: N days after the gate-off
+    switch, at 00:00, sell to the quote until the gate turns on. hourly_down: a full hour below the lower edge
+    re-centres as the daily check does. The book and its peak are Demeter's own (before gas and impact)."""
+
+    def __init__(self, cfg, gate: pd.Series):
+        super().__init__(cfg, gate)
+        self.peak = 0.0
+        self.outside = 0.0  # quote kept beside a sized ladder in this gate-off spell
+        self.off_since = None
+
+    def book(self, price: Decimal) -> float:
+        btc = self.broker.get_token_balance(self.cfg.base)
+        quote = self.broker.get_token_balance(self.cfg.quote)
+        if self.bounds is not None:
+            s = self.markets[KEY].get_market_balance()
+            btc += s.base_in_position + s.base_uncollected
+            quote += s.quote_in_position + s.quote_uncollected
+        return float(btc * price + quote)
+
+    def go(self, on: bool, price: Decimal, t):
+        if not on:
+            self.off_since, self.outside = pd.Timestamp(t).normalize(), 0.0
+        return super().go(on, price, t)
+
+    def place(self, price: Decimal, width: float, kind: str, t):
+        c = self.cfg
+        if self.state is not False or not c.dd_budget:
+            return super().place(price, width, kind, t)
+        v = self.book(price)
+        s = min(1.0, max(0.0, 1 - (1 - v / self.peak) / c.dd_budget))
+        lad = min(v * s, v - self.outside)
+        if lad >= v:
+            return super().place(price, width, kind, t)
+        m = self.markets[KEY]
+        btc = self.broker.get_token_balance(c.base)
+        if btc > 0:
+            m.swap(btc, c.base, c.quote)
+        if lad <= 0:
+            self.mode, self.outside = "cash", v
+            self.events.append((t, "zero"))
+            return
+        lad = min(lad, float(self.broker.get_token_balance(c.quote)))  # the swap's fee came off the book
+        lo, hi = price / Decimal(self.k[0]), price * Decimal(self.k[1])
+        t1, t2 = m.price_to_tick(lo), m.price_to_tick(hi)
+        m.add_liquidity_by_value(min(t1, t2), max(t1, t2), Decimal(lad))
+        self.bounds, self.outside = (lo, hi), float(self.broker.get_token_balance(c.quote))
+        self.events.append((t, kind))
+        self.events.append((t, f"cut:{lad / v:.4f}"))
+
+    def on_bar(self, snapshot):
+        c = self.cfg
+        t = snapshot.timestamp
+        price = self.markets[KEY].market_status.data.price
+        if t.minute == 0:
+            self.peak = max(self.peak, self.book(price))
+        gate_bar = t.hour == c.delay and t.minute == 0
+        off_now = self.state is False and not bool(self.gate.asof(pd.Timestamp(t).normalize()))
+        if (c.time_cap and gate_bar and off_now and self.mode == "range"
+                and (pd.Timestamp(t).normalize() - self.off_since).days >= c.time_cap):
+            to_quote(self, t, "timecap")
+        if (c.hourly_down and not gate_bar and t.minute == 0 and self.state is False and self.mode == "range"
+                and self.bounds is not None and price < self.bounds[0]):
+            self.remove()
+            self.place(price, 0.0, "recentre_h", t)
+        super().on_bar(snapshot)
+
+
+H59_VERSIONS = {"H59": {"dd20": dict(dd_budget=0.20), "dd30": dict(dd_budget=0.30), "dd40": dict(dd_budget=0.40)},
+                "H60": {"tc30": dict(time_cap=30), "tc60": dict(time_cap=60), "tc90": dict(time_cap=90)},
+                "H61": {"dd30_tc60": dict(dd_budget=0.30, time_cap=60)},
+                "H62": {"hdown": dict(hourly_down=True)}}
+H59_NB = {"dd20": ["dd30"], "dd30": ["dd20", "dd40"], "dd40": ["dd30"], "tc30": ["tc60"], "tc60": ["tc30", "tc90"],
+          "tc90": ["tc60"], "dd30_tc60": [], "hdown": []}
+WORST_C1 = ("2025-08-14", "2026-06-05")  # H53: the deepest drawdown of H48's C1 ladder
+CONT_YEARS = ((LAST_DAY - date(2022, 1, 1)).days + 1) / 365.25
+
+
+def h59_configs() -> list[ConfigG]:
+    with open(f"{RESULT_DIR}/h46_choice.json") as f:
+        btc = json.load(f)["btc"]
+    return [gcfg(opt, pk, v, btc, on="spot", **kw, **ladder(0.40, 0.01))
+            for pk in MAIN_REP["C1"] for opt, vs in H59_VERSIONS.items() for v, kw in vs.items()]
+
+
+def h59_tasks() -> list[tuple]:
+    out = []
+    for c in h59_configs():
+        out += [(c, s, e, "window") for s, e in windows("C1")]
+        s, e = continuous("C1")
+        out.append((c, s, e, "continuous"))
+    return out
+
+
+def check_h59():
+    """Plan 5: dd40 on the 2022-01 window equals H48's ladder unless it sized a placement (then the first one is
+    shown); tc90 on the 2023-04 window (no gate-off spell of 90 days) equals it."""
+    cs = {(c.pool_key, c.name): c for c in h59_configs()}
+    for v, s in (("dd40", date(2022, 1, 1)), ("tc90", date(2023, 4, 1))):
+        r = task(cs[("99ac", v)], s, batch.window_end(s), "window")
+        ref = json.load(open(f"{ROWS_DIR}/C1_99ac_ladder_window_{s}.json"))["net"]
+        ev = pd.read_csv(f"{RESULT_DIR}/nav/events_{cs[('99ac', v)].option}_99ac_{v}_window_{s}.csv")
+        cuts = ev[ev["kind"].str.startswith("cut:") | ev["kind"].isin(["zero", "timecap"])]
+        print(f"{v} {s}: {r['net']:.10f} vs C1 ladder {ref:.10f} diff {r['net'] - ref:+.2e}; "
+              f"sized / cash events {len(cuts)}" + (f", first {cuts.iloc[0].tolist()}" if len(cuts) else ""))
+
+
+def calmar_of(row: dict) -> float:
+    return ((1 + row["net"]) ** (1 / CONT_YEARS) - 1) / -row["maxDD"]
+
+
+def nav_of(opt: str, pk: str, v: str) -> pd.Series:
+    if opt == "C1":  # H51's single-slice books are H48's C1 bit for bit and keep the run kind in the file name
+        opt, v = "H51C1", f"{v}_n1_h00_100k"
+    cs, _ = continuous("C1")
+    return pd.read_parquet(f"{RESULT_DIR}/nav/{opt}_{pk}_{v}_continuous_{cs}.parquet")["usd"]
+
+
+def span(nav: pd.Series, a: str, b: str) -> dict:
+    cur = nav.loc[a:f"{b} 23:00"]
+    before = nav[nav.index < pd.Timestamp(a)]
+    x = np.concatenate([[before.iloc[-1] if len(before) else cur.iloc[0]], cur.to_numpy()])
+    return {"ret": float(x[-1] / x[0] - 1), "mdd": float((x / np.maximum.accumulate(x) - 1).min())}
+
+
+def report_h59():
+    cs, _ = continuous("C1")
+    out = []
+    for pk in MAIN_REP["C1"]:
+        cw, cc = rows_of("C1", pk, "ctl")
+        lw, lc = rows_of("C1", pk, "ladder")
+        cases = [("C1", "ladder"), ("C1", "ctl")] + [(o, v) for o, vs in H59_VERSIONS.items() for v in vs]
+        for opt, v in cases:
+            xw, xc = rows_of(opt, pk, v)
+            x = xw - cw
+            c = judge(x, xc["maxDD"], cc["maxDD"])
+            h = math.ceil(len(x) / 2)
+            nav = nav_of(opt, pk, v)
+            evf = f"{RESULT_DIR}/nav/events_{opt}_{pk}_{v}_continuous_{cs}.csv"
+            ev = pd.read_csv(evf) if os.path.exists(evf) else pd.DataFrame({"t": [], "kind": []})
+            kind = ev["kind"].astype(str)
+            row = {"case": opt, "version": v, "pool": pk, "median": x.median(), "positive": int((x > 0).sum()),
+                   "first_half": x.iloc[:h].median(), "second_half": x.iloc[h:].median(),
+                   "vs_c1_median": (xw - lw).median(), "cont": xc["net"], "dd": xc["maxDD"], "dd_ctl": cc["maxDD"],
+                   "dd_gap": xc["maxDD"] - cc["maxDD"], "calmar": calmar_of(xc), "calmar_ctl": calmar_of(cc),
+                   "calmar_c1": calmar_of(lc), "four": all(c.values()),
+                   "three": all(ok for k, ok in c.items() if k != "dd within 2 pt"),
+                   "failed": "; ".join(k for k, ok in c.items() if not ok), "recentres": xc["recentres"],
+                   "switches": xc["switches"], "gas": xc["gas"], "impact": xc["impact"],
+                   "cuts": int(kind.str.startswith("cut:").sum()), "zeros": int((kind == "zero").sum()),
+                   "timecaps": int((kind == "timecap").sum()), "hourly_moves": int((kind == "recentre_h").sum())}
+            w = span(nav, *WORST_C1)
+            y26 = span(nav, "2026-01-01", "2026-09-30")
+            row.update({"worst_ret": w["ret"], "worst_mdd": w["mdd"], "y2026_ret": y26["ret"], "y2026_mdd": y26["mdd"]})
+            for y in range(2022, 2027):
+                s_ = span(nav, f"{y}-01-01", f"{y}-12-31")
+                row[f"ret_{y}"], row[f"mdd_{y}"] = s_["ret"], s_["mdd"]
+            out.append(row)
+    t = pd.DataFrame(out)
+    t.to_csv(f"{RESULT_DIR}/h59_summary.csv", index=False)
+    show(t[["case", "version", "pool", "median", "positive", "first_half", "second_half", "vs_c1_median", "cont",
+            "dd", "dd_gap", "calmar", "four", "failed", "recentres", "cuts", "zeros", "timecaps", "hourly_moves"]])
+    m = t[t["pool"] == "99ac"].set_index("version")
+    r = t[t["pool"] == "9db9"].set_index("version")
+    verdict = {}
+    for v in H59_NB:
+        c1 = bool(m.loc[v, "four"])
+        c2 = bool(m.loc[v, "calmar"] > m.loc[v, "calmar_ctl"] and m.loc[v, "calmar"] > m.loc[v, "calmar_c1"])
+        c3 = bool(r.loc[v, "four"])
+        c4 = not H59_NB[v] or any(bool(m.loc[n, "three"] and m.loc[n, "calmar"] > m.loc[n, "calmar_ctl"])
+                                  for n in H59_NB[v])
+        verdict[v] = {"99ac four": c1, "calmar": c2, "9db9 four": c3, "neighbour": c4, "passes": c1 and c2 and c3 and c4,
+                      "main pool only": c1 and c2 and c4 and not c3}
+    passing = [v for v, d in verdict.items() if d["passes"]]
+    pick = max(passing, key=lambda v: m.loc[v, "calmar"]) if passing else None
+    res = {"verdict": verdict, "pick": pick}
+    print(json.dumps(res, indent=1))
+    with open(f"{RESULT_DIR}/h59_result.json", "w") as f:
+        json.dump(res, f, indent=1)
+
+
 # ---------------------------------------------------------------- H56, H57: gate x range together, 2026 held out
 
 IS_FROM, IS_TO = date(2022, 1, 1), date(2025, 12, 31)
@@ -1391,6 +1584,8 @@ def main():
     a.add_argument("--h51", action="store_true", help="H51 and H52 (the half ladder is a C1 version)")
     a.add_argument("--h53", action="store_true", help="H53, H54 and H55 (C1's drawdown)")
     a.add_argument("--h56", action="store_true", help="H56 and H57 (gate x range together, 2026 held out)")
+    a.add_argument("--h59-check", action="store_true", help="plan 2026-10-21 section 5's checks, before H59")
+    a.add_argument("--h59", action="store_true", help="H59 - H62 (C1's gate-off exposure capped)")
     a.add_argument("--report", action="store_true")
     a.add_argument("--only", nargs="*", default=None)
     a.add_argument("--workers", type=int, default=2)
@@ -1444,6 +1639,11 @@ def main():
         report_h53()
     if a.h56:
         run_h56(a.workers, a.only)
+    if a.h59_check:
+        check_h59()
+    if a.h59:
+        run_tasks(h59_tasks(), a.workers)
+        report_h59()
 
 
 if __name__ == "__main__":
