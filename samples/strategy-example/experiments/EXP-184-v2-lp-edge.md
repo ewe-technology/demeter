@@ -1,8 +1,8 @@
 # EXP-184: make the LP earn more on top of k100_f2low_rvol_reupE (ETH-cbBTC MGL v2), `0x4585`, IS before 2025 / OOS after
 
-- Jira: (pending)
-- Status: pre-registered
-- Pre-registration commit: (this commit) · Result commit: (pending)
+- Jira: QUAN-1181 (subtask of QUAN-1107)
+- Status: fail — 21 variants in 9 batches, none beats the base on IS with a higher LP edge (no OOS run)
+- Pre-registration commit: 2c71ccb · Result commit: (next commit)
 
 Dino (/goal 2026-10-21): "一樣is oos的方式優化策略，優化方式請以lp賺錢為主" — same IS / OOS rules as EXP-183, and the
 gain must come from the LP itself earning more, not from timing or holding more ETH.
@@ -187,6 +187,30 @@ Batch 8, IS 2023-01-01..2024-12-31 (failed, no OOS run):
 |---|---|---|---|---|---|---|---|
 | base on mainnet `0x4585` (`is23`) | 20.15% | −20.8% | 0.969 | 0.159 | −0.066 | +0.094 | 73 |
 | base on Arbitrum `0x2f5e` (`arbis`) | 18.86% | −20.9% | 0.901 | 0.133 | −0.065 | +0.068 | 73 |
+
+Batch 9, IS (none passed):
+
+| variant | CAGR | max DD | Calmar | fees | IL | LP edge | fees / IL | rebuilds | vs base |
+|---|---|---|---|---|---|---|---|---|---|
+| base (uniform +-20%) | 65.68% | −24.8% | 2.643 | 0.610 | −0.287 | +0.324 | 2.13 | 118 | |
+| `flat4` (control) | 65.41% | −24.9% | 2.625 | 0.612 | −0.284 | +0.329 | 2.15 | 122 | loses (CAGR), LP up |
+| `valley` | 64.63% | −25.0% | 2.583 | 0.437 | −0.173 | +0.263 | 2.53 | 122 | loses, LP down |
+
+**Verdict: fail — goal not reached.** 21 variants in 9 batches; none beat the base on IS with a higher LP edge, so no OOS
+run was made. What the IS search shows about the LP in `0x4585`:
+
+- The LP edge (+0.324 ETH over IS) comes almost entirely from weak-side positions opened at F = 1 (+0.315 of 29
+  positions; the other 29 positions net about zero). At weak F = 1 the whole book is already the LP.
+- Concentration loses: +-10 / +-5% raise fees 1.6 / 2.4x and IL 4 / 7.7x; narrowing only in calm or ranging ETH/BTC
+  loses too. Wider (+-30 / +-40%) cuts fees more than IL. A thin middle (`valley`) has the best fees / IL (2.53) but
+  less edge. The uniform +-20% is the edge optimum of every shape tried.
+- More LP capital loses wherever it comes from: the strong side (no subset of its positions earns), the BTC reserve in
+  an off-centre LP (`weakone`, run through by BTC trends), reinvested fees, the rvol-halved part.
+- Timing (no recentring, waiting for F to settle) and another pool (Arbitrum, lower fee yield) lose.
+- The IL total moves by ±0.2 ETH with small changes in rebuild timing; differences under ~0.05 ETH of edge are noise.
+
+In this pool the base's LP is a local optimum; a further gain has to come from timing / allocation (EXP-183) or from a
+pool with a higher fee yield than mainnet `0x4585`.
 
 ## Deviations
 

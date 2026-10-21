@@ -104,6 +104,11 @@ EXP-183 (QUAN-1180, /goal 2026-10-21: IS before 2025 / OOS 2025..2026-09-30, var
 IS passes, base k75_f2low_rvol): **pass** after 18 variants in 6 batches: `k100_f2low_rvol_reupE` (ETH_KEEP 1.0 + f2low
 + rvol + ETH/USD re-entry 15% above the last exit while strong) IS 65.68% / −24.8% vs 64.45% / −25.2%, OOS 25.80% /
 −28.7% vs 24.49% / −30.0% (in ETH). Small; reupE never fires after 2024, so the OOS gain is keep100's.
+EXP-184 (QUAN-1181, /goal "以lp賺錢為主", same IS / OOS rules, pass also needs a higher LP edge = fees + IL from the LP
+accounting `v2_goal.py` now logs, `lp_positions_<mode>.csv` per position): **fail**, 21 variants in 9 batches. Base edge
++0.324 ETH over IS (fees 0.610, IL −0.287), almost all from weak-side positions at F = 1. Narrower / wider / valley
+bands, off-centre or extra capital, strong-side LP, recentring and timing rules, compound, Arbitrum all lose: uniform
++-20% is this pool's LP optimum; IL moves ±0.2 ETH with rebuild timing, so edge gaps < 0.05 are noise.
 
 ## Handoff 2026-10-06 (two sessions closed; a new session starts here)
 
