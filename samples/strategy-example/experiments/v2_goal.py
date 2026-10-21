@@ -597,6 +597,63 @@ VARIANTS.update({
     "k100_reupE_compound": ("fee handling", "spec compound mode on the EXP-183 best: collected fees count as capital",
                             BASE184 + [x for x in VARIANTS["k75_f2low_rvol_compound"][2] if "compound" in x[1]]),
 })
+# EXP-184 batch 9 (after batch 8's IS results: the base on Arbitrum earns less than on mainnet, fees 0.133 vs 0.159 over
+# 2023-24; and a pool fee / IL proxy, 30-day volume / (liquidity x sqrt p) / var(R), has no IS link to position edge,
+# Spearman −0.07). Every batch so far says the same: liquidity concentrated near the price adds IL faster than fees.
+# So keep the +-20% span but thin the middle: four bands (−20..−10, −10..0, 0..+10, +10..+20%, by tick) with value
+# weights outer / inner; `flat4` (0.25 each) is the control for the band mechanics.
+
+
+def BANDS(outer: float, inner: float) -> list:
+    return BASE184 + [
+        ('        lp_value, lp_btc, lp_eth, tick_lo, tick_hi = shares["lp"] * value, ZERO, ZERO, None, None\n',
+         '        lp_value, lp_btc, lp_eth, tick_lo, tick_hi = shares["lp"] * value, ZERO, ZERO, None, None\n'
+         "        _bands = None  # v2_goal EXP-184 bands\n", 1),
+        ("            w = lp_quote_share(current_tick, tick_lo, tick_hi)   # ETH / BTC halves that fill the range exactly\n"
+         "            lp_eth, lp_btc = lp_value * w, lp_value * (ONE - w) / p\n",
+         "            if not strong:  # v2_goal EXP-184 bands: four bands over the same span\n"
+         "                _sp = self.utils.params.tick_spacing\n"
+         "                _lo10, _hi10 = range_ticks(current_tick, ratio / 2, _sp)\n"
+         "                _c = round(current_tick / _sp) * _sp\n"
+         f"                _bands = [(tick_lo, _lo10, {outer}), (_lo10, _c, {inner}), (_c, _hi10, {inner}), (_hi10, tick_hi, {outer})]\n"
+         "                _alloc = []\n"
+         "                for _a, _b, _wt in _bands:\n"
+         "                    _v = lp_value * Decimal(str(_wt))\n"
+         "                    _q = ONE if _b <= current_tick else (ZERO if _a > current_tick else lp_quote_share(current_tick, _a, _b))\n"
+         "                    _alloc.append((_a, _b, _v * (ONE - _q) / p, _v * _q))\n"
+         "                    lp_eth, lp_btc = lp_eth + _v * _q, lp_btc + _v * (ONE - _q) / p\n"
+         "            else:\n"
+         "                w = lp_quote_share(current_tick, tick_lo, tick_hi)   # ETH / BTC halves that fill the range exactly\n"
+         "                lp_eth, lp_btc = lp_value * w, lp_value * (ONE - w) / p\n", 1),
+        ("            position, used_base, used_quote, _ = lp_market.add_liquidity_by_tick(\n"
+         "                tick_lo, tick_hi, min(lp_btc, free_btc), min(lp_eth, free_eth), tick=current_tick)\n",
+         "            if _bands:  # v2_goal EXP-184 bands: all but the last band are kept here, the last one below\n"
+         "                _tb = _tq = ZERO\n"
+         "                for _i, (_a, _b, _xb, _xq) in enumerate(_alloc):\n"
+         "                    free_btc, free_eth, _ = self._wallet()\n"
+         "                    position, _ub, _uq, _ = lp_market.add_liquidity_by_tick(\n"
+         "                        _a, _b, min(_xb, free_btc), min(_xq, free_eth), tick=current_tick)\n"
+         "                    _tb, _tq = _tb + _ub, _tq + _uq\n"
+         "                    if _i < len(_alloc) - 1:\n"
+         "                        if _ub == ZERO and _uq == ZERO:\n"
+         "                            lp_market.positions.pop(position, None)\n"
+         "                        else:\n"
+         "                            self.positions += [position]\n"
+         "                used_base, used_quote = _tb, _tq\n"
+         "            else:\n"
+         "                position, used_base, used_quote, _ = lp_market.add_liquidity_by_tick(\n"
+         "                    tick_lo, tick_hi, min(lp_btc, free_btc), min(lp_eth, free_eth), tick=current_tick)\n", 1),
+        ("        out_of_range = bool(self.positions) and not (self.positions[0][0] <= tick < self.positions[0][1])\n",
+         "        out_of_range = bool(self.positions) and not (min(x[0] for x in self.positions) <= tick < "
+         "max(x[1] for x in self.positions))  # v2_goal EXP-184 bands\n", 1)]
+
+
+VARIANTS.update({
+    "k100_reupE_valley": ("weak-side LP shape", "+-20% as four bands, value weights 0.35 / 0.15 / 0.15 / 0.35 (thin middle)",
+                          BANDS(0.35, 0.15)),
+    "k100_reupE_flat4": ("weak-side LP shape (control)", "+-20% as four bands, 0.25 each (the uniform LP in bands)",
+                         BANDS(0.25, 0.25)),
+})
 ARB = "0x2f5e87C9312fa29aed5C179E456625D79015299c"
 MAKER_POOL = '    contract_address, fee, chain_name = "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0", 0.05, ChainType.ethereum.name  # wbtc/weth\n'
 

@@ -107,6 +107,17 @@ change, Dino's ruling for EXP-117). Its data starts 2023-01-01, so this batch us
 - OOS: 2025-01-01..2026-01-13 (the last Arbitrum day); `oos25a` vs `arboos`.
 - Same pass rule (better() and LP edge above the mainnet base on the same window), IS first.
 
+Batch 9 (after batch 8's IS result, which lost: Arbitrum fees 0.133 vs mainnet 0.159 over 2023-24; and a pool fee /
+IL proxy, 30-day volume / (liquidity x sqrt p) / var(R), had no IS link to position edge, Spearman −0.07). Every batch
+says liquidity concentrated near the price adds IL faster than fees, so keep the +-20% span and thin the middle:
+
+| variant | change |
+|---|---|
+| `k100_reupE_valley` | weak-side LP as four bands (−20..−10, −10..0, 0..+10, +10..+20% by tick), value weights 0.35 / 0.15 / 0.15 / 0.35 |
+| `k100_reupE_flat4` | the same four bands at 0.25 each (control for the band mechanics) |
+
+Smoke run (2024-03-01..10): `flat4` matches the base's fees and IL (0.0020 / −0.0003), `valley` earns less there.
+
 ## Pre-registration
 
 - Pool `0x4585`, 1 ETH, in ETH incl. rewards. IS 2021-11-02..2024-12-31, OOS 2025-01-01..2026-09-30 (`oosf`).
@@ -169,6 +180,13 @@ Batch 7, IS (none passed):
 |---|---|---|---|---|---|---|---|---|
 | `rvolS` | 63.33% | −24.8% | 2.550 | 0.637 | −0.474 | +0.163 | 113 | loses, LP down |
 | `compound` | 63.16% | −25.2% | 2.504 | 0.666 | −0.624 | +0.042 | 126 | loses, LP down |
+
+Batch 8, IS 2023-01-01..2024-12-31 (failed, no OOS run):
+
+| run | CAGR | max DD | Calmar | fees | IL | LP edge | rebuilds |
+|---|---|---|---|---|---|---|---|
+| base on mainnet `0x4585` (`is23`) | 20.15% | −20.8% | 0.969 | 0.159 | −0.066 | +0.094 | 73 |
+| base on Arbitrum `0x2f5e` (`arbis`) | 18.86% | −20.9% | 0.901 | 0.133 | −0.065 | +0.068 | 73 |
 
 ## Deviations
 
