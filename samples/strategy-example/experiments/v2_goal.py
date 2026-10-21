@@ -56,7 +56,8 @@ SEGMENTS = {"is": ((2021, 11, 2), (2024, 12, 31)), "oos": ((2025, 1, 1), END), "
             # our last minute-data day, the sheet's at 09-30)
             "y2022": ((2022, 1, 2), (2022, 12, 31)), "y2024": ((2024, 1, 2), (2024, 12, 31)),
             "c2225": ((2022, 1, 2), (2025, 12, 31)), "y2026": ((2026, 1, 2), END),
-            "y2026f": ((2026, 1, 2), DATA_END)}   # the sheet's 2026 window, after the data was extended to 09-30
+            "y2026f": ((2026, 1, 2), DATA_END),   # the sheet's 2026 window, after the data was extended to 09-30
+            "oosf": ((2025, 1, 1), DATA_END)}   # EXP-183 out-of-sample: 2025 on, all minute data
 
 # ---- variants: name -> (element of v2, what it becomes, [(pattern, replacement, expected count)]) -------------------
 STRONG_LINE = '    return pd.DataFrame({"G": g, "R": r, "R_ema": r_ema, "strong": r >= r_ema, "F": fractions})\n'
@@ -336,6 +337,56 @@ VARIANTS.update({
 # no signal, recentred when the price leaves it, same 0.1% swap cost
 VARIANTS["plain"] = ("whole strategy", "spec's plain LP control (MODE_PLAIN): 100% LP, uniform +-10%, rebuilt out of range",
                      [("    modes = modes or [MODE_SIGNAL]", "    modes = [MODE_PLAIN]  # v2_goal plain", 1)])
+
+# ---- EXP-183 (/goal 2026-10-21: IS before 2025, OOS after; only IS results may shape a variant, OOS only for IS passes).
+# Base = k75_f2low_rvol (EXP-182's best); each variant adds ONE element on top of it. Batch 1 was written after an IS-only
+# look at the base: its four deepest IS drawdowns (in ETH) come from holding the retreat while the market turned back
+# (USDC through ETH/USD rebounds 2022-08..11 −25.2% and 2024-05..08 −21.0%; BTC through ETH/BTC rebounds 2022-06..08 and
+# 2024-11), and the LP leg nets about zero over IS (+0.10 ETH of +2.96, fees included).
+RVOL_LINE = '    out["F"] = out["F"].where(~flag.reindex(out.index).fillna(False).astype(bool), out["F"] * 0.5)\n'
+K75 = KEEP("0.75") + F2LOW + RVOL
+
+
+def REUP(level: str, strong_only: bool) -> list:
+    """Re-entry after a wrong exit: when the final F falls, remember that day's close of `level`; while F < 1, a close
+    >= 1.15 x that level sets F = 1 until F falls again (a new exit) or reaches 1 by itself."""
+    return [(RVOL_LINE, RVOL_LINE +
+             f"    _lvl, _st = ({level}).reindex(out.index).tolist(), out['strong'].tolist()  # v2_goal EXP-183 reup\n"
+             "    _sell, _on, _prev, _res = None, False, None, []\n"
+             "    for _x, _p, _s in zip(out['F'].tolist(), _lvl, _st):\n"
+             "        if _prev is not None and _x < _prev:\n"
+             "            _sell, _on = _p, False\n"
+             "        if _x >= 1.0:\n"
+             "            _on = False\n"
+             f"        if not _on and _sell is not None and _x < 1.0 and _p >= 1.15 * _sell{' and _s' if strong_only else ''}:\n"
+             "            _on = True\n"
+             "        _res.append(1.0 if _on else _x)\n"
+             "        _prev = _x\n"
+             "    out['F'] = _res\n", 1)]
+
+
+STRONG_ALLOC = '        return {"lp": f * (ONE - ETH_KEEP), "eth": f * ETH_KEEP, "btc": ZERO, "usdc": ONE - f}, RANGE_STRONG\n'
+WEAK_ALLOC = '    return {"lp": f, "eth": ZERO, "btc": ONE - f, "usdc": ZERO}, RANGE_WEAK\n'
+VARIANTS.update({
+    "k75_f2low_rvol_reupG": ("added: re-entry after a wrong exit (G)", "F = 1 once G closes 15% above its close on the "
+                             "day F last fell, until F falls again", K75 + REUP("g", False)),
+    "k75_f2low_rvol_reupE": ("added: re-entry after a wrong exit (ETH/USD, strong only)", "while ETH is strong, F = 1 once "
+                             "ETH/USD closes 15% above its close on the day F last fell, until F falls again",
+                             K75 + REUP("g * r ** 0.5", True)),
+    "k75_f2low_rvol_split50": ("retreat asset", "the (1 - F) reserve is always half BTC, half USDC (v2: USDC while strong, "
+                               "BTC while weak)",
+                               K75 + [(STRONG_ALLOC, STRONG_ALLOC.replace('"btc": ZERO, "usdc": ONE - f',
+                                                                          '"btc": (ONE - f) / 2, "usdc": (ONE - f) / 2'), 1),
+                                      (WEAK_ALLOC, WEAK_ALLOC.replace('"btc": ONE - f, "usdc": ZERO',
+                                                                      '"btc": (ONE - f) / 2, "usdc": (ONE - f) / 2'), 1)]),
+    "k75_f2low_rvol_ethmom": ("added: ETH momentum override (EXP-179's ethmom on the new base)", "while ETH is strong and "
+                              "ETH/USD > EMA20 > EMA50, the USDC reserve is held as ETH outside the LP",
+                              K75 + [(RVOL_LINE, RVOL_LINE +
+                                      "    _e = g * r ** 0.5  # v2_goal EXP-183 ethmom\n"
+                                      "    _e20, _e50 = _e.ewm(span=20, adjust=False).mean(), _e.ewm(span=50, adjust=False).mean()\n"
+                                      '    out["ethmom"] = out["strong"] & (_e > _e20) & (_e20 > _e50)\n', 1),
+                                     VARIANTS["ethmom"][2][1]]),
+})
 ARB = "0x2f5e87C9312fa29aed5C179E456625D79015299c"
 MAKER_POOL = '    contract_address, fee, chain_name = "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0", 0.05, ChainType.ethereum.name  # wbtc/weth\n'
 
@@ -481,6 +532,14 @@ def table() -> pd.DataFrame:
 if __name__ == "__main__":
     if sys.argv[1] == "table":
         print(table().to_string())
+        sys.exit()
+    if sys.argv[1] == "judge":   # EXP-183: python v2_goal.py judge <seg> <base> <variant,...> (better() vs that base)
+        seg, base = sys.argv[2], metrics(sys.argv[2], sys.argv[3])
+        for v in [sys.argv[3]] + sys.argv[4].split(","):
+            m = metrics(seg, v)
+            print(f"{seg:5} {v:34} cagr {m['cagr']:7.2%} dd {m['mdd']:6.1%} calmar {m['calmar']:.3f} "
+                  f"usd x{m['usd_ratio']:.3f} usd-dd {m['mdd_usd']:6.1%} rebuilds {m['rebuilds']:3} "
+                  f"{'base' if v == sys.argv[3] else ('BEATS' if better(m, base) else 'loses')}")
         sys.exit()
     seg, names = sys.argv[1], sys.argv[2]
     workers = int(sys.argv[3]) if len(sys.argv) > 3 else 3
