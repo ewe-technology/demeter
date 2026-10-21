@@ -96,6 +96,17 @@ design looks like a local optimum (centred, +-20%, weak side, F high); two capit
 | `k100_reupE_rvolS` | rvol halves F only while ETH is strong (the base's positions opened in the most volatile R tercile still made +0.052) |
 | `k100_reupE_compound` | spec compound mode: collected fees count as capital and grow the LP |
 
+Batch 8 (after batch 7's IS results, both lost; 17 variants in 7 batches, none raised the LP edge, and the IL total
+moves a lot with small changes in rebuild timing, so the base's +0.324 is partly path luck). Shape, width and timing
+of the LP in this pool are exhausted; what is left is the fee yield per unit of liquidity, a property of the pool.
+Same strategy, LP placed in Arbitrum WBTC/WETH 0.05% `0x2f5e` (routing the LP to another pool counts as a strategy
+change, Dino's ruling for EXP-117). Its data starts 2023-01-01, so this batch uses its own windows, still split at
+2025:
+
+- IS: 2023-01-01..2024-12-31; the base on mainnet `0x4585` (`is23`) vs the base on Arbitrum (`arbis`).
+- OOS: 2025-01-01..2026-01-13 (the last Arbitrum day); `oos25a` vs `arboos`.
+- Same pass rule (better() and LP edge above the mainnet base on the same window), IS first.
+
 ## Pre-registration
 
 - Pool `0x4585`, 1 ETH, in ETH incl. rewards. IS 2021-11-02..2024-12-31, OOS 2025-01-01..2026-09-30 (`oosf`).
@@ -151,6 +162,13 @@ Batch 6, IS (none passed):
 |---|---|---|---|---|---|---|---|---|
 | `lpwait2` | 60.34% | −24.8% | 2.430 | 0.551 | −0.710 | −0.159 | 130 | loses, LP down |
 | `lpwait3` | 64.64% | −24.8% | 2.601 | 0.548 | −0.298 | +0.250 | 127 | loses, LP down |
+
+Batch 7, IS (none passed):
+
+| variant | CAGR | max DD | Calmar | fees | IL | LP edge | rebuilds | vs base |
+|---|---|---|---|---|---|---|---|---|
+| `rvolS` | 63.33% | −24.8% | 2.550 | 0.637 | −0.474 | +0.163 | 113 | loses, LP down |
+| `compound` | 63.16% | −25.2% | 2.504 | 0.666 | −0.624 | +0.042 | 126 | loses, LP down |
 
 ## Deviations
 

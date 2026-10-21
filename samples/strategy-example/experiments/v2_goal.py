@@ -57,7 +57,11 @@ SEGMENTS = {"is": ((2021, 11, 2), (2024, 12, 31)), "oos": ((2025, 1, 1), END), "
             "y2022": ((2022, 1, 2), (2022, 12, 31)), "y2024": ((2024, 1, 2), (2024, 12, 31)),
             "c2225": ((2022, 1, 2), (2025, 12, 31)), "y2026": ((2026, 1, 2), END),
             "y2026f": ((2026, 1, 2), DATA_END),   # the sheet's 2026 window, after the data was extended to 09-30
-            "oosf": ((2025, 1, 1), DATA_END)}   # EXP-183 out-of-sample: 2025 on, all minute data
+            "oosf": ((2025, 1, 1), DATA_END),   # EXP-183 out-of-sample: 2025 on, all minute data
+            # EXP-184 batch 8: the same windows on mainnet `0x4585` and Arbitrum `0x2f5e` (whose data runs 2023-01-01 ..
+            # 2026-01-13); IS before 2025, OOS after
+            "is23": ((2023, 1, 1), (2024, 12, 31)), "arbis": ((2023, 1, 1), (2024, 12, 31)),
+            "oos25a": ((2025, 1, 1), (2026, 1, 13)), "arboos": ((2025, 1, 1), (2026, 1, 13))}
 
 # ---- variants: name -> (element of v2, what it becomes, [(pattern, replacement, expected count)]) -------------------
 STRONG_LINE = '    return pd.DataFrame({"G": g, "R": r, "R_ema": r_ema, "strong": r >= r_ema, "F": fractions})\n'
