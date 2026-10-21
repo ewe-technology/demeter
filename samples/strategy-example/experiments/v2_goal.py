@@ -733,6 +733,30 @@ VARIANTS.update({
                                       "            if _mr and old and old[0] <= current_tick < old[1] and old[1] - old[0] == tick_hi - tick_lo:\n"
                                       "                tick_lo, tick_hi = old  # v2_goal EXP-185 mrgate\n", 1)]),
 })
+# ---- EXP-186 (Dino 2026-10-21: "1ETH_signal 如果把裡面的元素一個一個拿掉回測" -> "做"): ablation of v2 (MGL v2 =
+# `1ETH_signal`, the sheet's row 2). Each variant removes ONE element of v2 and replaces it with the neutral choice below;
+# `noslope` and `wide20` (EXP-178) are the same ablations for the slope filter and the strong-side +-10% range.
+VARIANTS.update({
+    "abl_noexit": ("F engine (EMA exits)", "removed: F = 1 every day (always invested)",
+                   [(FAPPEND, "        fractions.append(1.0)  # v2_goal EXP-186 abl_noexit\n", 1)]),
+    "abl_onestage": ("staged refill", "removed: the first refill stage (3 closes >= low x 1.05) deploys the account fully",
+                     [("            if advance:\n                self.stage, self.deployed, self.centre = nxt, nxt / 4, close\n",
+                       "            if advance:  # v2_goal EXP-186 abl_onestage\n"
+                       "                self.stage, self.deployed, self.centre = 4, 1.0, close\n", 1)]),
+    "abl_oneacct": ("four accounts (EMA 90..120)", "removed: one account on EMA100 (F = 0 / .25 / .5 / .75 / 1 from it)",
+                    [("EMA_SPANS = (90, 100, 110, 120)\n", "EMA_SPANS = (100,)  # v2_goal EXP-186 abl_oneacct\n", 1)]),
+    "abl_allweak": ("strength switch", "removed: always the weak regime (retreat to BTC, LP = F at +-20%, no ETH kept)",
+                    [(STRONG_LINE, STRONG_LINE.replace('"strong": r >= r_ema', '"strong": r < -1'), 1)]),
+    "abl_allstrong": ("strength switch", "removed: always the strong regime (retreat to USDC, LP F x 75% at +-10%, ETH F x 25%)",
+                      [(STRONG_LINE, STRONG_LINE.replace('"strong": r >= r_ema', '"strong": r > -1'), 1)]),
+    "abl_keep0": ("ETH kept outside the LP while strong", "removed: 0% (the whole F is LP while strong)", KEEP("0")),
+    "abl_nolp": ("the LP", "removed: the LP share is held as 50% ETH / 50% BTC tokens (no LP, no fees)",
+                 [(STRONG_ALLOC, STRONG_ALLOC.replace('"lp": f * (ONE - ETH_KEEP), "eth": f * ETH_KEEP, "btc": ZERO',
+                                                      '"lp": ZERO, "eth": f * ETH_KEEP + f * (ONE - ETH_KEEP) / 2, '
+                                                      '"btc": f * (ONE - ETH_KEEP) / 2'), 1),
+                  (WEAK_ALLOC, WEAK_ALLOC.replace('"lp": f, "eth": ZERO, "btc": ONE - f',
+                                                  '"lp": ZERO, "eth": f / 2, "btc": f / 2 + ONE - f'), 1)]),
+})
 # Logging only (EXP-184, no change in behaviour): LP accounting per position lifetime, in ETH. When a position is removed
 # (a rebuild, after its fees were collected) or at the end: fees = rewards collected since it was added, IL = its value
 # minus the value of the tokens it was built from at today's price, pnl = value + fees - value when built.
