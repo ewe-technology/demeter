@@ -1177,13 +1177,14 @@ class CapGated(robust.RobustGated):
             self.mode, self.outside = "cash", v
             self.events.append((t, "zero"))
             return
-        lad = min(lad, float(self.broker.get_token_balance(c.quote)))  # the swap's fee came off the book
+        # the swap's fee came off the book, and a float back in Decimal can land a hair above the balance
+        lad = min(Decimal(lad), self.broker.get_token_balance(c.quote))
         lo, hi = price / Decimal(self.k[0]), price * Decimal(self.k[1])
         t1, t2 = m.price_to_tick(lo), m.price_to_tick(hi)
-        m.add_liquidity_by_value(min(t1, t2), max(t1, t2), Decimal(lad))
+        m.add_liquidity_by_value(min(t1, t2), max(t1, t2), lad)
         self.bounds, self.outside = (lo, hi), float(self.broker.get_token_balance(c.quote))
         self.events.append((t, kind))
-        self.events.append((t, f"cut:{lad / v:.4f}"))
+        self.events.append((t, f"cut:{float(lad) / v:.4f}"))
 
     def on_bar(self, snapshot):
         c = self.cfg
@@ -1284,7 +1285,8 @@ def report_h59():
                    "three": all(ok for k, ok in c.items() if k != "dd within 2 pt"),
                    "failed": "; ".join(k for k, ok in c.items() if not ok), "recentres": xc["recentres"],
                    "switches": xc["switches"], "gas": xc["gas"], "impact": xc["impact"],
-                   "cuts": int(kind.str.startswith("cut:").sum()), "zeros": int((kind == "zero").sum()),
+                   "cuts": sum(k.startswith("cut:") and float(k[4:]) < 0.9995 for k in kind),  # s < 1 at 4 places
+                   "zeros": int((kind == "zero").sum()),
                    "timecaps": int((kind == "timecap").sum()), "hourly_moves": int((kind == "recentre_h").sum())}
             w = span(nav, *WORST_C1)
             y26 = span(nav, "2026-01-01", "2026-09-30")
