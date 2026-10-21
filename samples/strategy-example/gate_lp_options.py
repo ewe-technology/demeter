@@ -293,6 +293,7 @@ class ConfigG(robust.ConfigR):
     time_cap: int = 0  # H60: gate off for this many days -> sell to the quote until gate on
     hourly_down: bool = False  # H62: below the ladder at any full hour -> re-centre (the upper edge stays daily)
     vol_target: float = 0.0  # H64: gate off, the ladder is the book x min(1, vol_target / 30-day vol)
+    lp_budget: float = 0.0  # H66: C1 over the live gate (shadow books) this far below its high -> no ladder until a new high
     route: str = ""  # H63: each swap at the cheaper of this pool and the LP pool (costs after the run)
     route_block: bool = False  # acceptance only: the route priced at infinity
 
@@ -366,8 +367,9 @@ def run(c: ConfigG, start: date, end: date, bar: str | None = "1h", kind: str = 
     if c.hourly_check:
         strategy = GatedPool(c, gate)
     else:
-        if c.dd_budget or c.time_cap or c.hourly_down or c.vol_target:
-            strategy = CapGated(c, gate, vol_30d() if c.vol_target else None)
+        if c.dd_budget or c.time_cap or c.hourly_down or c.vol_target or c.lp_budget:
+            strategy = CapGated(c, gate, vol_30d() if c.vol_target else None,
+                                rel_series(c.pool_key) if c.lp_budget else None)
         elif c.brake:
             strategy = BrakeGated(c, gate)
         elif c.slow_spec:
@@ -1176,14 +1178,19 @@ class CapGated(robust.RobustGated):
     """H59 - H62 on C1's ladder while the gate is off. dd_budget: every placement (the gate-off one and each re-centre)
     holds the book x s, s = 1 - drawdown / dd_budget clipped to [0, 1], never more than the ladder just removed; the
     rest stays in the quote, and s = 0 holds the quote until the gate turns on. time_cap: N days after the gate-off
-    switch, at 00:00, sell to the quote until the gate turns on. hourly_down: a full hour below the lower edge
+    switch, at 00:00, sell to the quote until the gate turns on. lp_budget (H66): at a full hour where the shadow
+    books' C1 / live gate ratio (previous bar) is lp_budget below its high, stop: pull the ladder to the quote and
+    place none while off, until the ratio makes a new high. hourly_down: a full hour below the lower edge
     re-centres as the daily check does. vol_target (H64, H65 with dd_budget): s = min(1, vol_target / 30-day vol)
     (times the dd_budget share), sized from the whole book at every placement. The book and its peak are Demeter's
     own (before gas and impact)."""
 
-    def __init__(self, cfg, gate: pd.Series, vol: pd.Series | None = None):
+    def __init__(self, cfg, gate: pd.Series, vol: pd.Series | None = None, rel: pd.Series | None = None):
         super().__init__(cfg, gate)
         self.vol = vol  # H64: 30-day vol by day, known at that day's 00:00
+        self.rel = rel  # H66: C1 / live gate shadow NAVs by hour, the previous bar's value
+        self.rel_peak = 0.0
+        self.stopped = False
         self.peak = 0.0
         self.outside = 0.0  # quote kept beside a sized ladder in this gate-off spell
         self.off_since = None
@@ -1200,6 +1207,10 @@ class CapGated(robust.RobustGated):
     def go(self, on: bool, price: Decimal, t):
         if not on:
             self.off_since, self.outside = pd.Timestamp(t).normalize(), 0.0
+            if self.stopped:  # H66: gate off while stopped holds the quote (as SlowGated)
+                self.state = False
+                to_quote(self, t, "off")
+                return
         return super().go(on, price, t)
 
     def place(self, price: Decimal, width: float, kind: str, t):
@@ -1241,6 +1252,22 @@ class CapGated(robust.RobustGated):
         price = self.markets[KEY].market_status.data.price
         if t.minute == 0:
             self.peak = max(self.peak, self.book(price))
+        if c.lp_budget and t.minute == 0:
+            r = float(self.rel.asof(pd.Timestamp(t)))
+            if r == r:  # NaN before the shadow books start
+                self.rel_peak = max(self.rel_peak, r)
+                if not self.stopped and 1 - r / self.rel_peak >= c.lp_budget:
+                    self.stopped = True
+                    self.events.append((t, "budget_stop"))
+                    if self.state is False and self.mode == "range":
+                        to_quote(self, t, "budget_cut")
+                elif self.stopped and r >= self.rel_peak:
+                    self.stopped = False
+                    self.events.append((t, "budget_resume"))
+                    if self.state is False and self.mode == "cash":
+                        self.k = (1 + c.off_width, 1 + (c.off_up or c.off_width))
+                        self.mode = "range"
+                        self.place(price, 0.0, "budget_place", t)
         gate_bar = t.hour == c.delay and t.minute == 0
         off_now = self.state is False and not bool(self.gate.asof(pd.Timestamp(t).normalize()))
         if (c.time_cap and gate_bar and off_now and self.mode == "range"
@@ -1457,6 +1484,116 @@ def report_h63():
            "route": verdict_of(trt, {"ladder_rt": [], **{f"{v}_rt": [f"{n}_rt" for n in ns] for v, ns in H64_NB.items()}})}
     print(json.dumps(res, indent=1))
     with open(f"{RESULT_DIR}/h63_result.json", "w") as f:
+        json.dump(res, f, indent=1)
+
+
+# ---------------------------------------------------------------- H66: LP excess-loss budget
+# reports/plan_2026-10-21_c1_lp_budget.md (registered in 8ba303f)
+
+H66_VERSIONS = {"lp5": 0.05, "lp10": 0.10, "lp15": 0.15}
+
+
+def shadow_navs(pk: str) -> tuple[pd.Series, pd.Series]:
+    """H51's single-slice C1 ladder and live-gate continuous books (H48 bit for bit): H66's shadow books."""
+    return nav_of("C1", pk, "ladder"), nav_of("C1", pk, "ctl")
+
+
+def rel_series(pk: str) -> pd.Series:
+    """C1 / live gate on the shadow books, indexed so that bar t holds bar t - 1's value."""
+    lad, ctl = shadow_navs(pk)
+    return (lad / ctl.reindex(lad.index)).shift(1)
+
+
+def h66_configs() -> list[ConfigG]:
+    with open(f"{RESULT_DIR}/h46_choice.json") as f:
+        btc = json.load(f)["btc"]
+    return [gcfg("H66", pk, v, btc, on="spot", lp_budget=b, **ladder(0.40, 0.01))
+            for pk in MAIN_REP["C1"] for v, b in H66_VERSIONS.items()]
+
+
+def h66_tasks() -> list[tuple]:
+    out = []
+    for c in h66_configs():
+        out += [(c, s, e, "window") for s, e in windows("C1")]
+        s, e = continuous("C1")
+        out.append((c, s, e, "continuous"))
+    return out
+
+
+def check_h66():
+    """Plan lp_budget 4: a budget of 1000% never stops and equals H48's ladder on 99ac 2022-01."""
+    with open(f"{RESULT_DIR}/h46_choice.json") as f:
+        btc = json.load(f)["btc"]
+    s = date(2022, 1, 1)
+    ref = json.load(open(f"{ROWS_DIR}/C1_99ac_ladder_window_{s}.json"))["net"]
+    r = task(gcfg("chk", "99ac", "lp1000", btc, on="spot", lp_budget=10.0, **ladder(0.40, 0.01)), s,
+             batch.window_end(s), "window")
+    print(f"lp1000 {s}: {r['net']:.10f} vs C1 ladder {ref:.10f} diff {r['net'] - ref:+.2e}", flush=True)
+
+
+def h66_stops(pk: str, v: str) -> list[dict]:
+    """Each stop of the continuous book: R at the trigger, its low after, the resume, days stopped (and off), the
+    shadow C1's fees missed, and the version over C1 across the stop."""
+    from lp_attribution import decompose, segments
+    cs, _ = continuous("C1")
+    ev = pd.read_csv(f"{RESULT_DIR}/nav/events_H66_{pk}_{v}_continuous_{cs}.csv")
+    ev["t"] = pd.to_datetime(ev["t"])
+    lad, ctl = shadow_navs(pk)
+    rel = lad / ctl.reindex(lad.index)
+    mine = nav_of("H66", pk, v)
+    tag = f"H51C1_{pk}_ladder_n1_h00_100k_continuous_{cs}"
+    sev = pd.read_csv(f"{RESULT_DIR}/nav/events_{tag}.csv")
+    df = pd.read_parquet(f"{RESULT_DIR}/nav/{tag}.parquet")
+    nav, price = df["usd"].to_numpy(), df["price"].astype(float).ffill().to_numpy()
+    _, fe, _, on, _ = decompose(nav, price, segments(df.index, nav, price, sev,
+                                                     {"on": ["spot", 1.0], "off": ["range", 1.40, 1.01]}))
+    fees = pd.Series(fe, index=df.index)
+    off = pd.Series(~on, index=df.index)
+    out = []
+    stops = ev[ev["kind"] == "budget_stop"]["t"].tolist()
+    resumes = ev[ev["kind"] == "budget_resume"]["t"].tolist()
+    for t0 in stops:
+        t1 = next((t for t in resumes if t > t0), None)
+        end = t1 if t1 is not None else rel.index[-1]
+        seg = rel.loc[t0:end]
+        i0 = rel.index.get_loc(t0)
+        r0 = float(rel.iloc[i0 - 1])  # the value the stop read
+        lo_t = seg.idxmin()
+        out.append({"stop": str(t0), "resume": str(t1) if t1 is not None else None,
+                    "days": (end - t0).total_seconds() / 86400,
+                    "off_days": float(off.loc[t0:end].sum() / 24),
+                    "r_low_vs_trigger": float(seg.min() / r0 - 1), "r_low_at": str(lo_t),
+                    "r_rebound_to_resume": float(seg.iloc[-1] / seg.min() - 1),
+                    "fees_missed": float(fees.loc[t0:end].sum() / lad.asof(t0)),
+                    "vs_c1": float((mine.asof(end) / lad.asof(end)) / (mine.asof(t0) / lad.asof(t0)) - 1)})
+    return out
+
+
+def report_h66():
+    cases = [("C1", "ladder"), ("C1", "ctl"), ("H59", "dd30")] + [("H66", v) for v in H66_VERSIONS]
+    t = case_table(cases, ("C1", "ctl"), ("C1", "ladder"))
+    t.to_csv(f"{RESULT_DIR}/h66_summary.csv", index=False)
+    show(t[["case", "version", "pool", "median", "positive", "cont", "dd", "dd_gap", "calmar", "recentres",
+            "switches", "worst_ret", "worst_mdd", "y2026_ret"]])
+    by = t.set_index(["pool", "version"])
+    verdict = {}
+    for v in H66_VERSIONS:
+        risk = all(by.loc[(pk, v), "dd_gap"] >= -0.02 for pk in MAIN_REP["C1"])
+        ret = all(by.loc[(pk, v), "cont"] > by.loc[(pk, "dd30"), "cont"] for pk in MAIN_REP["C1"])
+        verdict[v] = {"dd within 2 pt (both)": bool(risk), "return above dd30 (both)": bool(ret),
+                      "passes": bool(risk and ret)}
+    passing = [v for v, d in verdict.items() if d["passes"]]
+    pick = max(passing, key=lambda v: by.loc[("99ac", v), "cont"]) if passing else None
+    stops = {f"{pk}_{v}": h66_stops(pk, v) for pk in MAIN_REP["C1"] for v in H66_VERSIONS}
+    for k, ss in stops.items():
+        print(f"{k}: {len(ss)} stops")
+        for s in ss:
+            print(f"  {s['stop'][:16]} -> {(s['resume'] or 'end')[:16]} {s['days']:6.1f}d (off {s['off_days']:5.1f}d) "
+                  f"R low {s['r_low_vs_trigger']:+.1%}, rebound to resume {s['r_rebound_to_resume']:+.1%}, "
+                  f"fees missed {s['fees_missed']:+.1%}, vs C1 {s['vs_c1']:+.1%}")
+    res = {"verdict": verdict, "pick": pick, "stops": stops}
+    print(json.dumps({"verdict": verdict, "pick": pick}, indent=1))
+    with open(f"{RESULT_DIR}/h66_result.json", "w") as f:
         json.dump(res, f, indent=1)
 
 
@@ -1732,6 +1869,8 @@ def main():
     a.add_argument("--h59", action="store_true", help="H59 - H62 (C1's gate-off exposure capped)")
     a.add_argument("--h63-check", action="store_true", help="plan cost_vol section 5's checks, before H63")
     a.add_argument("--h63", action="store_true", help="H63 - H65 (swap route, ladder sized by vol)")
+    a.add_argument("--h66-check", action="store_true", help="plan lp_budget section 4's check, before H66")
+    a.add_argument("--h66", action="store_true", help="H66 (LP excess-loss budget)")
     a.add_argument("--report", action="store_true")
     a.add_argument("--only", nargs="*", default=None)
     a.add_argument("--workers", type=int, default=2)
@@ -1795,6 +1934,11 @@ def main():
     if a.h63:
         run_tasks(h63_tasks(), a.workers)
         report_h63()
+    if a.h66_check:
+        check_h66()
+    if a.h66:
+        run_tasks(h66_tasks(), a.workers)
+        report_h66()
 
 
 if __name__ == "__main__":
