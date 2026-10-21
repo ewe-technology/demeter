@@ -35,6 +35,7 @@ def main():
         navs[key] = m.nav0(usd)
         evs = [m.events(opt, "99ac", v, m.D22, m.END) for v in names]
         extra = {"control": ctl, **m.counts(evs), **m.row_costs(opt, "99ac", names, m.D22)}
+        extra["moves"] += sum(int((e["kind"] == "recentre_h").sum()) for e in evs)  # H62's hourly ones (counts() skips them)
         if modes:
             extra.update(m.lp_metrics([m.lp_parts(p, e, modes, "99ac") for p, e in zip(parts, evs)]))
         out["series"][key] = m.full(label, navs[key], navs.get(ctl), px, "btc", extra)
