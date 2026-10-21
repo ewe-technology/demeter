@@ -2,7 +2,7 @@
 
 - Jira: QUAN-1183 (subtask of QUAN-1107)
 - Status: done — 3 of 9 elements effective (F engine, strength switch, ETH keep); the LP is neutral IS and harmful OOS + Arbitrum
-- Pre-registration commit: 5d5b75a · Result commit: (next commit)
+- Pre-registration commit: 5d5b75a · Result commit: 53174e2
 
 Dino (2026-10-21): "1ETH_signal 如果把裡面的元素一個一個拿掉回測，是不是就可以確認該元素是不是真的是一個有效元素？" -> "做".
 
