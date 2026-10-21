@@ -466,6 +466,20 @@ VARIANTS.update({
     "k100_fmin_rvol_reupE": ("ETH kept 100% + F lowest + re-entry", "k100, fmin, rvol and reupE",
                              KEEP("1") + FMIN + RVOL + REUPE),
 })
+
+# ---- EXP-184 (/goal 2026-10-21: same IS / OOS rules as EXP-183, the gain must come from the LP earning more). Base =
+# EXP-183's k100_f2low_rvol_reupE (LP only while ETH is weak, +-20%). IS LP accounting of the base (LP_ACC): fees +0.610
+# ETH, IL −0.287, LP edge (fees + IL) +0.323; k75 (LP also while strong) +0.296: the weak-side LP earns about 2x its IL,
+# the strong-side LP does not. Batch 1: concentrate the weak-side LP (fees and IL both scale with concentration while the
+# price stays in range; out-of-range rebuilds cost swaps).
+BASE184 = KEEP("1") + F2LOW + RVOL + REUPE
+RANGES = 'RANGE_STRONG, RANGE_WEAK = Decimal("0.10"), Decimal("0.20")'
+VARIANTS.update({
+    "k100_reupE_weak10": ("LP width while weak", "+-10% instead of +-20% on the EXP-183 best",
+                          BASE184 + [(RANGES, RANGES.replace('Decimal("0.20")', 'Decimal("0.10")'), 1)]),
+    "k100_reupE_weak5": ("LP width while weak", "+-5% instead of +-20% on the EXP-183 best",
+                         BASE184 + [(RANGES, RANGES.replace('Decimal("0.20")', 'Decimal("0.05")'), 1)]),
+})
 ARB = "0x2f5e87C9312fa29aed5C179E456625D79015299c"
 MAKER_POOL = '    contract_address, fee, chain_name = "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0", 0.05, ChainType.ethereum.name  # wbtc/weth\n'
 
@@ -482,8 +496,40 @@ MET_MORE = MET_LINE + (
     "                'usd0': float(_usd.iloc[0]), 'usd1': float(_usd.iloc[-1]),\n"
     "                **{k: float(metrics[k]) for k in ('eth_ratio_receipt', 'eth_ratio_end', 'reward_eth', 'btc_ratio', 'usd_ratio',\n"
     "                                                  'swap_cost_eth', 'lp_avg_share')},\n"
-    "                'rebuilds': strat.rebuild_count, 'out_of_range': strat.out_of_range_rebuilds},\n"
+    "                'rebuilds': strat.rebuild_count, 'out_of_range': strat.out_of_range_rebuilds,\n"
+    "                **{('lp_' + k): float(v) for k, v in getattr(strat, 'lp_acc', {}).items()}},\n"
     "               open(f'{params.folder}/v2goal_{mode}.json', 'w'))\n")
+
+
+# Logging only (EXP-184, no change in behaviour): LP accounting per position lifetime, in ETH. When a position is removed
+# (a rebuild, after its fees were collected) or at the end: fees = rewards collected since it was added, IL = its value
+# minus the value of the tokens it was built from at today's price, pnl = value + fees - value when built.
+LP_ACC = [
+    ("    def rebuild(self, row_data: Snapshot, why: str) -> None:\n",
+     "    def _lp_close(self, p) -> None:  # v2_goal EXP-184 LP accounting\n"
+     "        o = getattr(self, '_lp_open', None)\n"
+     "        if not hasattr(self, 'lp_acc'):\n"
+     "            self.lp_acc = {'fees': ZERO, 'il': ZERO, 'pnl': ZERO, 'value_in': ZERO, 'n': ZERO}\n"
+     "        if o is None:\n"
+     "            return\n"
+     "        out, fees = self._lp_value(), self.reward_eth - o[3]\n"
+     "        self.lp_acc['fees'] += fees\n"
+     "        self.lp_acc['il'] += out - (o[0] * p + o[1])\n"
+     "        self.lp_acc['pnl'] += out + fees - o[2]\n"
+     "        self.lp_acc['value_in'] += o[2]\n"
+     "        self.lp_acc['n'] += 1\n"
+     "        self._lp_open = None\n"
+     "\n"
+     "    def rebuild(self, row_data: Snapshot, why: str) -> None:\n", 1),
+    ("        self.collect_fees(p)\n        old = (self.positions[0][0], self.positions[0][1]) if self.positions else None\n",
+     "        self.collect_fees(p)\n        self._lp_close(p)\n"
+     "        old = (self.positions[0][0], self.positions[0][1]) if self.positions else None\n", 1),
+    ("                self.positions.append(position)\n",
+     "                self.positions.append(position)\n"
+     "                self._lp_open = (used_base, used_quote, used_base * p + used_quote, self.reward_eth)\n", 1),
+    ("        self.collect_fees(p)\n        lp_value = self._lp_value()\n        assets = (",
+     "        self.collect_fees(p)\n        self._lp_close(p)\n        lp_value = self._lp_value()\n        assets = (", 1),
+]
 
 
 def sub(text: str, pattern: str, repl: str, n_expected: int) -> str:
@@ -502,7 +548,7 @@ def patch(text: str, seg: str, variant: str) -> str:
                "if __name__ == \"__main__\":\n    pass  # _self_check() skipped: it asserts the default parameters\n", 1)
     if seg.startswith("arb"):   # EXP-182: Arbitrum WBTC/WETH 0.05% (same token order and spacing as 0x4585)
         text = sub(text, MAKER_POOL, MAKER_POOL.replace("0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0", ARB), 1)
-    for pattern, repl, n_expected in VARIANTS[variant][2]:
+    for pattern, repl, n_expected in VARIANTS[variant][2] + LP_ACC:
         text = sub(text, pattern, repl, n_expected)
     return sub(text, MET_LINE, MET_MORE, 1)
 
@@ -616,9 +662,12 @@ if __name__ == "__main__":
         seg, base = sys.argv[2], metrics(sys.argv[2], sys.argv[3])
         for v in [sys.argv[3]] + sys.argv[4].split(","):
             m = metrics(seg, v)
+            edge = m.get("lp_fees", math.nan) + m.get("lp_il", math.nan)   # EXP-184 LP edge = fees + IL (ETH)
+            lp_up = edge > base.get("lp_fees", math.nan) + base.get("lp_il", math.nan)
             print(f"{seg:5} {v:34} cagr {m['cagr']:7.2%} dd {m['mdd']:6.1%} calmar {m['calmar']:.3f} "
                   f"usd x{m['usd_ratio']:.3f} usd-dd {m['mdd_usd']:6.1%} rebuilds {m['rebuilds']:3} "
-                  f"{'base' if v == sys.argv[3] else ('BEATS' if better(m, base) else 'loses')}")
+                  f"lp fees {m.get('lp_fees', math.nan):.3f} il {m.get('lp_il', math.nan):+.3f} edge {edge:+.3f} "
+                  f"{'base' if v == sys.argv[3] else ('BEATS' if better(m, base) else 'loses') + (' lp-up' if lp_up else ' lp-down')}")
         sys.exit()
     seg, names = sys.argv[1], sys.argv[2]
     workers = int(sys.argv[3]) if len(sys.argv) > 3 else 3
