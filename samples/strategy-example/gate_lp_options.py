@@ -1758,6 +1758,51 @@ def report_h67(sizes: dict):
         json.dump(res, f, indent=1)
 
 
+# ---------------------------------------------------------------- H68: gate-on and gate-off shares set apart
+# reports/plan_2026-10-21_c1_split.md (registered in 0be6653)
+
+H68_VERSIONS = {"w80_s40": (0.8, 0.4), "w80_s60": (0.8, 0.6), "w90_s40": (0.9, 0.4), "w90_s60": (0.9, 0.6)}
+H68_NB = {"w80_s40": ["w80_s60", "w90_s40"], "w80_s60": ["w80_s40", "w90_s60"],
+          "w90_s40": ["w90_s60", "w80_s40"], "w90_s60": ["w90_s40", "w80_s60"]}
+
+
+def h68_configs() -> list[ConfigG]:
+    """WBTC share while on (spot_weight, set at each gate-on switch) and the ladder share while off (ladder_size)."""
+    return [h67_cfg("H68", pk, v, spot_weight=w, ladder_size=s)
+            for pk in MAIN_REP["C1"] for v, (w, s) in H68_VERSIONS.items()]
+
+
+def check_h68():
+    """Plan split 4: w_on 1.0 and s_off 1.0 equal H48's ladder on 99ac 2022-01."""
+    s = date(2022, 1, 1)
+    ref = json.load(open(f"{ROWS_DIR}/C1_99ac_ladder_window_{s}.json"))["net"]
+    r = task(h67_cfg("chk", "99ac", "w100_s100", spot_weight=1.0, ladder_size=1.0), s, batch.window_end(s), "window")
+    print(f"w100_s100 {s}: {r['net']:.10f} vs C1 ladder {ref:.10f} diff {r['net'] - ref:+.2e}", flush=True)
+
+
+def report_h68():
+    cases = [("C1", "ladder"), ("C1", "ctl"), ("H59", "dd30")] + [("H68", v) for v in H68_VERSIONS]
+    t = case_table(cases, ("C1", "ctl"), ("C1", "ladder"))
+    t.to_csv(f"{RESULT_DIR}/h68_summary.csv", index=False)
+    show(t[["case", "version", "pool", "median", "positive", "cont", "dd", "dd_gap", "calmar", "recentres", "gas",
+            "impact", "worst_ret", "worst_mdd", "y2026_ret", "y2026_mdd"]])
+    by = t.set_index(["pool", "version"])
+    pools = MAIN_REP["C1"]
+    verdict = {}
+    for v in H68_VERSIONS:
+        risk = all(by.loc[(pk, v), "dd_gap"] >= -0.02 for pk in pools)
+        ret = all(by.loc[(pk, v), "cont"] > by.loc[(pk, "dd30"), "cont"] for pk in pools)
+        verdict[v] = {"dd within 2 pt (both)": bool(risk), "return above dd30 (both)": bool(ret),
+                      "passes": bool(risk and ret)}
+    for v in H68_VERSIONS:
+        verdict[v]["neighbours passing"] = [n for n in H68_NB[v] if verdict[n]["passes"]]
+    passing = [v for v, d in verdict.items() if d["passes"]]
+    res = {"verdict": verdict, "pick": max(passing, key=lambda v: by.loc[("99ac", v), "cont"]) if passing else None}
+    print(json.dumps(res, indent=1))
+    with open(f"{RESULT_DIR}/h68_result.json", "w") as f:
+        json.dump(res, f, indent=1)
+
+
 # ---------------------------------------------------------------- H56, H57: gate x range together, 2026 held out
 
 IS_FROM, IS_TO = date(2022, 1, 1), date(2025, 12, 31)
@@ -2034,6 +2079,8 @@ def main():
     a.add_argument("--h66", action="store_true", help="H66 (LP excess-loss budget)")
     a.add_argument("--h67-check", action="store_true", help="plan inventory section 4's checks, before H67")
     a.add_argument("--h67", action="store_true", help="H67 (BTC inventory cap), then its fixed ladders")
+    a.add_argument("--h68-check", action="store_true", help="plan split section 4's check, before H68")
+    a.add_argument("--h68", action="store_true", help="H68 (gate-on and gate-off shares set apart)")
     a.add_argument("--report", action="store_true")
     a.add_argument("--only", nargs="*", default=None)
     a.add_argument("--workers", type=int, default=2)
@@ -2106,6 +2153,11 @@ def main():
         check_h67()
     if a.h67:
         run_h67(a.workers)
+    if a.h68_check:
+        check_h68()
+    if a.h68:
+        run_tasks(tasks_of(h68_configs()), a.workers)
+        report_h68()
 
 
 if __name__ == "__main__":
