@@ -88,6 +88,14 @@ stopped moving; until then its share is held as 50 / 50 ETH / BTC tokens (the ex
 | `k100_reupE_lpwait2` | the weak-side LP is built only after F is unchanged for 2 closes |
 | `k100_reupE_lpwait3` | the same after 3 unchanged closes |
 
+Batch 7 (after batch 6's IS results: lpwait2 / lpwait3 lose; a position's first days earn fees too). The base's LP
+design looks like a local optimum (centred, +-20%, weak side, F high); two capital levers on the weak side remain:
+
+| variant | change |
+|---|---|
+| `k100_reupE_rvolS` | rvol halves F only while ETH is strong (the base's positions opened in the most volatile R tercile still made +0.052) |
+| `k100_reupE_compound` | spec compound mode: collected fees count as capital and grow the LP |
+
 ## Pre-registration
 
 - Pool `0x4585`, 1 ETH, in ETH incl. rewards. IS 2021-11-02..2024-12-31, OOS 2025-01-01..2026-09-30 (`oosf`).
@@ -136,6 +144,13 @@ Batch 5, IS (none passed):
 |---|---|---|---|---|---|---|---|---|
 | `weakone` | 57.16% | −24.2% | 2.358 | 0.766 | −1.016 | −0.250 | 174 | loses, LP down |
 | `weakone30` | 60.08% | −24.5% | 2.452 | 0.558 | −0.623 | −0.065 | 149 | loses, LP down |
+
+Batch 6, IS (none passed):
+
+| variant | CAGR | max DD | Calmar | fees | IL | LP edge | rebuilds | vs base |
+|---|---|---|---|---|---|---|---|---|
+| `lpwait2` | 60.34% | −24.8% | 2.430 | 0.551 | −0.710 | −0.159 | 130 | loses, LP down |
+| `lpwait3` | 64.64% | −24.8% | 2.601 | 0.548 | −0.298 | +0.250 | 127 | loses, LP down |
 
 ## Deviations
 

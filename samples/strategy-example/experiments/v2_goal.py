@@ -582,6 +582,17 @@ VARIANTS.update({
                            "share is held as 50 / 50 ETH / BTC tokens", LPWAIT(2)),
     "k100_reupE_lpwait3": ("weak-side LP timing", "the same after 3 unchanged closes", LPWAIT(3)),
 })
+# EXP-184 batch 7 (after batch 6's IS results: lpwait2 / lpwait3 lose, edge −0.159 / +0.250; a position's first days earn
+# fees too). The base's LP design looks like a local optimum (centred, +-20%, weak side, F high). Two capital levers on
+# the weak side: rvol halves F, hence the LP, in vol spikes, yet the base's positions opened in the most volatile R
+# tercile still made +0.052; and collected fees sit outside the book instead of growing the LP.
+VARIANTS.update({
+    "k100_reupE_rvolS": ("rvol filter scope", "rvol halves F only while ETH is strong (the weak-side LP keeps its size)",
+                         BASE184 + [(RVOL_LINE, RVOL_LINE.replace('~flag.reindex(out.index).fillna(False).astype(bool)',
+                                                                  '~(flag.reindex(out.index).fillna(False).astype(bool) & out["strong"])'), 1)]),
+    "k100_reupE_compound": ("fee handling", "spec compound mode on the EXP-183 best: collected fees count as capital",
+                            BASE184 + [x for x in VARIANTS["k75_f2low_rvol_compound"][2] if "compound" in x[1]]),
+})
 ARB = "0x2f5e87C9312fa29aed5C179E456625D79015299c"
 MAKER_POOL = '    contract_address, fee, chain_name = "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0", 0.05, ChainType.ethereum.name  # wbtc/weth\n'
 
