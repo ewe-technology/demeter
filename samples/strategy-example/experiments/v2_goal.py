@@ -480,6 +480,14 @@ VARIANTS.update({
     "k100_reupE_weak5": ("LP width while weak", "+-5% instead of +-20% on the EXP-183 best",
                          BASE184 + [(RANGES, RANGES.replace('Decimal("0.20")', 'Decimal("0.05")'), 1)]),
 })
+# EXP-184 batch 2 (after batch 1's IS results): narrowing the weak-side LP raised fees 1.6x / 2.4x but IL 4x / 7.7x
+# (edge +0.324 -> −0.145 / −0.757): recentring locks IL in, and a narrow range recentres more. Try the other way.
+VARIANTS.update({
+    "k100_reupE_weak30": ("LP width while weak", "+-30% instead of +-20% on the EXP-183 best",
+                          BASE184 + [(RANGES, RANGES.replace('Decimal("0.20")', 'Decimal("0.30")'), 1)]),
+    "k100_reupE_weak40": ("LP width while weak", "+-40% instead of +-20% on the EXP-183 best",
+                          BASE184 + [(RANGES, RANGES.replace('Decimal("0.20")', 'Decimal("0.40")'), 1)]),
+})
 ARB = "0x2f5e87C9312fa29aed5C179E456625D79015299c"
 MAKER_POOL = '    contract_address, fee, chain_name = "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0", 0.05, ChainType.ethereum.name  # wbtc/weth\n'
 

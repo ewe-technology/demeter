@@ -33,6 +33,14 @@ out-of-range rebuilds and swap cost.
 
 Later batches, if needed, are added here and committed before they run, shaped from IS results only.
 
+Batch 2 (after batch 1's IS results): narrowing raised fees 1.6x / 2.4x but IL 4x / 7.7x; recentring locks IL in, and a
+narrow range recentres more. The other way:
+
+| variant | change |
+|---|---|
+| `k100_reupE_weak30` | LP half width while weak +-30% |
+| `k100_reupE_weak40` | LP half width while weak +-40% |
+
 ## Pre-registration
 
 - Pool `0x4585`, 1 ETH, in ETH incl. rewards. IS 2021-11-02..2024-12-31, OOS 2025-01-01..2026-09-30 (`oosf`).
@@ -42,7 +50,15 @@ Later batches, if needed, are added here and committed before they run, shaped f
 
 ## Result
 
-(pending)
+In ETH; base `k100_f2low_rvol_reupE`. LP edge = fees + IL over all LP positions.
+
+Batch 1, IS (none passed):
+
+| variant | CAGR | max DD | Calmar | fees | IL | LP edge | rebuilds | vs base |
+|---|---|---|---|---|---|---|---|---|
+| base (+-20%) | 65.68% | −24.8% | 2.643 | 0.610 | −0.287 | +0.324 | 118 | |
+| `weak10` | 58.64% | −24.6% | 2.388 | 0.994 | −1.139 | −0.145 | 125 | loses, LP down |
+| `weak5` | 50.33% | −26.2% | 1.922 | 1.447 | −2.204 | −0.757 | 156 | loses, LP down |
 
 ## Deviations
 
