@@ -71,6 +71,15 @@ and its more conservative neighbour was never run; rlow20 had the best IS Calmar
 | `k75_fmin_rvol` | F = lowest of the four accounts (base: second-lowest) |
 | `k75_f2low_rvol_rlow20` | EXP-180's rlow20 BTC lock added to the base |
 
+Batch 6 (after batch 5's IS results): fmin raised IS CAGR to 67.07% and k100 to 65.10%, both with a lower Calmar;
+fmin's deepest IS drawdown is the 2022-08-29..11-05 episode (−27.0%), the one `reupE` cut on the base (−25.2% → −24.0%).
+
+| variant | change |
+|---|---|
+| `k75_fmin_rvol_reupE` | ETH_KEEP 0.75 + F lowest account + rvol + reupE |
+| `k100_f2low_rvol_reupE` | ETH_KEEP 1.0 + f2low + rvol + reupE |
+| `k100_fmin_rvol_reupE` | ETH_KEEP 1.0 + F lowest account + rvol + reupE |
+
 ## Pre-registration
 
 - Pool: mainnet WBTC/WETH 0.05% `0x4585`, 1 ETH start, net value in ETH incl. rewards (as EXP-178..182); USD ratio and
@@ -120,6 +129,14 @@ Batch 4, IS (none passed, no OOS run):
 |---|---|---|---|---|---|
 | `fEstrong` | 61.11% | −25.3% | 2.418 | 3.486 / −54.5% | loses |
 | `fEboth` | 57.76% | −26.4% | 2.185 | 3.262 / −55.5% | loses |
+
+Batch 5, IS (none passed, no OOS run):
+
+| variant | CAGR | max DD | Calmar | USD x / USD DD | vs base |
+|---|---|---|---|---|---|
+| `k100_f2low_rvol` | 65.10% | −26.1% | 2.494 | 3.767 / −47.7% | loses (Calmar) |
+| `k75_fmin_rvol` | 67.07% | −27.2% | 2.463 | 3.910 / −48.4% | loses (Calmar) |
+| `k75_f2low_rvol_rlow20` | 60.89% | −22.4% | 2.720 | 3.471 / −55.8% | loses (CAGR) |
 
 ## Deviations
 

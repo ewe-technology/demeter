@@ -455,6 +455,17 @@ VARIANTS.update({
                               "share is held as ETH until R > EMA50(R)",
                               K75 + [(RVOL_LINE, RVOL_LINE + _rlock(x=0.80), 1), RLOCK(x=0.80)[1]]),
 })
+# EXP-183 batch 6 (after batch 5's IS results): fmin raised IS CAGR to 67.07% and k100 to 65.10%, both with a lower
+# Calmar; fmin's deepest IS drawdown is the 2022-08-29..11-05 episode (−27.0%), the one reupE cut on the base
+# (−25.2% -> −24.0%). Stack reupE on them.
+FMIN = [(FAPPEND, "        fractions.append(min(a.deployed for a in accounts))\n", 1)]
+REUPE = REUP("g * r ** 0.5", True)
+VARIANTS.update({
+    "k75_fmin_rvol_reupE": ("F lowest account + re-entry", "k75_fmin_rvol + reupE", KEEP("0.75") + FMIN + RVOL + REUPE),
+    "k100_f2low_rvol_reupE": ("ETH kept 100% + re-entry", "k100_f2low_rvol + reupE", KEEP("1") + F2LOW + RVOL + REUPE),
+    "k100_fmin_rvol_reupE": ("ETH kept 100% + F lowest + re-entry", "k100, fmin, rvol and reupE",
+                             KEEP("1") + FMIN + RVOL + REUPE),
+})
 ARB = "0x2f5e87C9312fa29aed5C179E456625D79015299c"
 MAKER_POOL = '    contract_address, fee, chain_name = "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0", 0.05, ChainType.ethereum.name  # wbtc/weth\n'
 
