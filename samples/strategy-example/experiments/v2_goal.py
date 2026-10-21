@@ -488,6 +488,22 @@ VARIANTS.update({
     "k100_reupE_weak40": ("LP width while weak", "+-40% instead of +-20% on the EXP-183 best",
                           BASE184 + [(RANGES, RANGES.replace('Decimal("0.20")', 'Decimal("0.40")'), 1)]),
 })
+# EXP-184 batch 3 (after batch 2's IS results: +-30 / +-40 lose too, edge +0.225 / +0.171; +-20 is near the best width;
+# fees / IL ratio 0.87 at +-10, 2.1 at +-20..40). All 117 IS rebuilds of the base are drift rebuilds (F or strength
+# changes), none out of range; 29 of them keep an LP and still recentre it. And the strong-side LP of k75 (+-10%) did
+# not pay for itself, a ratio wider ranges improve.
+RANGE_LINE = "            tick_lo, tick_hi = range_ticks(current_tick, ratio, self.utils.params.tick_spacing)\n"
+VARIANTS.update({
+    "k100_reupE_lpresize": ("LP rebuild", "a drift rebuild keeps the old LP range (resizes the liquidity) while the price is "
+                            "inside it and the width is unchanged; only a new width or an out-of-range price recentres",
+                            BASE184 + [(RANGE_LINE, RANGE_LINE +
+                                        "            if old and old[0] <= current_tick < old[1] and old[1] - old[0] == tick_hi - tick_lo:\n"
+                                        "                tick_lo, tick_hi = old  # v2_goal EXP-184 lpresize\n", 1)]),
+    "k75s20_reupE": ("strong-side LP", "25% of F as LP while strong (ETH_KEEP 0.75) at +-20% instead of +-10%",
+                     KEEP("0.75") + F2LOW + RVOL + REUPE + [(RANGES, RANGES.replace('Decimal("0.10")', 'Decimal("0.20")'), 1)]),
+    "k75s30_reupE": ("strong-side LP", "25% of F as LP while strong (ETH_KEEP 0.75) at +-30%",
+                     KEEP("0.75") + F2LOW + RVOL + REUPE + [(RANGES, RANGES.replace('Decimal("0.10")', 'Decimal("0.30")'), 1)]),
+})
 ARB = "0x2f5e87C9312fa29aed5C179E456625D79015299c"
 MAKER_POOL = '    contract_address, fee, chain_name = "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0", 0.05, ChainType.ethereum.name  # wbtc/weth\n'
 

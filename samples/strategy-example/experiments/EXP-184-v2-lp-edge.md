@@ -41,6 +41,16 @@ narrow range recentres more. The other way:
 | `k100_reupE_weak30` | LP half width while weak +-30% |
 | `k100_reupE_weak40` | LP half width while weak +-40% |
 
+Batch 3 (after batch 2's IS results: +-30 / +-40 lose too; +-20 is near the best width, fees / IL 0.87 at +-10 and
+2.1 at +-20..40). All 117 IS rebuilds of the base are drift rebuilds (F or strength changes), none out of range; 29 of
+them keep an LP and still recentre it. The strong-side LP of k75 (+-10%) did not pay for itself.
+
+| variant | change |
+|---|---|
+| `k100_reupE_lpresize` | a drift rebuild keeps the old LP range (resizes it) while the price is inside and the width is unchanged |
+| `k75s20_reupE` | 25% of F as LP while strong (ETH_KEEP 0.75) at +-20% (k75: +-10%) |
+| `k75s30_reupE` | the same at +-30% |
+
 ## Pre-registration
 
 - Pool `0x4585`, 1 ETH, in ETH incl. rewards. IS 2021-11-02..2024-12-31, OOS 2025-01-01..2026-09-30 (`oosf`).
@@ -59,6 +69,13 @@ Batch 1, IS (none passed):
 | base (+-20%) | 65.68% | −24.8% | 2.643 | 0.610 | −0.287 | +0.324 | 118 | |
 | `weak10` | 58.64% | −24.6% | 2.388 | 0.994 | −1.139 | −0.145 | 125 | loses, LP down |
 | `weak5` | 50.33% | −26.2% | 1.922 | 1.447 | −2.204 | −0.757 | 156 | loses, LP down |
+
+Batch 2, IS (none passed):
+
+| variant | CAGR | max DD | Calmar | fees | IL | LP edge | rebuilds | vs base |
+|---|---|---|---|---|---|---|---|---|
+| `weak30` | 64.57% | −24.9% | 2.591 | 0.421 | −0.196 | +0.225 | 118 | loses, LP down |
+| `weak40` | 64.01% | −25.0% | 2.565 | 0.321 | −0.149 | +0.171 | 118 | loses, LP down |
 
 ## Deviations
 
