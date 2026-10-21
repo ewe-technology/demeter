@@ -1,0 +1,84 @@
+{
+ "h48_costs": {
+  "verdict": {
+   "vol30": {
+    "99ac four": false,
+    "calmar": false,
+    "9db9 four": false,
+    "neighbour": true,
+    "passes": false,
+    "main pool only": false
+   },
+   "vol40": {
+    "99ac four": false,
+    "calmar": false,
+    "9db9 four": false,
+    "neighbour": true,
+    "passes": false,
+    "main pool only": false
+   },
+   "vol50": {
+    "99ac four": false,
+    "calmar": false,
+    "9db9 four": false,
+    "neighbour": true,
+    "passes": false,
+    "main pool only": false
+   },
+   "vol40_dd30": {
+    "99ac four": true,
+    "calmar": false,
+    "9db9 four": false,
+    "neighbour": true,
+    "passes": false,
+    "main pool only": false
+   }
+  },
+  "pick": null
+ },
+ "route": {
+  "verdict": {
+   "ladder_rt": {
+    "99ac four": false,
+    "calmar": false,
+    "9db9 four": false,
+    "neighbour": true,
+    "passes": false,
+    "main pool only": false
+   },
+   "vol30_rt": {
+    "99ac four": false,
+    "calmar": false,
+    "9db9 four": false,
+    "neighbour": true,
+    "passes": false,
+    "main pool only": false
+   },
+   "vol40_rt": {
+    "99ac four": false,
+    "calmar": false,
+    "9db9 four": false,
+    "neighbour": true,
+    "passes": false,
+    "main pool only": false
+   },
+   "vol50_rt": {
+    "99ac four": false,
+    "calmar": false,
+    "9db9 four": false,
+    "neighbour": true,
+    "passes": false,
+    "main pool only": false
+   },
+   "vol40_dd30_rt": {
+    "99ac four": true,
+    "calmar": false,
+    "9db9 four": false,
+    "neighbour": true,
+    "passes": false,
+    "main pool only": false
+   }
+  },
+  "pick": null
+ }
+}
