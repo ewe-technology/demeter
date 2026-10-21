@@ -113,6 +113,10 @@ EXP-185 (QUAN-1182, LP research note directions 2 / 3 / 4, same rules, base k100
 off-centre ranges (`nscentre`) save 0.02 ETH of swaps but lose 2.4 pts IS; debouncing the weak -> strong flip
 (`flip3` / `flipband`) cuts swaps but delays the timing edge (−12.9 / −4.0 pts); a mean-reversion recentring gate
 (`mrgate`) is noise (IS +0.19, OOS −0.04 pt). The base's LP edge is −0.118 ETH OOS (IL −0.232 vs fees 0.114).
+EXP-186 (QUAN-1183, ablation of v2 = `1ETH_signal`, one element removed at a time, `0x4585` IS / OOS + Arbitrum):
+3 of 9 elements are effective on all three (F engine, strength switch vs always weak, 25% ETH keep). Replacing the LP
+by 50/50 tokens ties IS (−0.34 pt) and wins OOS +10.2 / Arbitrum +6.9 pts with shallower DD; the slope filter helps
+OOS + Arbitrum; four accounts vs one EMA100 account is neutral.
 
 ## Handoff 2026-10-06 (two sessions closed; a new session starts here)
 
