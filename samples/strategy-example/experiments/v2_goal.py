@@ -504,6 +504,32 @@ VARIANTS.update({
     "k75s30_reupE": ("strong-side LP", "25% of F as LP while strong (ETH_KEEP 0.75) at +-30%",
                      KEEP("0.75") + F2LOW + RVOL + REUPE + [(RANGES, RANGES.replace('Decimal("0.10")', 'Decimal("0.30")'), 1)]),
 })
+# EXP-184 batch 4 (after batch 3's IS results, all lost, and an IS-only look at the base's 58 LP positions): the edge
+# comes from positions that live >= 6 days (+0.374 of +0.324), and is highest while R = ETH/BTC ranges (30-day
+# efficiency ratio lowest tercile +0.159); +-10% lost overall because it recentred through volatile spells. Narrow the
+# weak-side LP only in calm or ranging R, judged on the day's close like F.
+
+
+def WIDTH(code: str) -> list:
+    """Weak-side LP half width from a daily column `wk` (code sets it from r); strong side unchanged."""
+    return BASE184 + [(RVOL_LINE, RVOL_LINE +
+                       "    _lr = _np.log(r).diff()  # v2_goal EXP-184 width rule\n" + code, 1),
+                      (ALLOC_CALL, ALLOC_CALL +
+                       '        if not strong and "wk" in row and row["wk"] == row["wk"]:  # v2_goal EXP-184 width rule\n'
+                       '            ratio = Decimal(str(row["wk"]))\n', 1)]
+
+
+VARIANTS.update({
+    "k100_reupE_volwidth": ("LP width while weak", "+-10% while R's 30-day realized vol (annualized) < 30%, else +-20%",
+                            WIDTH("    _rv = _lr.rolling(30).std() * 365 ** 0.5\n"
+                                  '    out["wk"] = pd.Series(_np.where(_rv < 0.30, 0.10, 0.20), index=r.index).where(_rv.notna()).reindex(out.index)\n')),
+    "k100_reupE_volwidth3": ("LP width while weak", "+-10% / +-20% / +-30% for R's 30-day vol < 30% / 30-45% / > 45%",
+                             WIDTH("    _rv = _lr.rolling(30).std() * 365 ** 0.5\n"
+                                   '    out["wk"] = pd.Series(_np.select([_rv < 0.30, _rv <= 0.45], [0.10, 0.20], 0.30), index=r.index).where(_rv.notna()).reindex(out.index)\n')),
+    "k100_reupE_erwidth": ("LP width while weak", "+-10% while R's 30-day efficiency ratio < 0.12 (ranging), else +-20%",
+                           WIDTH("    _er = (r - r.shift(30)).abs() / r.diff().abs().rolling(30).sum()\n"
+                                 '    out["wk"] = pd.Series(_np.where(_er < 0.12, 0.10, 0.20), index=r.index).where(_er.notna()).reindex(out.index)\n')),
+})
 ARB = "0x2f5e87C9312fa29aed5C179E456625D79015299c"
 MAKER_POOL = '    contract_address, fee, chain_name = "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0", 0.05, ChainType.ethereum.name  # wbtc/weth\n'
 
@@ -514,6 +540,7 @@ MET_MORE = MET_LINE + (
     "    _nv = net_value.apply(float)\n"
     "    _usd = usd_series.astype(float)\n"
     "    _nv.resample('1D').last().to_csv(f'{params.folder}/nv_daily_{mode}.csv')\n"
+    "    pd.DataFrame(getattr(strat, 'lp_list', [])).to_csv(f'{params.folder}/lp_positions_{mode}.csv', index=False)\n"
     "    import json as _json\n"
     "    _json.dump({'start': str(_nv.index[0]), 'end': str(_nv.index[-1]), 'nv0': float(_nv.iloc[0]), 'nv1': float(_nv.iloc[-1]),\n"
     "                'mdd_eth': float((_nv / _nv.cummax() - 1).min()), 'mdd_usd': float((_usd / _usd.cummax() - 1).min()),\n"
@@ -542,17 +569,22 @@ LP_ACC = [
      "        self.lp_acc['pnl'] += out + fees - o[2]\n"
      "        self.lp_acc['value_in'] += o[2]\n"
      "        self.lp_acc['n'] += 1\n"
+     "        if not hasattr(self, 'lp_list'):\n"
+     "            self.lp_list = []\n"
+     "        self.lp_list.append({'open': str(o[4]), 'close': str(getattr(self, '_now', '')), 'p_open': float((o[2] - o[1]) / o[0]) if o[0] else 0.0,\n"
+     "                             'p_close': float(p), 'value_in': float(o[2]), 'fees': float(fees), 'il': float(out - (o[0] * p + o[1]))})\n"
      "        self._lp_open = None\n"
      "\n"
      "    def rebuild(self, row_data: Snapshot, why: str) -> None:\n", 1),
     ("        self.collect_fees(p)\n        old = (self.positions[0][0], self.positions[0][1]) if self.positions else None\n",
-     "        self.collect_fees(p)\n        self._lp_close(p)\n"
+     "        self.collect_fees(p)\n        self._now = row_data.timestamp\n        self._lp_close(p)\n"
      "        old = (self.positions[0][0], self.positions[0][1]) if self.positions else None\n", 1),
     ("                self.positions.append(position)\n",
      "                self.positions.append(position)\n"
-     "                self._lp_open = (used_base, used_quote, used_base * p + used_quote, self.reward_eth)\n", 1),
+     "                self._lp_open = (used_base, used_quote, used_base * p + used_quote, self.reward_eth, row_data.timestamp)\n", 1),
     ("        self.collect_fees(p)\n        lp_value = self._lp_value()\n        assets = (",
-     "        self.collect_fees(p)\n        self._lp_close(p)\n        lp_value = self._lp_value()\n        assets = (", 1),
+     "        self.collect_fees(p)\n        self._now = row_data.timestamp\n        self._lp_close(p)\n"
+     "        lp_value = self._lp_value()\n        assets = (", 1),
 ]
 
 

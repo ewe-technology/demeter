@@ -51,6 +51,19 @@ them keep an LP and still recentre it. The strong-side LP of k75 (+-10%) did not
 | `k75s20_reupE` | 25% of F as LP while strong (ETH_KEEP 0.75) at +-20% (k75: +-10%) |
 | `k75s30_reupE` | the same at +-30% |
 
+Batch 4 (after batch 3's IS results, all lost). The LP log now also writes each position (`lp_positions_signal.csv`,
+logging only, base rerun identical). IS look at the base's 58 positions: positions living >= 6 days made +0.374 (the
+rest −0.05, mostly 1-2 day positions from stage-by-stage F changes); the edge is highest while R ranges (R's 30-day
+efficiency ratio, lowest tercile +0.159 of 19 positions) and lowest in the most volatile tercile of R (+0.052). +-10%
+lost overall because it recentred through volatile spells, so narrow only while R is calm or ranging (judged on the
+day's close, like F; the strong side is unchanged):
+
+| variant | weak-side half width |
+|---|---|
+| `k100_reupE_volwidth` | +-10% while R's 30-day realized vol (annualized) < 30%, else +-20% |
+| `k100_reupE_volwidth3` | +-10% / +-20% / +-30% for R's 30-day vol < 30% / 30-45% / > 45% |
+| `k100_reupE_erwidth` | +-10% while R's 30-day efficiency ratio < 0.12, else +-20% |
+
 ## Pre-registration
 
 - Pool `0x4585`, 1 ETH, in ETH incl. rewards. IS 2021-11-02..2024-12-31, OOS 2025-01-01..2026-09-30 (`oosf`).
@@ -76,6 +89,14 @@ Batch 2, IS (none passed):
 |---|---|---|---|---|---|---|---|---|
 | `weak30` | 64.57% | −24.9% | 2.591 | 0.421 | −0.196 | +0.225 | 118 | loses, LP down |
 | `weak40` | 64.01% | −25.0% | 2.565 | 0.321 | −0.149 | +0.171 | 118 | loses, LP down |
+
+Batch 3, IS (none passed):
+
+| variant | CAGR | max DD | Calmar | fees | IL | LP edge | rebuilds | vs base |
+|---|---|---|---|---|---|---|---|---|
+| `lpresize` | 64.23% | −24.7% | 2.601 | 0.607 | −0.336 | +0.271 | 119 | loses, LP down |
+| `k75s20_reupE` | 64.79% | −24.3% | 2.670 | 0.643 | −0.368 | +0.275 | 119 | loses (CAGR), LP down |
+| `k75s30_reupE` | 65.26% | −24.2% | 2.699 | 0.633 | −0.338 | +0.295 | 118 | loses (CAGR), LP down |
 
 ## Deviations
 
