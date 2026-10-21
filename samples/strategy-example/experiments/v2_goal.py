@@ -405,6 +405,19 @@ VARIANTS.update({
                                 K75 + [(WEAK_ALLOC, WEAK_ALLOC.replace('"lp": f, "eth": ZERO, "btc": ONE - f',
                                                                       '"lp": ZERO, "eth": f / 2, "btc": f / 2 + ONE - f'), 1)]),
 })
+# EXP-183 batch 3 (after batch 2's IS results: all three weak-side changes lost IS, the LP's fees matter more than the
+# regime split suggested). Collected fees (0.68 ETH over IS, 14% of the end book) sit in the wallet outside the
+# strategy's capital, BTC fees stay BTC; the spec's compound mode reinvests them. Rebuild swap cost was 0.14 ETH over IS.
+VARIANTS.update({
+    "k75_f2low_rvol_compound": ("fee handling", "spec compound mode: collected fees count as capital and are reinvested "
+                                "by the next rebuild's target (base: kept in the wallet, outside the strategy)",
+                                K75 + [("        return (self.broker.get_token_balance(self.gp.base_token) - self.total_base_fee,\n"
+                                        "                self.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee,\n",
+                                        "        return (self.broker.get_token_balance(self.gp.base_token),  # v2_goal EXP-183 compound\n"
+                                        "                self.broker.get_token_balance(self.gp.quote_token),\n", 1)]),
+    "k75_f2low_rvol_follow25": ("rebuild threshold", "25% instead of 12.5% (fewer drift rebuilds, less swap cost)",
+                                K75 + [('FOLLOW_THRESHOLD = Decimal("0.125")', 'FOLLOW_THRESHOLD = Decimal("0.25")', 1)]),
+})
 ARB = "0x2f5e87C9312fa29aed5C179E456625D79015299c"
 MAKER_POOL = '    contract_address, fee, chain_name = "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0", 0.05, ChainType.ethereum.name  # wbtc/weth\n'
 

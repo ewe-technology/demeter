@@ -43,6 +43,15 @@ IS days (LP 68% of the book) where a 50/50 ETH/BTC hold of the same money made +
 | `k75_f2low_rvol_bkeep50` | while weak, 50% of F held as BTC outside the LP |
 | `k75_f2low_rvol_weakhold` | while weak, F held as 50% ETH / 50% BTC tokens, no LP |
 
+Batch 3 (after batch 2's IS results, all three lost: the LP's fees matter more than the regime split suggested).
+Collected fees (0.68 ETH over IS, 14% of the end book) sit in the wallet outside the strategy's capital and BTC fees
+stay BTC; rebuild swap cost was 0.14 ETH over IS.
+
+| variant | change |
+|---|---|
+| `k75_f2low_rvol_compound` | spec compound mode: collected fees count as capital, reinvested by the next rebuild |
+| `k75_f2low_rvol_follow25` | drift-rebuild threshold 25% instead of 12.5% |
+
 ## Pre-registration
 
 - Pool: mainnet WBTC/WETH 0.05% `0x4585`, 1 ETH start, net value in ETH incl. rewards (as EXP-178..182); USD ratio and
@@ -70,6 +79,14 @@ Batch 1, IS:
 
 Batch 1, OOS (only `reupE` passed IS): base 24.49% / −30.0% / 0.818 (USD x1.180, USD DD −55.2%); `reupE` identical
 to the base (its rule never fires after 2024): not better, fails.
+
+Batch 2, IS (none passed, no OOS run):
+
+| variant | CAGR | max DD | Calmar | USD x / USD DD | vs base |
+|---|---|---|---|---|---|
+| `bkeep25` | 62.66% | −25.5% | 2.461 | 3.593 / −48.9% | loses |
+| `bkeep50` | 61.29% | −25.9% | 2.365 | 3.498 / −49.1% | loses |
+| `weakhold` | 60.14% | −25.6% | 2.347 | 3.420 / −49.3% | loses |
 
 ## Deviations
 
