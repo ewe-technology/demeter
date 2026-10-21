@@ -8,7 +8,7 @@ asserted). A run gets its own copy of the maker-defense samples/strategy-example
 Rust engine (.venv-rs, no PYTHONPATH). IS and OOS are separate runs, each starting from the full book; the signal engine
 is warmed up on Binance daily closes from 2017 either way.
 
-    python v3_goal.py is|oos <pool:eth|btc> <variant,variant,...|all> [workers]
+    python v3_goal.py is|oos|y2022..y2025|c2225|y2026f <pool:eth|btc> <variant,variant,...|all> [workers]
     python v3_goal.py table                      # every finished run -> result/v3_goal/runs.csv (+ judged columns)
 
 WBTC/WETH: v3 runs unchanged with ETH as the base token and WBTC in USDC's place (quote, 2 WBTC book, results in BTC),
@@ -45,7 +45,11 @@ POOLS = {
     "btc": dict(address="0x4585fe77225b41b697c938b018e2ac67ac5a20c0", data=MAIN / "samples/holdout-data",
                 is_start=(2021, 11, 2), csv="binance_ethbtc_ext.csv"),
 }
+DATA_END = (2026, 9, 30)   # both pools' minute data since 2026-10-21; the Binance files are extended to here
 SEGMENTS = {"is": lambda p: (p["is_start"], (2024, 12, 31)), "oos": lambda p: ((2025, 1, 1), END)}
+# the windows of Maker's BTC/ETH spec sheet (start on 1/2), to put ETH/USDC runs next to it
+SEGMENTS.update({f"y{y}": (lambda p, y=y: ((y, 1, 2), (y, 12, 31))) for y in (2022, 2023, 2024, 2025)})
+SEGMENTS.update({"c2225": lambda p: ((2022, 1, 2), (2025, 12, 31)), "y2026f": lambda p: ((2026, 1, 2), DATA_END)})
 
 # ---- variants: name -> (element of v3, what it becomes, [(pattern, replacement, expected count)]) -------------------
 # pattern is a plain string (re.escape'd) unless it starts with "re:"
@@ -395,9 +399,9 @@ LOG_MORE = (
 
 
 def binance_files(dst: Path):
-    """Maker's daily closes extended to END from samples/binance_daily_closes.csv (same date convention)."""
+    """Maker's daily closes extended to DATA_END from samples/binance_daily_closes.csv (same date convention)."""
     long = pd.read_csv(MAIN / "samples/binance_daily_closes.csv", parse_dates=["date"]).set_index("date")
-    end = pd.Timestamp(*END)
+    end = pd.Timestamp(*DATA_END)
     for name, src, ext in (("binance_ethusdt_ext.csv", "binance_ethusdt_1d.csv", long["ETHUSDT"]),
                            ("binance_ethbtc_ext.csv", "binance_ethbtc_1d.csv", long["ETHUSDT"] / long["BTCUSDT"])):
         s = pd.read_csv(dst / src, parse_dates=["date"]).set_index("date")["close"]
@@ -409,9 +413,9 @@ def binance_files(dst: Path):
 
 def g_file(dst: Path):
     """EXP-177: G = sqrt(ETHUSDT x BTCUSDT) daily closes (ETH-cbBTC spec section 2), from Maker's two files (2017-08-17 on)
-    extended to END from samples/binance_daily_closes.csv like binance_files."""
+    extended to DATA_END from samples/binance_daily_closes.csv like binance_files."""
     long = pd.read_csv(MAIN / "samples/binance_daily_closes.csv", parse_dates=["date"]).set_index("date")
-    end = pd.Timestamp(*END)
+    end = pd.Timestamp(*DATA_END)
     legs = []
     for src, col in (("binance_ethusdt_1d.csv", "ETHUSDT"), ("binance_btcusdt_1d.csv", "BTCUSDT")):
         s = pd.read_csv(dst / src, parse_dates=["date"]).set_index("date")["close"]
@@ -424,6 +428,9 @@ def g_file(dst: Path):
 
 def source() -> Path:
     src = WORK / "_src"
+    ext = src / "samples/strategy-example/binance_ethusdt_ext.csv"
+    if ext.exists() and pd.read_csv(ext)["date"].iloc[-1] < "%04d-%02d-%02d" % DATA_END:
+        shutil.rmtree(src)   # a cache built before DATA_END moved: rebuild it (same closes up to the old end)
     if not src.exists():
         blob = subprocess.run(["git", "-C", str(REPO), "archive", REF, "samples/strategy-example"],
                               check=True, capture_output=True).stdout
