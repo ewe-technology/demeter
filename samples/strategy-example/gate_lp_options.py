@@ -75,7 +75,9 @@ batch.POOLS.update({
     "cbcd": Pool("0xCBCdF9626bC03E24f779434178A73a0B4bad62eD", "ethereum", wbtc, weth, weth, 0.3, 60, date(2021, 5, 5)),
     "e8f7": Pool("0xe8f7c89C5eFa061e340f2d2F206EC78FD8f7e124", "ethereum", wbtc, cbbtc, wbtc, 0.01, 1, date(2024, 10, 13)),
     "1098": Pool("0x109830a1AAaD605BbF02a9dFA7B0B92EC2FB7dAa", "ethereum", wsteth, weth, weth, 0.01, 1, date(2024, 1, 1)),
+    "5653": Pool("0x56534741CD8B152df6d48AdF7ac51f75169A83b2", "ethereum", wbtc, usdt, usdt, 0.05, 10, date(2021, 6, 11)),
 })
+ROUTE_HOP_BPS = 1  # H63: USDC <-> USDT in a 0.01% pool, impact left out
 ASSET_SRC = {"btc": "99ac", "eth": "88e6"}
 
 
@@ -290,6 +292,9 @@ class ConfigG(robust.ConfigR):
     dd_budget: float = 0.0  # H59: gate off, the ladder is the book x (1 - drawdown / dd_budget), clipped to [0, 1]
     time_cap: int = 0  # H60: gate off for this many days -> sell to the quote until gate on
     hourly_down: bool = False  # H62: below the ladder at any full hour -> re-centre (the upper edge stays daily)
+    vol_target: float = 0.0  # H64: gate off, the ladder is the book x min(1, vol_target / 30-day vol)
+    route: str = ""  # H63: each swap at the cheaper of this pool and the LP pool (costs after the run)
+    route_block: bool = False  # acceptance only: the route priced at infinity
 
 
 def gcfg(option: str, pool_key: str, name: str, gate_spec: str, width: float = 0.0, up: float = 0.0,
@@ -361,8 +366,8 @@ def run(c: ConfigG, start: date, end: date, bar: str | None = "1h", kind: str = 
     if c.hourly_check:
         strategy = GatedPool(c, gate)
     else:
-        if c.dd_budget or c.time_cap or c.hourly_down:
-            strategy = CapGated(c, gate)
+        if c.dd_budget or c.time_cap or c.hourly_down or c.vol_target:
+            strategy = CapGated(c, gate, vol_30d() if c.vol_target else None)
         elif c.brake:
             strategy = BrakeGated(c, gate)
         elif c.slow_spec:
@@ -377,22 +382,50 @@ def run(c: ConfigG, start: date, end: date, bar: str | None = "1h", kind: str = 
     eth = eth_daily()
     liq = data["currentLiquidity"].astype(float)
     quote_is_1, scale = batch.raw_price_scale(p)
+    if c.route:  # H63: the route pool's liquidity; a hop USDC <-> USDT only for books with an LP in a USDC pool
+        alt = batch.POOLS[c.route]
+        alt_liq = hourly_market(c.route, start, end)["currentLiquidity"].astype(float)
+        hop = alt.quote != p.quote and "range" in (c.on, c.off)
     costs, costs3, swap_fee, impact = {}, {}, 0.0, 0.0
+    routed = swaps = 0
+    saved = paid_main = paid_chosen = traded = gas_paid = 0.0
     for a in actuator.actions:
         ts = pd.Timestamp(a.timestamp)
         name = type(a).__name__
         cost = gas_quote(ts, name, p, eth, q_usd, None)
         cost3 = gas_quote(ts, name, p, eth, q_usd, 3)
+        gas_paid += cost
         if name == "SwapAction":
             px = float(price.asof(ts))
             notional = float(a.amount) * (px if a.amount.unit.upper() == base.name.upper() else 1.0)  # in quote
-            swap_fee += float(a.fee) * (px if a.fee.unit.upper() == base.name.upper() else 1.0)
+            fee_q = float(a.fee) * (px if a.fee.unit.upper() == base.name.upper() else 1.0)
+            swap_fee += fee_q
             p_raw = (px if quote_is_1 else 1 / px) / scale  # token1 raw per token0 raw
             raw1 = notional * (1.0 if quote_is_1 else 1 / px) * 10 ** p.token1.decimal
             hit = notional * raw1 / (float(liq.asof(ts)) * math.sqrt(p_raw))
             impact += hit
-            cost += hit
-            cost3 += hit
+            extra, extra3 = hit, hit  # on top of the pool fee Demeter already took
+            if c.route:
+                swaps += 1
+                main = fee_q + hit
+                lq = float(alt_liq.asof(ts)) if ts >= alt_liq.index[0] else float("nan")
+                alt_cost = alt_cost3 = math.inf
+                if not c.route_block and lq > 0:  # NaN fails too: no data, no route
+                    alt_cost = notional * alt.fee_pct / 100 + notional * raw1 / (lq * math.sqrt(p_raw))
+                    alt_cost3 = alt_cost
+                    if hop:
+                        alt_cost += notional * ROUTE_HOP_BPS * 1e-4 + gas_quote(ts, name, p, eth, q_usd, None)
+                        alt_cost3 += notional * ROUTE_HOP_BPS * 1e-4 + gas_quote(ts, name, p, eth, q_usd, 3)
+                if alt_cost < main:
+                    routed += 1
+                    saved += main - alt_cost
+                    extra, extra3 = alt_cost - fee_q, alt_cost3 - fee_q
+                    gas_paid += gas_quote(ts, name, p, eth, q_usd, None) if hop else 0.0
+                traded += notional
+                paid_main += main
+                paid_chosen += min(main, alt_cost)
+            cost += extra
+            cost3 += extra3
         costs[ts] = costs.get(ts, 0.0) + cost
         costs3[ts] = costs3.get(ts, 0.0) + cost3
 
@@ -415,10 +448,16 @@ def run(c: ConfigG, start: date, end: date, bar: str | None = "1h", kind: str = 
         f"{RESULT_DIR}/nav/{tag}.parquet")
     ev.to_csv(f"{RESULT_DIR}/nav/events_{tag}.csv", index=False)
     paid_all = sum(costs.values())
-    return {"option": c.option, "pool": c.pool_key, "version": c.name, "gate": c.gate_spec, "start": str(start),
+    out = {}
+    if c.route:
+        out = {"swaps": swaps, "routed": routed, "route_saved": saved / initial,
+               "bps_main": paid_main / traded * 1e4 if traded else 0.0,
+               "bps_chosen": paid_chosen / traded * 1e4 if traded else 0.0}
+    return {**out, "option": c.option, "pool": c.pool_key, "version": c.name, "gate": c.gate_spec, "start": str(start),
             "end": str(end), "net": float(usd.iloc[-1] / usd.iloc[0] - 1),
             "net_3gwei": float(usd3.iloc[-1] / usd3.iloc[0] - 1),
-            "swap_fee": swap_fee / initial, "impact": impact / initial, "gas": (paid_all - impact) / initial,
+            "swap_fee": swap_fee / initial, "impact": impact / initial,
+            "gas": (gas_paid if c.route else paid_all - impact) / initial,
             "recentres": int(ev["kind"].isin(["recentre", "recentre_h"]).sum()),
             "switches": int(ev["kind"].isin(["on", "off"]).sum()),
             "maxDD": max_dd(usd), "secs": round(time.time() - started)}
@@ -1138,10 +1177,13 @@ class CapGated(robust.RobustGated):
     holds the book x s, s = 1 - drawdown / dd_budget clipped to [0, 1], never more than the ladder just removed; the
     rest stays in the quote, and s = 0 holds the quote until the gate turns on. time_cap: N days after the gate-off
     switch, at 00:00, sell to the quote until the gate turns on. hourly_down: a full hour below the lower edge
-    re-centres as the daily check does. The book and its peak are Demeter's own (before gas and impact)."""
+    re-centres as the daily check does. vol_target (H64, H65 with dd_budget): s = min(1, vol_target / 30-day vol)
+    (times the dd_budget share), sized from the whole book at every placement. The book and its peak are Demeter's
+    own (before gas and impact)."""
 
-    def __init__(self, cfg, gate: pd.Series):
+    def __init__(self, cfg, gate: pd.Series, vol: pd.Series | None = None):
         super().__init__(cfg, gate)
+        self.vol = vol  # H64: 30-day vol by day, known at that day's 00:00
         self.peak = 0.0
         self.outside = 0.0  # quote kept beside a sized ladder in this gate-off spell
         self.off_since = None
@@ -1162,11 +1204,18 @@ class CapGated(robust.RobustGated):
 
     def place(self, price: Decimal, width: float, kind: str, t):
         c = self.cfg
-        if self.state is not False or not c.dd_budget:
+        if self.state is not False or not (c.dd_budget or c.vol_target):
             return super().place(price, width, kind, t)
         v = self.book(price)
-        s = min(1.0, max(0.0, 1 - (1 - v / self.peak) / c.dd_budget))
-        lad = min(v * s, v - self.outside)
+        s = 1.0
+        if c.vol_target:  # H64 / H65 size from the whole book every time, no cap
+            sig = float(self.vol.asof(pd.Timestamp(t).normalize()))
+            s = min(1.0, c.vol_target / sig) if sig > 0 else 1.0
+        if c.dd_budget:
+            s *= min(1.0, max(0.0, 1 - (1 - v / self.peak) / c.dd_budget))
+        if c.vol_target:
+            self.events.append((t, f"s:{s:.4f}"))  # every gate-off placement's share, sized or not
+        lad = v * s if c.vol_target else min(v * s, v - self.outside)
         if lad >= v:
             return super().place(price, width, kind, t)
         m = self.markets[KEY]
@@ -1261,13 +1310,14 @@ def span(nav: pd.Series, a: str, b: str) -> dict:
     return {"ret": float(x[-1] / x[0] - 1), "mdd": float((x / np.maximum.accumulate(x) - 1).min())}
 
 
-def report_h59():
+def case_table(cases: list[tuple[str, str]], ctl: tuple[str, str], c1: tuple[str, str]) -> pd.DataFrame:
+    """One row per (case, pool): the windows against `ctl`, the continuous book, Calmar against `ctl` and `c1`, and
+    the listed counts and spans (plan 2026-10-21 section 4)."""
     cs, _ = continuous("C1")
     out = []
     for pk in MAIN_REP["C1"]:
-        cw, cc = rows_of("C1", pk, "ctl")
-        lw, lc = rows_of("C1", pk, "ladder")
-        cases = [("C1", "ladder"), ("C1", "ctl")] + [(o, v) for o, vs in H59_VERSIONS.items() for v in vs]
+        cw, cc = rows_of(ctl[0], pk, ctl[1])
+        lw, lc = rows_of(c1[0], pk, c1[1])
         for opt, v in cases:
             xw, xc = rows_of(opt, pk, v)
             x = xw - cw
@@ -1277,6 +1327,7 @@ def report_h59():
             evf = f"{RESULT_DIR}/nav/events_{opt}_{pk}_{v}_continuous_{cs}.csv"
             ev = pd.read_csv(evf) if os.path.exists(evf) else pd.DataFrame({"t": [], "kind": []})
             kind = ev["kind"].astype(str)
+            shares = [float(k[2:]) for k in kind if k.startswith("s:")]
             row = {"case": opt, "version": v, "pool": pk, "median": x.median(), "positive": int((x > 0).sum()),
                    "first_half": x.iloc[:h].median(), "second_half": x.iloc[h:].median(),
                    "vs_c1_median": (xw - lw).median(), "cont": xc["net"], "dd": xc["maxDD"], "dd_ctl": cc["maxDD"],
@@ -1288,6 +1339,11 @@ def report_h59():
                    "cuts": sum(k.startswith("cut:") and float(k[4:]) < 0.9995 for k in kind),  # s < 1 at 4 places
                    "zeros": int((kind == "zero").sum()),
                    "timecaps": int((kind == "timecap").sum()), "hourly_moves": int((kind == "recentre_h").sum())}
+            if shares:
+                row.update({"placements": len(shares), "s_below_1": sum(s < 0.9995 for s in shares),
+                            "s_median": float(np.median(shares))})
+            if "routed" in xc:
+                row.update({k: xc[k] for k in ("swaps", "routed", "route_saved", "bps_main", "bps_chosen")})
             w = span(nav, *WORST_C1)
             y26 = span(nav, "2026-01-01", "2026-09-30")
             row.update({"worst_ret": w["ret"], "worst_mdd": w["mdd"], "y2026_ret": y26["ret"], "y2026_mdd": y26["mdd"]})
@@ -1295,26 +1351,112 @@ def report_h59():
                 s_ = span(nav, f"{y}-01-01", f"{y}-12-31")
                 row[f"ret_{y}"], row[f"mdd_{y}"] = s_["ret"], s_["mdd"]
             out.append(row)
-    t = pd.DataFrame(out)
-    t.to_csv(f"{RESULT_DIR}/h59_summary.csv", index=False)
-    show(t[["case", "version", "pool", "median", "positive", "first_half", "second_half", "vs_c1_median", "cont",
-            "dd", "dd_gap", "calmar", "four", "failed", "recentres", "cuts", "zeros", "timecaps", "hourly_moves"]])
+    return pd.DataFrame(out)
+
+
+def verdict_of(t: pd.DataFrame, nb: dict[str, list[str]]) -> dict:
+    """Plan 2026-10-21 section 4: four checks on 99ac, Calmar above both bases, four checks on 9db9, a neighbour."""
     m = t[t["pool"] == "99ac"].set_index("version")
     r = t[t["pool"] == "9db9"].set_index("version")
     verdict = {}
-    for v in H59_NB:
+    for v in nb:
         c1 = bool(m.loc[v, "four"])
         c2 = bool(m.loc[v, "calmar"] > m.loc[v, "calmar_ctl"] and m.loc[v, "calmar"] > m.loc[v, "calmar_c1"])
         c3 = bool(r.loc[v, "four"])
-        c4 = not H59_NB[v] or any(bool(m.loc[n, "three"] and m.loc[n, "calmar"] > m.loc[n, "calmar_ctl"])
-                                  for n in H59_NB[v])
+        c4 = not nb[v] or any(bool(m.loc[n, "three"] and m.loc[n, "calmar"] > m.loc[n, "calmar_ctl"]) for n in nb[v])
         verdict[v] = {"99ac four": c1, "calmar": c2, "9db9 four": c3, "neighbour": c4, "passes": c1 and c2 and c3 and c4,
                       "main pool only": c1 and c2 and c4 and not c3}
     passing = [v for v, d in verdict.items() if d["passes"]]
-    pick = max(passing, key=lambda v: m.loc[v, "calmar"]) if passing else None
-    res = {"verdict": verdict, "pick": pick}
+    return {"verdict": verdict, "pick": max(passing, key=lambda v: m.loc[v, "calmar"]) if passing else None}
+
+
+SUMMARY_COLS = ["case", "version", "pool", "median", "positive", "first_half", "second_half", "vs_c1_median", "cont",
+                "dd", "dd_gap", "calmar", "four", "failed", "recentres", "cuts", "zeros", "timecaps", "hourly_moves"]
+
+
+def report_h59():
+    cases = [("C1", "ladder"), ("C1", "ctl")] + [(o, v) for o, vs in H59_VERSIONS.items() for v in vs]
+    t = case_table(cases, ("C1", "ctl"), ("C1", "ladder"))
+    t.to_csv(f"{RESULT_DIR}/h59_summary.csv", index=False)
+    show(t[SUMMARY_COLS])
+    res = verdict_of(t, H59_NB)
     print(json.dumps(res, indent=1))
     with open(f"{RESULT_DIR}/h59_result.json", "w") as f:
+        json.dump(res, f, indent=1)
+
+
+# ---------------------------------------------------------------- H63 - H65: swap route, ladder sized by vol
+# reports/plan_2026-10-21_c1_cost_vol.md (registered in 8276d01)
+
+H64_VERSIONS = {"H64": {"vol30": dict(vol_target=0.30), "vol40": dict(vol_target=0.40), "vol50": dict(vol_target=0.50)},
+                "H65": {"vol40_dd30": dict(vol_target=0.40, dd_budget=0.30)}}
+H64_NB = {"vol30": ["vol40"], "vol40": ["vol30", "vol50"], "vol50": ["vol40"], "vol40_dd30": []}
+ROUTE = "5653"
+
+
+def vol_30d() -> pd.Series:
+    """Annualised std of the last 30 daily log returns of 99ac's 00 h close, known at the next day's 00:00."""
+    close = daily_close("99ac", 0)
+    return (np.log(close).diff().rolling(30).std() * math.sqrt(365)).shift(1)
+
+
+def h63_configs() -> list[ConfigG]:
+    """H64 and H65 at H48's costs, then the bases, H64 and H65 with the route (H63, names ending in _rt)."""
+    with open(f"{RESULT_DIR}/h46_choice.json") as f:
+        btc = json.load(f)["btc"]
+    lad = ladder(0.40, 0.01)
+    out = [gcfg(opt, pk, v, btc, on="spot", **kw, **lad)
+           for pk in MAIN_REP["C1"] for opt, vs in H64_VERSIONS.items() for v, kw in vs.items()]
+    for pk in MAIN_REP["C1"]:
+        out.append(gcfg("H63", pk, "ladder_rt", btc, on="spot", route=ROUTE, **lad))
+        out.append(gcfg("H63", pk, "ctl_rt", btc, on="spot", route=ROUTE))
+        for vs in H64_VERSIONS.values():
+            for v, kw in vs.items():
+                out.append(gcfg("H63", pk, f"{v}_rt", btc, on="spot", route=ROUTE, **kw, **lad))
+    return out
+
+
+def h63_tasks() -> list[tuple]:
+    out = []
+    for c in h63_configs():
+        out += [(c, s, e, "window") for s, e in windows("C1")]
+        s, e = continuous("C1")
+        out.append((c, s, e, "continuous"))
+    return out
+
+
+def check_h63():
+    """Plan cost_vol section 5: T = 1000% equals H48's ladder on 99ac 2022-01; so does the route priced at infinity;
+    the real route lists how many swaps it takes and what it saves."""
+    with open(f"{RESULT_DIR}/h46_choice.json") as f:
+        btc = json.load(f)["btc"]
+    s = date(2022, 1, 1)
+    ref = json.load(open(f"{ROWS_DIR}/C1_99ac_ladder_window_{s}.json"))["net"]
+    lad = ladder(0.40, 0.01)
+    for c in (gcfg("chk", "99ac", "vol1000", btc, on="spot", vol_target=10.0, **lad),
+              gcfg("chk", "99ac", "ladder_rt_block", btc, on="spot", route=ROUTE, route_block=True, **lad),
+              gcfg("chk", "99ac", "ladder_rt", btc, on="spot", route=ROUTE, **lad)):
+        r = task(c, s, batch.window_end(s), "window")
+        extra = {k: r[k] for k in ("swaps", "routed", "route_saved", "bps_main", "bps_chosen") if k in r}
+        print(f"{c.name} {s}: {r['net']:.10f} vs C1 ladder {ref:.10f} diff {r['net'] - ref:+.2e} {extra}", flush=True)
+
+
+def report_h63():
+    h64 = [(o, v) for o, vs in H64_VERSIONS.items() for v in vs]
+    t48 = case_table([("C1", "ladder"), ("C1", "ctl")] + h64, ("C1", "ctl"), ("C1", "ladder"))
+    trt = case_table([("H63", "ladder_rt"), ("H63", "ctl_rt")] + [("H63", f"{v}_rt") for _, v in h64],
+                     ("H63", "ctl_rt"), ("H63", "ladder_rt"))
+    t48.to_csv(f"{RESULT_DIR}/h64_summary.csv", index=False)
+    trt.to_csv(f"{RESULT_DIR}/h63_summary.csv", index=False)
+    print("H64, H65 at H48's costs:")
+    show(t48[SUMMARY_COLS + [c for c in ("s_below_1", "s_median") if c in t48]])
+    print("with the route (H63):")
+    show(trt[SUMMARY_COLS + [c for c in ("s_below_1", "s_median", "routed", "swaps", "route_saved", "bps_main",
+                                         "bps_chosen") if c in trt]])
+    res = {"h48_costs": verdict_of(t48, H64_NB),
+           "route": verdict_of(trt, {"ladder_rt": [], **{f"{v}_rt": [f"{n}_rt" for n in ns] for v, ns in H64_NB.items()}})}
+    print(json.dumps(res, indent=1))
+    with open(f"{RESULT_DIR}/h63_result.json", "w") as f:
         json.dump(res, f, indent=1)
 
 
@@ -1588,6 +1730,8 @@ def main():
     a.add_argument("--h56", action="store_true", help="H56 and H57 (gate x range together, 2026 held out)")
     a.add_argument("--h59-check", action="store_true", help="plan 2026-10-21 section 5's checks, before H59")
     a.add_argument("--h59", action="store_true", help="H59 - H62 (C1's gate-off exposure capped)")
+    a.add_argument("--h63-check", action="store_true", help="plan cost_vol section 5's checks, before H63")
+    a.add_argument("--h63", action="store_true", help="H63 - H65 (swap route, ladder sized by vol)")
     a.add_argument("--report", action="store_true")
     a.add_argument("--only", nargs="*", default=None)
     a.add_argument("--workers", type=int, default=2)
@@ -1646,6 +1790,11 @@ def main():
     if a.h59:
         run_tasks(h59_tasks(), a.workers)
         report_h59()
+    if a.h63_check:
+        check_h63()
+    if a.h63:
+        run_tasks(h63_tasks(), a.workers)
+        report_h63()
 
 
 if __name__ == "__main__":

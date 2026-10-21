@@ -19,6 +19,7 @@ import argparse
 import json
 import math
 
+import numpy as np
 import pandas as pd
 
 RESULT_DIR = "result/gate-lp-options"
@@ -107,8 +108,11 @@ def mk(value, p, down, up=1.01):
 
 
 def stylised(px: pd.Series, gate: pd.Series, start: str, end: str, fee: float = 0.0, size: float = 1.0,
-             max_days: int | None = None, dd_scale: float | None = None) -> pd.Series:
-    """size 0 is the control; dd_scale is H59's D, max_days H60's N."""
+             max_days: int | None = None, dd_scale: float | None = None, vol_t: float | None = None,
+             sw: float = SW) -> pd.Series:
+    """size 0 is the control; dd_scale is H59's D, max_days H60's N; vol_t is H64's T (with dd_scale: H65, both
+    shares multiplied and sized from the whole book at every placement); sw the switch cost."""
+    rv = np.log(px).diff().rolling(30).std() * math.sqrt(365)
     p_, g = px[start:end], gate[start:end]
     nav, peak, state = 1.0, 1.0, None
     L = a = b = None
@@ -125,12 +129,13 @@ def stylised(px: pd.Series, gate: pd.Series, start: str, end: str, fee: float = 
                     L *= 1 + fee  # fees reinvested in the ladder
                 nav = pv(L, a, b, p)[0] + cash
         peak = max(peak, nav)
+        s_vol = min(1.0, vol_t / rv[t]) if vol_t and rv[t] > 0 else 1.0
         if state is None or on != state:
-            nav *= 1 - SW
+            nav *= 1 - sw
             L = None
             if not on:
                 days_off = 0
-                s = size * (max(0.0, 1 - (1 - nav / peak) / dd_scale) if dd_scale else 1.0)
+                s = size * s_vol * (max(0.0, 1 - (1 - nav / peak) / dd_scale) if dd_scale else 1.0)
                 if s > 0:
                     L, a, b = mk(nav * s, p, 1.40)
                 cash = nav * (1 - s)
@@ -145,7 +150,11 @@ def stylised(px: pd.Series, gate: pd.Series, start: str, end: str, fee: float = 
                 v, btc = pv(L, a, b, p)
                 v -= btc * RC
                 tot = v + cash
-                lad = min(v, tot * max(0.0, 1 - (1 - tot / peak) / dd_scale)) if dd_scale else v
+                s_dd = max(0.0, 1 - (1 - tot / peak) / dd_scale) if dd_scale else 1.0
+                if vol_t:
+                    lad = tot * s_vol * s_dd
+                else:
+                    lad = min(v, tot * s_dd) if dd_scale else v
                 L, a, b = mk(lad, p, 1.40) if lad > 0 else (None, None, None)
                 cash, nav = tot - lad, tot
         out.append(nav)
@@ -200,12 +209,35 @@ def prepool():
         json.dump(out, f, indent=1)
 
 
+VOL_VERSIONS = {"ctl": dict(size=0.0), "ladder": {}, "vol30": dict(vol_t=0.30), "vol40": dict(vol_t=0.40),
+                "vol50": dict(vol_t=0.50), "vol40_dd30": dict(vol_t=0.40, dd_scale=0.30)}
+
+
+def prepool_vol():
+    """Plan cost_vol section 4, listed: H64, H65 and both bases, fee proxy 0 / 0.05% / 0.10%, switches 10 / 50 bps."""
+    px, gate = daily()
+    out = {}
+    for sw in (10e-4, 50e-4):
+        for fee in (0.0, 0.0005, 0.001):
+            key = f"sw{sw * 1e4:.0f}bps_fee{fee * 100:.2f}%"
+            out[key] = {v: stats(stylised(px, gate, "2018-04-01", "2021-12-31", fee=fee, sw=sw, **kw))
+                        for v, kw in VOL_VERSIONS.items()}
+            print(f"{key}, 2018-04-01 .. 2021-12-31:")
+            for v, r in out[key].items():
+                print(f"  {v:10s} CAGR {r['cagr']:+6.1%}  MDD {r['mdd']:6.1%}  Calmar {r['calmar']:5.2f}")
+    with open(f"{RESULT_DIR}/h64_prepool.json", "w") as f:
+        json.dump(out, f, indent=1)
+
+
 def main():
     a = argparse.ArgumentParser()
     a.add_argument("--h58", action="store_true")
     a.add_argument("--check", action="store_true")
     a.add_argument("--prepool", action="store_true")
+    a.add_argument("--prepool-vol", action="store_true")
     a = a.parse_args()
+    if a.prepool_vol:
+        prepool_vol()
     if a.h58:
         run_h58()
     if a.check:
