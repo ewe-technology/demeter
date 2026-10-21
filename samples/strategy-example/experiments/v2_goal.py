@@ -43,7 +43,8 @@ REF = os.environ.get("REF", "5cec767")
 SCRIPT = os.environ.get("SCRIPT", "gamma_maker_defense_btceth_v1.py")
 # Sheet check 2026-10-21: REF=29e3dd9 SCRIPT=gamma_ig_gap_bands_defense_btceth.py OUT=<other dir> runs the remix branch's
 # earlier version of the same spec (pool-price signal, no Binance files); its runs must go to their own OUT.
-END = (2026, 9, 17)   # last day of minute data for both pools
+END = (2026, 9, 17)   # end of the EXP-178..182 out-of-sample segment (minute data then ended here)
+DATA_END = (2026, 9, 30)   # both pools' minute data since 2026-10-21; the Binance files are extended to here
 DATA = {"0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0": MAIN / "samples/holdout-data/0x4585fe77225b41b697c938b018e2ac67ac5a20c0",
         "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640": MAIN / "samples/real-data/0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
         "0x2f5e87C9312fa29aed5C179E456625D79015299c": MAIN / "samples/holdout-data/0x2f5e87c9312fa29aed5c179e456625d79015299c"}
@@ -54,7 +55,8 @@ SEGMENTS = {"is": ((2021, 11, 2), (2024, 12, 31)), "oos": ((2025, 1, 1), END), "
             # the windows of Maker's sheet "BTC/ETH gamma ig gap bands defence V1 slippage 0.1/fee 0.05" (2026 ends at
             # our last minute-data day, the sheet's at 09-30)
             "y2022": ((2022, 1, 2), (2022, 12, 31)), "y2024": ((2024, 1, 2), (2024, 12, 31)),
-            "c2225": ((2022, 1, 2), (2025, 12, 31)), "y2026": ((2026, 1, 2), END)}
+            "c2225": ((2022, 1, 2), (2025, 12, 31)), "y2026": ((2026, 1, 2), END),
+            "y2026f": ((2026, 1, 2), DATA_END)}   # the sheet's 2026 window, after the data was extended to 09-30
 
 # ---- variants: name -> (element of v2, what it becomes, [(pattern, replacement, expected count)]) -------------------
 STRONG_LINE = '    return pd.DataFrame({"G": g, "R": r, "R_ema": r_ema, "strong": r >= r_ema, "F": fractions})\n'
@@ -374,7 +376,7 @@ def patch(text: str, seg: str, variant: str) -> str:
 def binance_files(dst: Path):
     """Maker's daily closes extended to END from samples/binance_daily_closes.csv (same date convention)."""
     long = pd.read_csv(MAIN / "samples/binance_daily_closes.csv", parse_dates=["date"]).set_index("date")
-    end = pd.Timestamp(*END)
+    end = pd.Timestamp(*DATA_END)
     for name, ext in (("binance_ethusdt_1d.csv", long["ETHUSDT"]), ("binance_btcusdt_1d.csv", long["BTCUSDT"]),
                       ("binance_ethbtc_1d.csv", long["ETHUSDT"] / long["BTCUSDT"])):
         s = pd.read_csv(dst / name, parse_dates=["date"]).set_index("date")["close"]
@@ -386,6 +388,9 @@ def binance_files(dst: Path):
 
 def source() -> Path:
     src = WORK / "_src"
+    ethbtc = src / "samples/strategy-example/binance_ethbtc_1d.csv"
+    if ethbtc.exists() and pd.read_csv(ethbtc)["date"].iloc[-1] < "%04d-%02d-%02d" % DATA_END:
+        shutil.rmtree(src)   # a cache built before DATA_END moved: rebuild it (same closes up to the old end)
     if not src.exists():
         blob = subprocess.run(["git", "-C", str(REPO), "archive", REF, "samples/strategy-example"],
                               check=True, capture_output=True).stdout

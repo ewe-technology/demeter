@@ -15,9 +15,9 @@ All of these are **in-sample** for v6 research now: a new pre-registration needs
 
 | Pool | Chain | Pair, fee | Data from | Folder | Used as |
 |---|---|---|---|---|---|
-| `0x88e6a0c2...` | Ethereum | WETH/USDC 0.05% | 2021-05-06 | `real-data` | v6 dev pool |
+| `0x88e6a0c2...` | Ethereum | WETH/USDC 0.05% | 2021-05-06, ends **2026-09-30** (09-18..30 via `fetch_uni_minute.py`, 2026-10-21) | `real-data` | v6 dev pool |
 | `0x99ac8ca7...` | Ethereum | WBTC/USDC 0.3% | 2021-11-02 | `holdout-data` | dev (WBTC) |
-| `0x4585fe77...` | Ethereum | WBTC/WETH 0.05% | 2021-11-02 | `holdout-data` | EXP-001/009/010 holdout |
+| `0x4585fe77...` | Ethereum | WBTC/WETH 0.05% | 2021-11-02, ends **2026-09-30** (09-18..30 via `fetch_uni_minute.py`, 2026-10-21; the refetched 09-16 / 09-17 matched the local files cell for cell) | `holdout-data` | EXP-001/009/010 holdout; MGL v2 / EXP-176..182 |
 | `0xd0b53d92...` | Base | WETH/USDC 0.05% | 2023-12-01 | `base-data` | EXP-004 holdout, later reruns |
 | `0xfbb6eed8...` | Base | USDC/cbBTC 0.05% | 2024-10-01 | `base-data` | EXP-011 |
 | `0x6c561b44...` | Base | WETH/USDC 0.3% | 2024-01-01 | `base-data` | EXP-015 |
