@@ -418,6 +418,31 @@ VARIANTS.update({
     "k75_f2low_rvol_follow25": ("rebuild threshold", "25% instead of 12.5% (fewer drift rebuilds, less swap cost)",
                                 K75 + [('FOLLOW_THRESHOLD = Decimal("0.125")', 'FOLLOW_THRESHOLD = Decimal("0.25")', 1)]),
 })
+# EXP-183 batch 4 (after batch 3's IS results, both lost). While ETH is strong the book is F x 75% ETH + F x 25% ETH/BTC
+# LP + (1 - F) USDC, i.e. an ETH/USD position, but F comes from G = sqrt(ETH x BTC); the base's two deepest IS drawdowns
+# are USDC held through ETH/USD rebounds. Run the same four accounts (second-lowest, then rvol) on ETH/USD = G x sqrt(R).
+
+
+def FE(strong_only: bool) -> list:
+    return K75 + [(RVOL_LINE,
+                   "    _e = g * r ** 0.5  # v2_goal EXP-183 fE: the four accounts on ETH/USD\n"
+                   "    _em = {n: _e.ewm(span=n, adjust=False).mean() for n in EMA_SPANS}\n"
+                   "    _pv = {n: _em[n].shift(EMA_SLOPE_DAYS) for n in EMA_SPANS}\n"
+                   "    _acc, _fe = [VirtualAccount(n) for n in EMA_SPANS], []\n"
+                   "    for _day, _c in _e.items():\n"
+                   "        for _a in _acc:\n"
+                   "            _a.step(float(_c), float(_em[_a.span][_day]), float(_pv[_a.span][_day]))\n"
+                   "        _fe.append(sorted(_a.deployed for _a in _acc)[1])\n"
+                   "    _fe = pd.Series(_fe, index=_e.index).reindex(out.index)\n"
+                   + ('    out["F"] = _fe.where(out["strong"], out["F"])\n' if strong_only else '    out["F"] = _fe\n')
+                   + RVOL_LINE, 1)]
+
+
+VARIANTS.update({
+    "k75_f2low_rvol_fEstrong": ("F signal while strong", "while ETH is strong, F from the four accounts on ETH/USD (base: on G)",
+                                FE(True)),
+    "k75_f2low_rvol_fEboth": ("F signal", "F from the four accounts on ETH/USD on every day (base: on G)", FE(False)),
+})
 ARB = "0x2f5e87C9312fa29aed5C179E456625D79015299c"
 MAKER_POOL = '    contract_address, fee, chain_name = "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0", 0.05, ChainType.ethereum.name  # wbtc/weth\n'
 

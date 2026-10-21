@@ -52,6 +52,15 @@ stay BTC; rebuild swap cost was 0.14 ETH over IS.
 | `k75_f2low_rvol_compound` | spec compound mode: collected fees count as capital, reinvested by the next rebuild |
 | `k75_f2low_rvol_follow25` | drift-rebuild threshold 25% instead of 12.5% |
 
+Batch 4 (after batch 3's IS results, both lost). While ETH is strong the book is F x 75% ETH + F x 25% ETH/BTC LP +
+(1 − F) USDC, an ETH/USD position, but F comes from G = sqrt(ETH x BTC); the base's two deepest IS drawdowns are USDC
+held through ETH/USD rebounds. The same four accounts (second-lowest, then rvol) run on ETH/USD = G x sqrt(R).
+
+| variant | change |
+|---|---|
+| `k75_f2low_rvol_fEstrong` | while strong, F from the four accounts on ETH/USD (weak: on G as before) |
+| `k75_f2low_rvol_fEboth` | F from the accounts on ETH/USD on every day |
+
 ## Pre-registration
 
 - Pool: mainnet WBTC/WETH 0.05% `0x4585`, 1 ETH start, net value in ETH incl. rewards (as EXP-178..182); USD ratio and
@@ -87,6 +96,13 @@ Batch 2, IS (none passed, no OOS run):
 | `bkeep25` | 62.66% | −25.5% | 2.461 | 3.593 / −48.9% | loses |
 | `bkeep50` | 61.29% | −25.9% | 2.365 | 3.498 / −49.1% | loses |
 | `weakhold` | 60.14% | −25.6% | 2.347 | 3.420 / −49.3% | loses |
+
+Batch 3, IS (none passed, no OOS run):
+
+| variant | CAGR | max DD | Calmar | USD x / USD DD | vs base |
+|---|---|---|---|---|---|
+| `compound` | 62.71% | −25.9% | 2.423 | 3.597 / −48.0% | loses |
+| `follow25` | 63.32% | −25.7% | 2.465 | 3.640 / −49.0% | loses |
 
 ## Deviations
 
