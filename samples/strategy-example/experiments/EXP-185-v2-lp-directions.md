@@ -2,7 +2,7 @@
 
 - Jira: QUAN-1182 (subtask of QUAN-1107)
 - Status: fail — none of nscentre / flip3 / flipband / mrgate beats the base on IS and OOS (mrgate: IS +0.19 pt, OOS −0.04 pt CAGR, noise)
-- Pre-registration commit: 97e5e14 · Result commit: (next commit)
+- Pre-registration commit: 97e5e14 · Result commit: cc6fb6d
 
 Dino (2026-10-21): "2,3,4都嘗試做看看，看有沒有效果" — directions 2, 3 and 4 of the LP research note (agent report of
 2026-10-21, after EXP-184): swap-free recentring, keeping the weak-side LP through brief strength flips, and a
