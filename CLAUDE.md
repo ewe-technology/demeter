@@ -109,6 +109,10 @@ accounting `v2_goal.py` now logs, `lp_positions_<mode>.csv` per position): **fai
 +0.324 ETH over IS (fees 0.610, IL −0.287), almost all from weak-side positions at F = 1. Narrower / wider / valley
 bands, off-centre or extra capital, strong-side LP, recentring and timing rules, compound, Arbitrum all lose: uniform
 +-20% is this pool's LP optimum; IL moves ±0.2 ETH with rebuild timing, so edge gaps < 0.05 are noise.
+EXP-185 (QUAN-1182, LP research note directions 2 / 3 / 4, same rules, base k100_f2low_rvol_reupE): **fail**. Swap-free
+off-centre ranges (`nscentre`) save 0.02 ETH of swaps but lose 2.4 pts IS; debouncing the weak -> strong flip
+(`flip3` / `flipband`) cuts swaps but delays the timing edge (−12.9 / −4.0 pts); a mean-reversion recentring gate
+(`mrgate`) is noise (IS +0.19, OOS −0.04 pt). The base's LP edge is −0.118 ETH OOS (IL −0.232 vs fees 0.114).
 
 ## Handoff 2026-10-06 (two sessions closed; a new session starts here)
 
