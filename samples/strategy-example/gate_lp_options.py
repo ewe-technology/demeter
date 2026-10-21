@@ -108,6 +108,8 @@ def signal(close: pd.Series, kind: str, n: int) -> pd.Series:
         ref = close.rolling(n).mean()
     elif kind == "ts":
         ref = close.shift(n)
+    elif kind == "all":  # always on: the fixed LP benchmark with no gate
+        return pd.Series(True, index=close.index)
     else:
         raise ValueError(kind)
     return (close > ref).fillna(False).astype(bool)

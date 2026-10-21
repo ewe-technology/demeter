@@ -35,6 +35,24 @@ numbers the page computes from its config over numbers typed into prose.
 - the strategy's own control: same gate, same capital, the simplest holding (e.g. g_spot100 for g_down);
 - the current live strategy (A 現行濾網) when the work proposes a change to it.
 
+**Always show the standard metric set** (user, 2026-10-21) for the main versions and their controls, in the report,
+the report page and the deck:
+
+| 類別 | 指標 |
+|---|---|
+| 報酬 | 總報酬、年化報酬（APR）、fee 收入、相對 HODL 的超額報酬 |
+| 風險 | 最大回撤（MDD）、年化波動率、downside deviation |
+| 風險調整後 | Sharpe、Sortino、Calmar |
+| LP 專屬 | in-range 時間佔比、IL／LVR、rebalance 次數與成本（gas＋滑價）、fee／LVR 比 |
+| 穩健性 | 滾動視窗報酬、牛／熊／盤整分段表現 |
+
+against four benchmarks on the same period: HODL, the pool's two tokens 50/50 rebalanced daily (with swap costs), a
+fixed ±20% LP in the same pool with no gate, and USDC as the risk-free asset (no lending-rate data in the repo:
+Sharpe / Sortino at a fixed 4% a year, with 0% beside it, labelled as an assumption). The minimum a reader needs to
+judge a strategy: the four benchmarks plus return, MDD, Sharpe, in-range% and excess over HODL. The model script is
+`samples/strategy-example/gate_lp_metrics.py` (daily returns × 365, LVR as the hourly-rebalancing lower bound,
+regimes by the base coin's monthly move of ±10%). These metrics are descriptive and never re-judge a hypothesis.
+
 **Respect the pre-registration.** The repo's method: the verdict rule is committed before a run, and the result
 names that commit. Keep pre-registered verdicts and after-the-fact looks apart and say which is which (事先寫死 /
 只列出 / 事後追加). A yearly table or an attribution is descriptive; it never re-judges a hypothesis.
