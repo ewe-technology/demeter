@@ -294,6 +294,9 @@ class ConfigG(robust.ConfigR):
     hourly_down: bool = False  # H62: below the ladder at any full hour -> re-centre (the upper edge stays daily)
     vol_target: float = 0.0  # H64: gate off, the ladder is the book x min(1, vol_target / 30-day vol)
     lp_budget: float = 0.0  # H66: C1 over the live gate (shadow books) this far below its high -> no ladder until a new high
+    inv_cap: float = 0.0  # H67: gate off, the book's BTC share above this at a full hour -> trim the ladder back to it
+    inv_refill: str = "recentre"  # H67: "recentre" re-places the whole book; "spell" keeps the trimmed quote out till gate off
+    ladder_size: float = 0.0  # H67's fixed ladder: every gate-off placement holds the book x this
     route: str = ""  # H63: each swap at the cheaper of this pool and the LP pool (costs after the run)
     route_block: bool = False  # acceptance only: the route priced at infinity
 
@@ -367,7 +370,7 @@ def run(c: ConfigG, start: date, end: date, bar: str | None = "1h", kind: str = 
     if c.hourly_check:
         strategy = GatedPool(c, gate)
     else:
-        if c.dd_budget or c.time_cap or c.hourly_down or c.vol_target or c.lp_budget:
+        if c.dd_budget or c.time_cap or c.hourly_down or c.vol_target or c.lp_budget or c.inv_cap or c.ladder_size:
             strategy = CapGated(c, gate, vol_30d() if c.vol_target else None,
                                 rel_series(c.pool_key) if c.lp_budget else None)
         elif c.brake:
@@ -449,6 +452,9 @@ def run(c: ConfigG, start: date, end: date, bar: str | None = "1h", kind: str = 
     pd.DataFrame({"usd": usd, "usd_3gwei": usd3, "price": price.reindex(usd.index)}).to_parquet(
         f"{RESULT_DIR}/nav/{tag}.parquet")
     ev.to_csv(f"{RESULT_DIR}/nav/events_{tag}.csv", index=False)
+    if getattr(strategy, "lp_shares", None):  # H67: the LP's share of the book at every gate-off full hour
+        pd.DataFrame(strategy.lp_shares, columns=["t", "lp_share", "btc_share"]).to_csv(
+            f"{RESULT_DIR}/nav/lpshare_{tag}.csv", index=False)
     paid_all = sum(costs.values())
     out = {}
     if c.route:
@@ -1181,7 +1187,10 @@ class CapGated(robust.RobustGated):
     switch, at 00:00, sell to the quote until the gate turns on. lp_budget (H66): at a full hour where the shadow
     books' C1 / live gate ratio (previous bar) is lp_budget below its high, stop: pull the ladder to the quote and
     place none while off, until the ratio makes a new high. hourly_down: a full hour below the lower edge
-    re-centres as the daily check does. vol_target (H64, H65 with dd_budget): s = min(1, vol_target / 30-day vol)
+    re-centres as the daily check does. inv_cap (H67): at a gate-off full hour, the book's BTC share above inv_cap
+    trims every position by the share of liquidity that brings it back and sells the WBTC; inv_refill "spell" keeps
+    the trimmed quote out of re-centres until the next gate-off. ladder_size (H67's fixed ladder): every gate-off
+    placement holds the book x ladder_size. vol_target (H64, H65 with dd_budget): s = min(1, vol_target / 30-day vol)
     (times the dd_budget share), sized from the whole book at every placement. The book and its peak are Demeter's
     own (before gas and impact)."""
 
@@ -1194,6 +1203,7 @@ class CapGated(robust.RobustGated):
         self.peak = 0.0
         self.outside = 0.0  # quote kept beside a sized ladder in this gate-off spell
         self.off_since = None
+        self.lp_shares = []  # H67: (time, LP / book, BTC / book) at gate-off full hours
 
     def book(self, price: Decimal) -> float:
         btc = self.broker.get_token_balance(self.cfg.base)
@@ -1215,18 +1225,22 @@ class CapGated(robust.RobustGated):
 
     def place(self, price: Decimal, width: float, kind: str, t):
         c = self.cfg
-        if self.state is not False or not (c.dd_budget or c.vol_target):
+        spell = c.inv_cap and c.inv_refill == "spell"
+        if self.state is not False or not (c.dd_budget or c.vol_target or c.ladder_size or spell):
             return super().place(price, width, kind, t)
         v = self.book(price)
         s = 1.0
         if c.vol_target:  # H64 / H65 size from the whole book every time, no cap
             sig = float(self.vol.asof(pd.Timestamp(t).normalize()))
             s = min(1.0, c.vol_target / sig) if sig > 0 else 1.0
+        if c.ladder_size:  # H67's fixed ladder, from the whole book every time
+            s = c.ladder_size
         if c.dd_budget:
             s *= min(1.0, max(0.0, 1 - (1 - v / self.peak) / c.dd_budget))
         if c.vol_target:
             self.events.append((t, f"s:{s:.4f}"))  # every gate-off placement's share, sized or not
-        lad = v * s if c.vol_target else min(v * s, v - self.outside)
+        # H59's dd_budget and H67's spell refill never grow the ladder from the quote within a spell
+        lad = v * s if (c.vol_target or c.ladder_size) else min(v * s, v - self.outside)
         if lad >= v:
             return super().place(price, width, kind, t)
         m = self.markets[KEY]
@@ -1277,7 +1291,49 @@ class CapGated(robust.RobustGated):
                 and self.bounds is not None and price < self.bounds[0]):
             self.remove()
             self.place(price, 0.0, "recentre_h", t)
+        if c.inv_cap and t.minute == 0 and self.state is False and self.mode == "range" and self.bounds is not None:
+            self.trim(price, t)
         super().on_bar(snapshot)
+        if (c.inv_cap or c.ladder_size) and t.minute == 0 and self.state is False:
+            v = self.book(price)
+            lp = btc = 0.0
+            if self.bounds is not None:
+                s = self.markets[KEY].get_market_balance()
+                lp = float((s.base_in_position + s.base_uncollected) * price + s.quote_in_position + s.quote_uncollected)
+                btc = float((s.base_in_position + s.base_uncollected) * price)
+            btc += float(self.broker.get_token_balance(c.base) * price)
+            self.lp_shares.append((t, lp / v if v > 0 else 0.0, btc / v if v > 0 else 0.0))
+
+    def trim(self, price: Decimal, t):
+        """H67: the book's BTC share above inv_cap -> remove k of every position's liquidity, k = 1 - cap x book / the
+        positions' BTC value, collect, and sell every WBTC on the book; the rest of the ladder stays in its range."""
+        c = self.cfg
+        m = self.markets[KEY]
+        s = m.get_market_balance()
+        v = self.book(price)
+        in_pos = float((s.base_in_position + s.base_uncollected) * price)
+        btc = in_pos + float(self.broker.get_token_balance(c.base) * price)
+        if v <= 0 or btc <= c.inv_cap * v or in_pos <= 0:
+            return
+        k = min(1.0, max(0.0, 1 - c.inv_cap * v / in_pos))  # the book's other WBTC is sold below anyway
+        for key, pos in list(m.positions.items()):
+            part = int(pos.liquidity * k)
+            if 0 < part < pos.liquidity:
+                m.remove_liquidity(key, part)
+        held = self.broker.get_token_balance(c.base)
+        if held > 0:
+            m.swap(held, c.base, c.quote)
+        self.outside = float(self.broker.get_token_balance(c.quote))
+        # trim:<BTC share before>:<after>:<WBTC sold, in the quote>
+        self.events.append((t, f"trim:{btc / v:.4f}:{self.book_btc_share(price):.4f}:{float(held * price):.2f}"))
+
+    def book_btc_share(self, price: Decimal) -> float:
+        v = self.book(price)
+        s = self.markets[KEY].get_market_balance() if self.bounds is not None else None
+        btc = float(self.broker.get_token_balance(self.cfg.base) * price)
+        if s is not None:
+            btc += float((s.base_in_position + s.base_uncollected) * price)
+        return btc / v if v > 0 else 0.0
 
 
 H59_VERSIONS = {"H59": {"dd20": dict(dd_budget=0.20), "dd30": dict(dd_budget=0.30), "dd40": dict(dd_budget=0.40)},
@@ -1597,6 +1653,111 @@ def report_h66():
         json.dump(res, f, indent=1)
 
 
+# ---------------------------------------------------------------- H67: the ladder's BTC inventory cap
+# reports/plan_2026-10-21_c1_inventory.md (registered in 4812bd2)
+
+H67_VERSIONS = {"inv30": dict(inv_cap=0.30), "inv50": dict(inv_cap=0.50), "inv70": dict(inv_cap=0.70),
+                "inv50_spell": dict(inv_cap=0.50, inv_refill="spell")}
+D1_LOSERS = (("2022-04-07", "2022-11-04"), ("2026-01-16", "2026-04-17"))  # D1's losing gate-off spells
+
+
+def h67_cfg(option: str, pk: str, name: str, **kw) -> ConfigG:
+    with open(f"{RESULT_DIR}/h46_choice.json") as f:
+        btc = json.load(f)["btc"]
+    return gcfg(option, pk, name, btc, on="spot", **kw, **ladder(0.40, 0.01))
+
+
+def fix_name(s: float) -> str:
+    return f"fix{round(s * 100):02d}"
+
+
+def tasks_of(cs: list[ConfigG]) -> list[tuple]:
+    out = []
+    for c in cs:
+        out += [(c, s, e, "window") for s, e in windows("C1")]
+        s, e = continuous("C1")
+        out.append((c, s, e, "continuous"))
+    return out
+
+
+def lp_shares(option: str, pk: str, v: str) -> pd.DataFrame:
+    cs, _ = continuous("C1")
+    return pd.read_csv(f"{RESULT_DIR}/nav/lpshare_{option}_{pk}_{v}_continuous_{cs}.csv")
+
+
+def matched_size(v: str) -> float:
+    """Plan inventory 2: the version's time-weighted LP share of the book over every gate-off hour on 99ac's continuous
+    book (the hours are equal steps), rounded to 0.05."""
+    return round(float(lp_shares("H67", "99ac", v)["lp_share"].mean()) / 0.05) * 0.05
+
+
+def check_h67():
+    """Plan inventory 4: a 1000% cap and a fixed ladder of 1.0 equal H48's ladder on 99ac 2022-01; inv50's first
+    trim there."""
+    s = date(2022, 1, 1)
+    ref = json.load(open(f"{ROWS_DIR}/C1_99ac_ladder_window_{s}.json"))["net"]
+    for c in (h67_cfg("chk", "99ac", "inv1000", inv_cap=10.0), h67_cfg("chk", "99ac", "fix100", ladder_size=1.0)):
+        r = task(c, s, batch.window_end(s), "window")
+        print(f"{c.name} {s}: {r['net']:.10f} vs C1 ladder {ref:.10f} diff {r['net'] - ref:+.2e}", flush=True)
+    c = h67_cfg("chk", "99ac", "inv50", **H67_VERSIONS["inv50"])
+    r = task(c, s, batch.window_end(s), "window")
+    ev = pd.read_csv(f"{RESULT_DIR}/nav/events_chk_99ac_inv50_window_{s}.csv")
+    trims = ev[ev["kind"].str.startswith("trim:")]
+    print(f"inv50 {s}: net {r['net']:+.4f}, {len(trims)} trims; first {trims.head(3).values.tolist()}", flush=True)
+
+
+def run_h67(workers: int):
+    inv = [h67_cfg("H67", pk, v, **kw) for pk in MAIN_REP["C1"] for v, kw in H67_VERSIONS.items()]
+    run_tasks(tasks_of(inv), workers)
+    sizes = {v: matched_size(v) for v in H67_VERSIONS}
+    print("matched fixed ladder sizes:", sizes, flush=True)
+    fixed = [h67_cfg("H67F", pk, fix_name(s), ladder_size=s) for pk in MAIN_REP["C1"] for s in sorted(set(sizes.values()))]
+    run_tasks(tasks_of(fixed), workers)
+    report_h67(sizes)
+
+
+def report_h67(sizes: dict):
+    cases = ([("C1", "ladder"), ("C1", "ctl"), ("H59", "dd30")] + [("H67", v) for v in H67_VERSIONS]
+             + [("H67F", fix_name(s)) for s in sorted(set(sizes.values()))])
+    t = case_table(cases, ("C1", "ctl"), ("C1", "ladder"))
+    cs, _ = continuous("C1")
+    extra = []
+    for r in t.itertuples():
+        e = {}
+        if r.case in ("H67", "H67F"):
+            sh = lp_shares(r.case, r.pool, r.version)
+            e["lp_share_off"], e["btc_share_max"] = float(sh["lp_share"].mean()), float(sh["btc_share"].max())
+            ev = pd.read_csv(f"{RESULT_DIR}/nav/events_{r.case}_{r.pool}_{r.version}_continuous_{cs}.csv")
+            tr = [k.split(":") for k in ev["kind"].astype(str) if k.startswith("trim:")]
+            e["trims"], e["trim_sold"] = len(tr), sum(float(x[3]) for x in tr) / USD
+        nav = nav_of(r.case, r.pool, r.version)
+        for i, (a, b) in enumerate(D1_LOSERS):
+            e[f"d1_{i}"] = span(nav, a, b)["ret"]
+        extra.append(e)
+    t = pd.concat([t, pd.DataFrame(extra)], axis=1)
+    t.to_csv(f"{RESULT_DIR}/h67_summary.csv", index=False)
+    show(t[["case", "version", "pool", "median", "positive", "cont", "dd", "dd_gap", "calmar", "recentres", "trims",
+            "trim_sold", "lp_share_off", "btc_share_max", "worst_ret", "y2026_ret", "d1_0", "d1_1"]])
+    by = t.set_index(["pool", "version"])
+    pools = MAIN_REP["C1"]
+    verdict = {}
+    for v in H67_VERSIONS:
+        risk = all(by.loc[(pk, v), "dd_gap"] >= -0.02 for pk in pools)
+        ret = all(by.loc[(pk, v), "cont"] > by.loc[(pk, "dd30"), "cont"] for pk in pools)
+        f = fix_name(sizes[v])
+        value = all(by.loc[(pk, v), "cont"] >= by.loc[(pk, f), "cont"] and by.loc[(pk, v), "dd"] >= by.loc[(pk, f), "dd"]
+                    for pk in pools)
+        verdict[v] = {"dd within 2 pt (both)": bool(risk), "return above dd30 (both)": bool(ret),
+                      "passes": bool(risk and ret), "matched fixed ladder": f,
+                      "beats its fixed ladder (both)": bool(value)}
+    passing = [v for v, d in verdict.items() if d["passes"]]
+    res = {"sizes": sizes, "verdict": verdict,
+           "pick": max(passing, key=lambda v: by.loc[("99ac", v), "cont"]) if passing else None}
+    print(json.dumps(res, indent=1))
+    with open(f"{RESULT_DIR}/h67_result.json", "w") as f:
+        json.dump(res, f, indent=1)
+
+
 # ---------------------------------------------------------------- H56, H57: gate x range together, 2026 held out
 
 IS_FROM, IS_TO = date(2022, 1, 1), date(2025, 12, 31)
@@ -1871,6 +2032,8 @@ def main():
     a.add_argument("--h63", action="store_true", help="H63 - H65 (swap route, ladder sized by vol)")
     a.add_argument("--h66-check", action="store_true", help="plan lp_budget section 4's check, before H66")
     a.add_argument("--h66", action="store_true", help="H66 (LP excess-loss budget)")
+    a.add_argument("--h67-check", action="store_true", help="plan inventory section 4's checks, before H67")
+    a.add_argument("--h67", action="store_true", help="H67 (BTC inventory cap), then its fixed ladders")
     a.add_argument("--report", action="store_true")
     a.add_argument("--only", nargs="*", default=None)
     a.add_argument("--workers", type=int, default=2)
@@ -1939,6 +2102,10 @@ def main():
     if a.h66:
         run_tasks(h66_tasks(), a.workers)
         report_h66()
+    if a.h67_check:
+        check_h67()
+    if a.h67:
+        run_h67(a.workers)
 
 
 if __name__ == "__main__":
