@@ -2,7 +2,7 @@
 
 - Jira: QUAN-1181 (subtask of QUAN-1107)
 - Status: fail — 21 variants in 9 batches, none beats the base on IS with a higher LP edge (no OOS run)
-- Pre-registration commit: 2c71ccb · Result commit: (next commit)
+- Pre-registration commit: 2c71ccb · Result commit: fda2af9
 
 Dino (/goal 2026-10-21): "一樣is oos的方式優化策略，優化方式請以lp賺錢為主" — same IS / OOS rules as EXP-183, and the
 gain must come from the LP itself earning more, not from timing or holding more ETH.
