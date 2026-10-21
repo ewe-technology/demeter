@@ -530,6 +530,36 @@ VARIANTS.update({
                            WIDTH("    _er = (r - r.shift(30)).abs() / r.diff().abs().rolling(30).sum()\n"
                                  '    out["wk"] = pd.Series(_np.where(_er < 0.12, 0.10, 0.20), index=r.index).where(_er.notna()).reindex(out.index)\n')),
 })
+# EXP-184 batch 5 (after batch 4's IS results, all lost: in this pool narrowing raises IL faster than fees even in calm
+# R; fees / IL is ~2 only from +-20% up). IS split of k75s30_reupE's positions: the strong-side LP (34 positions) made
+# fees +0.036 / IL −0.052 with no profitable subset by R vol, R efficiency, R or G momentum or age. So the lever left is
+# more LP capital where fees / IL ~2, the weak side, where the base holds only F as LP and (1 − F) as plain BTC.
+# `weakone`: while weak the whole book is ONE LP of the same span, placed so its ETH share is F / 2 (the base's ETH
+# exposure: F x 50% in the LP); F = 0 puts it just above the price (all BTC, out of reach of fees until BTC rises).
+# A weak-side drift rebuild fires when the LP's ETH share is >= 12.5% off F / 2.
+WEAKONE = [
+    (WEAK_ALLOC, '    return {"lp": ONE, "eth": ZERO, "btc": ZERO, "usdc": ZERO}, RANGE_WEAK  # v2_goal EXP-184 weakone\n', 1),
+    (RANGE_LINE, RANGE_LINE +
+     "            if not strong:  # v2_goal EXP-184 weakone: same span, ETH share F / 2\n"
+     "                _sp, _S, _best = self.utils.params.tick_spacing, tick_hi - tick_lo, None\n"
+     "                for _lo in range((current_tick - _S) // _sp * _sp, current_tick + 1, _sp):\n"
+     "                    if _lo <= current_tick < _lo + _S:\n"
+     "                        _d = abs(lp_quote_share(current_tick, _lo, _lo + _S) - f / 2)\n"
+     "                        if _best is None or _d < _best[0]:\n"
+     "                            _best = (_d, _lo)\n"
+     "                tick_lo, tick_hi = _best[1], _best[1] + _S\n", 1),
+    ('        elif shares["lp"] == ZERO and self.positions:\n',
+     "        elif not strong and self.positions and \\\n"
+     "                abs(lp_quote_share(tick, self.positions[0][0], self.positions[0][1]) - f / 2) >= FOLLOW_THRESHOLD:\n"
+     '            why = "drift >= 12.5%"  # v2_goal EXP-184 weakone\n'
+     '        elif shares["lp"] == ZERO and self.positions:\n', 1),
+]
+VARIANTS.update({
+    "k100_reupE_weakone": ("weak-side LP capital", "while weak the whole book is one LP (+-20% span) placed so its ETH share "
+                           "is F / 2 (base: F as a centred LP + (1 - F) BTC)", BASE184 + WEAKONE),
+    "k100_reupE_weakone30": ("weak-side LP capital", "weakone with a +-30% span",
+                             BASE184 + WEAKONE + [(RANGES, RANGES.replace('Decimal("0.20")', 'Decimal("0.30")'), 1)]),
+})
 ARB = "0x2f5e87C9312fa29aed5C179E456625D79015299c"
 MAKER_POOL = '    contract_address, fee, chain_name = "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0", 0.05, ChainType.ethereum.name  # wbtc/weth\n'
 

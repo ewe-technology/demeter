@@ -64,6 +64,20 @@ day's close, like F; the strong side is unchanged):
 | `k100_reupE_volwidth3` | +-10% / +-20% / +-30% for R's 30-day vol < 30% / 30-45% / > 45% |
 | `k100_reupE_erwidth` | +-10% while R's 30-day efficiency ratio < 0.12, else +-20% |
 
+Batch 5 (after batch 4's IS results, all lost: in this pool narrowing raises IL faster than fees even in calm R; fees /
+IL is ~2 only from +-20% up). An IS split of `k75s30_reupE`'s positions (rerun with the position log): the strong-side
+LP's 34 positions made fees +0.036 / IL −0.052 with no profitable subset by R vol, R efficiency, R or G momentum or age.
+The lever left is more LP capital where fees / IL ~2: the weak side, where the base holds only F as LP and (1 − F) as
+plain BTC.
+
+| variant | change |
+|---|---|
+| `k100_reupE_weakone` | while weak the whole book is ONE LP of the same +-20% span, placed so its ETH share is F / 2 (the base's ETH exposure); F = 0 puts it just above the price (all BTC). A weak-side drift rebuild fires when the LP's ETH share is >= 12.5% off F / 2 |
+| `k100_reupE_weakone30` | the same with a +-30% span |
+
+Smoke run (2025-03-01..10, F = 0, weak): the LP starts all BTC just above the price, out-of-range rebuilds cost ~2e-6
+ETH, fees accrue daily.
+
 ## Pre-registration
 
 - Pool `0x4585`, 1 ETH, in ETH incl. rewards. IS 2021-11-02..2024-12-31, OOS 2025-01-01..2026-09-30 (`oosf`).
@@ -97,6 +111,14 @@ Batch 3, IS (none passed):
 | `lpresize` | 64.23% | −24.7% | 2.601 | 0.607 | −0.336 | +0.271 | 119 | loses, LP down |
 | `k75s20_reupE` | 64.79% | −24.3% | 2.670 | 0.643 | −0.368 | +0.275 | 119 | loses (CAGR), LP down |
 | `k75s30_reupE` | 65.26% | −24.2% | 2.699 | 0.633 | −0.338 | +0.295 | 118 | loses (CAGR), LP down |
+
+Batch 4, IS (none passed): narrowing in calm or ranging R still raises IL faster than fees.
+
+| variant | CAGR | max DD | Calmar | fees | IL | LP edge | rebuilds | vs base |
+|---|---|---|---|---|---|---|---|---|
+| `volwidth` | 62.50% | −24.8% | 2.515 | 0.683 | −0.619 | +0.063 | 120 | loses, LP down |
+| `volwidth3` | 62.66% | −24.9% | 2.521 | 0.655 | −0.597 | +0.058 | 120 | loses, LP down |
+| `erwidth` | 62.18% | −24.8% | 2.504 | 0.733 | −0.761 | −0.028 | 121 | loses, LP down |
 
 ## Deviations
 
