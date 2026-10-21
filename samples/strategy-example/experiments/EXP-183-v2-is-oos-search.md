@@ -61,6 +61,16 @@ held through ETH/USD rebounds. The same four accounts (second-lowest, then rvol)
 | `k75_f2low_rvol_fEstrong` | while strong, F from the four accounts on ETH/USD (weak: on G as before) |
 | `k75_f2low_rvol_fEboth` | F from the accounts on ETH/USD on every day |
 
+Batch 5 (after batch 4's IS results, both lost), picked from the IS ranking of every v2_goal run (IS numbers only):
+keep100 beat keep75 on IS (59.26% / −23.0% vs 58.79% / −23.3%); f2low was the largest single IS gain (+4.1 pts on v2)
+and its more conservative neighbour was never run; rlow20 had the best IS Calmar (3.076, DD −17.9%).
+
+| variant | change |
+|---|---|
+| `k100_f2low_rvol` | ETH_KEEP 1.0 on the base (no LP while strong) |
+| `k75_fmin_rvol` | F = lowest of the four accounts (base: second-lowest) |
+| `k75_f2low_rvol_rlow20` | EXP-180's rlow20 BTC lock added to the base |
+
 ## Pre-registration
 
 - Pool: mainnet WBTC/WETH 0.05% `0x4585`, 1 ETH start, net value in ETH incl. rewards (as EXP-178..182); USD ratio and
@@ -104,7 +114,16 @@ Batch 3, IS (none passed, no OOS run):
 | `compound` | 62.71% | −25.9% | 2.423 | 3.597 / −48.0% | loses |
 | `follow25` | 63.32% | −25.7% | 2.465 | 3.640 / −49.0% | loses |
 
+Batch 4, IS (none passed, no OOS run):
+
+| variant | CAGR | max DD | Calmar | USD x / USD DD | vs base |
+|---|---|---|---|---|---|
+| `fEstrong` | 61.11% | −25.3% | 2.418 | 3.486 / −54.5% | loses |
+| `fEboth` | 57.76% | −26.4% | 2.185 | 3.262 / −55.5% | loses |
+
 ## Deviations
 
 - The OOS period (2025 on) was already seen in EXP-178..182, and the base itself was assembled from components picked
   partly on that OOS. This search uses only IS to shape variants, but OOS is not untouched data.
+- Batch 5's `rlow20` is an IS pick, but its family (rlow25) is known to have failed OOS on v2 (EXP-181); it is run as
+  the IS ranking says, not dropped on that knowledge.

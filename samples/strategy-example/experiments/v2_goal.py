@@ -443,6 +443,18 @@ VARIANTS.update({
                                 FE(True)),
     "k75_f2low_rvol_fEboth": ("F signal", "F from the four accounts on ETH/USD on every day (base: on G)", FE(False)),
 })
+# EXP-183 batch 5 (after batch 4's IS results, both lost; picked from the IS ranking of every v2_goal run, IS only):
+# keep100 beat keep75 on IS (59.26% / −23.0% vs 58.79% / −23.3%); f2low was the largest single IS gain (+4.1 pts on v2),
+# its more conservative neighbour (lowest account) was never run on v2; rlow20 had the best IS Calmar (3.076, DD −17.9%).
+VARIANTS.update({
+    "k100_f2low_rvol": ("ETH kept outside the LP while strong", "100% of F on the base (no LP while ETH is strong)",
+                        KEEP("1") + F2LOW + RVOL),
+    "k75_fmin_rvol": ("F aggregation", "lowest of the four accounts instead of the second-lowest",
+                      KEEP("0.75") + [(FAPPEND, "        fractions.append(min(a.deployed for a in accounts))\n", 1)] + RVOL),
+    "k75_f2low_rvol_rlow20": ("added: R-low BTC lock (EXP-180 rlow20) on the base", "R <= 0.80 x 90-day high -> the BTC "
+                              "share is held as ETH until R > EMA50(R)",
+                              K75 + [(RVOL_LINE, RVOL_LINE + _rlock(x=0.80), 1), RLOCK(x=0.80)[1]]),
+})
 ARB = "0x2f5e87C9312fa29aed5C179E456625D79015299c"
 MAKER_POOL = '    contract_address, fee, chain_name = "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0", 0.05, ChainType.ethereum.name  # wbtc/weth\n'
 
