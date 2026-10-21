@@ -1,8 +1,8 @@
 # EXP-183: IS-only search on top of k75_f2low_rvol (ETH-cbBTC MGL v2), `0x4585`, IS before 2025 / OOS after
 
-- Jira: (pending)
-- Status: pre-registered
-- Pre-registration commit: (this commit) · Result commit: (pending)
+- Jira: QUAN-1180 (subtask of QUAN-1107)
+- Status: pass — `k100_f2low_rvol_reupE` beats `k75_f2low_rvol` on IS and OOS (CAGR +1.23 / +1.31 pts, DD 0.4 / 1.3 pts shallower)
+- Pre-registration commit: 4052e44 · Result commit: (next commit)
 
 Dino (/goal 2026-10-21): "切25年以前is 以後oos，只能分析is的結果優化策略，is有比較好的結果才可以看oos，直到btceth池找到
 一個is oos績效都更好的策略。"
@@ -137,6 +137,33 @@ Batch 5, IS (none passed, no OOS run):
 | `k100_f2low_rvol` | 65.10% | −26.1% | 2.494 | 3.767 / −47.7% | loses (Calmar) |
 | `k75_fmin_rvol` | 67.07% | −27.2% | 2.463 | 3.910 / −48.4% | loses (Calmar) |
 | `k75_f2low_rvol_rlow20` | 60.89% | −22.4% | 2.720 | 3.471 / −55.8% | loses (CAGR) |
+
+Batch 6, IS:
+
+| variant | CAGR | max DD | Calmar | USD x / USD DD | vs base |
+|---|---|---|---|---|---|
+| `k75_fmin_rvol_reupE` | 67.94% | −27.2% | 2.495 | 3.975 / −48.4% | loses (Calmar) |
+| `k100_f2low_rvol_reupE` | 65.68% | −24.8% | 2.643 | 3.809 / −47.8% | **beats** |
+| `k100_fmin_rvol_reupE` | 69.14% | −28.3% | 2.441 | 4.067 / −47.4% | loses (Calmar) |
+
+Batch 6, OOS (only `k100_f2low_rvol_reupE` passed IS; base OOS from batch 1):
+
+| variant | CAGR | max DD | Calmar | USD x / USD DD | vs base |
+|---|---|---|---|---|---|
+| base | 24.49% | −30.0% | 0.818 | 1.180 / −55.2% | |
+| `k100_f2low_rvol_reupE` | 25.80% | −28.7% | 0.898 | 1.202 / −57.5% | **beats** |
+
+**Verdict: pass — goal reached.** `k100_f2low_rvol_reupE` (MGL v2 + ETH_KEEP 1.0 + F second-lowest account + rvol +
+ETH/USD re-entry while strong) beats `k75_f2low_rvol` on IS (CAGR +1.23 pts, DD 0.4 pt shallower, Calmar 2.643 vs
+2.558) and OOS (CAGR +1.31 pts, DD 1.3 pts shallower, Calmar 0.898 vs 0.818). 18 variants in 6 batches; 3 passed IS,
+1 of those passed OOS.
+
+Reading it:
+
+- The gain is small, about +1.2..1.3 pts CAGR and 0.4..1.3 pts DD in ETH; USD max DD is deeper OOS (−57.5% vs −55.2%).
+- `reupE` never fires after 2024 (batch 1: OOS identical to the base), so the OOS gain is ETH_KEEP 1.0's: no LP while ETH
+  is strong. EXP-182 saw Arbitrum `0x2f5e` CAGR fall past a 75% keep; that pool was not part of this goal.
+- 18 tries for one IS + OOS pass is close to what chance gives; the forward window after 2026-09-30 decides.
 
 ## Deviations
 

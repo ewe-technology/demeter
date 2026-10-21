@@ -100,6 +100,10 @@ an Arbitrum WBTC/WETH `0x2f5e` check (`v2_goal.py arb`): **fail** on the signifi
 +1.94 pts), but **`k75_f2low_rvol`** (ETH_KEEP 0.75 + F second-lowest + rvol) beats v2 on IS, OOS and Arbitrum: CAGR +7.1 /
 +4.1 / +1.5 pts, max DD 1.2 / 7.2 / 7.6 pts shallower, significant OOS. The ETH-kept share is the DD lever; past 75% the
 Arbitrum CAGR falls. Current best v2 candidate; components were picked on `0x4585` OOS, so the forward window decides.
+EXP-183 (QUAN-1180, /goal 2026-10-21: IS before 2025 / OOS 2025..2026-09-30, variants shaped from IS only, OOS only for
+IS passes, base k75_f2low_rvol): **pass** after 18 variants in 6 batches: `k100_f2low_rvol_reupE` (ETH_KEEP 1.0 + f2low
++ rvol + ETH/USD re-entry 15% above the last exit while strong) IS 65.68% / −24.8% vs 64.45% / −25.2%, OOS 25.80% /
+−28.7% vs 24.49% / −30.0% (in ETH). Small; reupE never fires after 2024, so the OOS gain is keep100's.
 
 ## Handoff 2026-10-06 (two sessions closed; a new session starts here)
 
