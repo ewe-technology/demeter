@@ -1,0 +1,69 @@
+{
+ "verdict": {
+  "dd20": {
+   "99ac four": true,
+   "calmar": false,
+   "9db9 four": true,
+   "neighbour": true,
+   "passes": false,
+   "main pool only": false
+  },
+  "dd30": {
+   "99ac four": true,
+   "calmar": false,
+   "9db9 four": true,
+   "neighbour": true,
+   "passes": false,
+   "main pool only": false
+  },
+  "dd40": {
+   "99ac four": true,
+   "calmar": false,
+   "9db9 four": false,
+   "neighbour": true,
+   "passes": false,
+   "main pool only": false
+  },
+  "tc30": {
+   "99ac four": false,
+   "calmar": false,
+   "9db9 four": false,
+   "neighbour": false,
+   "passes": false,
+   "main pool only": false
+  },
+  "tc60": {
+   "99ac four": false,
+   "calmar": false,
+   "9db9 four": false,
+   "neighbour": true,
+   "passes": false,
+   "main pool only": false
+  },
+  "tc90": {
+   "99ac four": false,
+   "calmar": false,
+   "9db9 four": false,
+   "neighbour": false,
+   "passes": false,
+   "main pool only": false
+  },
+  "dd30_tc60": {
+   "99ac four": true,
+   "calmar": false,
+   "9db9 four": false,
+   "neighbour": true,
+   "passes": false,
+   "main pool only": false
+  },
+  "hdown": {
+   "99ac four": true,
+   "calmar": true,
+   "9db9 four": false,
+   "neighbour": true,
+   "passes": false,
+   "main pool only": true
+  }
+ },
+ "pick": null
+}
