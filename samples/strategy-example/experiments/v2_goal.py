@@ -845,6 +845,75 @@ VARIANTS.update({
                           LPGATE("    _er = _lr.rolling(30).sum().abs() / _lr.abs().rolling(30).sum()\n"
                                  "    out['lpok'] = (_er < _er.rolling(365, min_periods=180).median()).reindex(out.index).fillna(False).astype(bool)\n")),
 })
+# ---- EXP-189 (Dino 2026-10-22, "做1,2,5" item 5; an explicit exception to the pure-LP scope of 2026-10-01): the weak-side
+# LP delta-hedged with a synthetic BTC/ETH perp (long BTCUSDT + short ETHUSDT perps, Binance funding). Each day the hedge
+# is set to the LP's BTC drift since it was built (h = BTC at build - BTC now, in BTC), so the LP keeps its build-time
+# exposure; P&L in ETH = h x change in BTC/ETH - h x price x (BTC funding - ETH funding over the day) - 0.1% of every
+# hedge change (two taker legs at 0.05%). 10% of the LP's money is held as ETH margin; the hedge is closed at a rebuild.
+# Control `k100_reupE_margin`: the same 10% margin, no hedge.
+HEDGE_CONST = ('SWAP_COST = Decimal("0.001")\n',
+               'SWAP_COST = Decimal("0.001")\n'
+               'HEDGE_MARGIN, HEDGE_FEE = Decimal("0.10"), Decimal("0.001")  # v2_goal EXP-189\n'
+               '_hf = {}\n'
+               'for _s in ("BTCUSDT", "ETHUSDT"):\n'
+               f'    _hd = pd.read_csv("{SAMPLES}/binance_funding_" + _s + "_long.csv", parse_dates=["timestamp"])\n'
+               '    _hf[_s] = _hd.groupby(_hd["timestamp"].dt.normalize())["rate"].sum()\n'
+               'HEDGE_FUNDING = (_hf["BTCUSDT"] - _hf["ETHUSDT"]).fillna(0.0).to_dict()\n', 1)
+MARGIN = [('        lp_value, lp_btc, lp_eth, tick_lo, tick_hi = shares["lp"] * value, ZERO, ZERO, None, None\n',
+           '        lp_value, lp_btc, lp_eth, tick_lo, tick_hi = shares["lp"] * value * (ONE - HEDGE_MARGIN), ZERO, ZERO, None, None  # EXP-189\n', 1),
+          ('        want = [shares["btc"] * value / p + lp_btc, shares["eth"] * value + lp_eth, shares["usdc"] * value / u]\n',
+           '        want = [shares["btc"] * value / p + lp_btc, shares["eth"] * value + lp_eth + shares["lp"] * value * HEDGE_MARGIN,\n'
+           '                shares["usdc"] * value / u]  # v2_goal EXP-189 margin\n', 1),
+          ('        elif shares["lp"] >= ONE and cur["lp"] < ONE - LP_SHORT_TOL:\n',
+           '        elif shares["lp"] >= ONE and cur["lp"] < ONE - HEDGE_MARGIN - LP_SHORT_TOL:  # v2_goal EXP-189 margin\n', 1)]
+HEDGE = [
+    ("    def rebuild(self, row_data: Snapshot, why: str) -> None:\n",
+     "    def _hedge(self, p, day, close=False) -> None:  # v2_goal EXP-189 perp hedge of the LP's BTC drift\n"
+     "        h, p0 = getattr(self, '_h', ZERO), getattr(self, '_hp', None)\n"
+     "        pnl = ZERO\n"
+     "        if p0 is not None and h != ZERO:\n"
+     "            pnl = h * (p - p0) - h * p * Decimal(str(HEDGE_FUNDING.get(day, 0.0)))\n"
+     "        new = ZERO if close or not self.positions else \\\n"
+     "            getattr(self, '_lp_btc0', ZERO) - self._lp_market().get_market_balance().base_in_position\n"
+     "        pnl -= HEDGE_FEE * abs(new - h) * p\n"
+     "        self.hedge_pnl = getattr(self, 'hedge_pnl', ZERO) + pnl\n"
+     "        pnl += getattr(self, '_hdebt', ZERO)\n"
+     "        self._hdebt = ZERO\n"
+     "        eth_t, btc_t = self.gp.quote_token, self.gp.base_token\n"
+     "        if pnl >= ZERO:\n"
+     "            self.broker.add_to_balance(eth_t, pnl)\n"
+     "        else:\n"
+     "            take = min(-pnl, self.broker.get_token_balance(eth_t))\n"
+     "            if take > ZERO:\n"
+     "                self.broker.subtract_from_balance(eth_t, take)\n"
+     "            rest = -pnl - take\n"
+     "            take_b = min(rest / p, self.broker.get_token_balance(btc_t))\n"
+     "            if take_b > ZERO:\n"
+     "                self.broker.subtract_from_balance(btc_t, take_b)\n"
+     "            self._hdebt = -(rest - take_b * p)   # settled at the next step\n"
+     "        self._h, self._hp = new, p\n"
+     "\n"
+     "    def rebuild(self, row_data: Snapshot, why: str) -> None:\n", 1),
+    ("        shares, ratio, f, strong = self.target(row_data.timestamp)\n        btc, eth, usdc = self._wallet()\n",
+     "        self._hedge(p, pd.Timestamp(row_data.timestamp).normalize() - pd.Timedelta(days=1), close=True)  # EXP-189\n"
+     "        shares, ratio, f, strong = self.target(row_data.timestamp)\n        btc, eth, usdc = self._wallet()\n", 1),
+    ("                self.positions.append(position)\n",
+     "                self.positions.append(position)\n                self._lp_btc0 = used_base  # v2_goal EXP-189 hedge reference\n", 1),
+    ("        p, u = self._prices(row_data)\n        self.collect_fees(p)\n        btc, eth, usdc = self._wallet()\n        lp_value = self._lp_value()\n",
+     "        p, u = self._prices(row_data)\n        self.collect_fees(p)\n"
+     "        self._hedge(p, pd.Timestamp(row_data.timestamp).normalize() - pd.Timedelta(days=1))  # v2_goal EXP-189\n"
+     "        btc, eth, usdc = self._wallet()\n        lp_value = self._lp_value()\n", 1),
+    ("        self.final_price = p\n",
+     "        self.final_price = p\n"
+     "        print(f'[hedge] pnl_eth {float(getattr(self, \"hedge_pnl\", ZERO)):.6f} debt {float(getattr(self, \"_hdebt\", ZERO)):.6f}')  # EXP-189\n", 1),
+]
+VARIANTS.update({
+    "k100_reupE_hedge": ("added: perp hedge of the LP (out of the pure-LP scope, Dino's exception)", "the weak-side LP's BTC "
+                         "drift is hedged daily with a synthetic BTC/ETH perp (Binance funding, 0.1% per change), 10% ETH margin",
+                         BASE184 + [HEDGE_CONST] + MARGIN + HEDGE),
+    "k100_reupE_margin": ("control: 10% ETH margin, no hedge", "the LP version with 10% of the LP's money held as ETH",
+                          BASE184 + [HEDGE_CONST] + MARGIN),
+})
 # Logging only (EXP-184, no change in behaviour): LP accounting per position lifetime, in ETH. When a position is removed
 # (a rebuild, after its fees were collected) or at the end: fees = rewards collected since it was added, IL = its value
 # minus the value of the tokens it was built from at today's price, pnl = value + fees - value when built.
