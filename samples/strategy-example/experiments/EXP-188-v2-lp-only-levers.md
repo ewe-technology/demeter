@@ -1,8 +1,8 @@
 # EXP-188: LP-only levers on the MGL v2 best — range-order rebuilds and an LP on/off gate, `0x4585` IS before 2025 / OOS after
 
 - Jira: QUAN-1187 (subtask of QUAN-1107)
-- Status: pre-registered
-- Pre-registration commit: (this commit) · Result commit: (pending)
+- Status: fail — range-order rebuilds (LP / spot) and LP gates (VR / ER) all lose to their bases in-sample (no OOS run)
+- Pre-registration commit: 234ae70 · Result commit: (next commit)
 
 Dino (2026-10-22), after EXP-187 (spot only beats the LP version out of sample): "那有什麼樣的策略優化是只有lp能做的嗎"
 -> "做1,2,5". 1 = rebuild by range orders, 2 = an LP on/off gate; 5 (LP + perp hedge) is EXP-189.
@@ -37,8 +37,26 @@ Dino (2026-10-22), after EXP-187 (spot only beats the LP version out of sample):
 
 ## Result
 
-(pending)
+IS 2021-11-02..2024-12-31, in ETH (CAGR / max DD / Calmar; LP fees / IL / edge):
+
+| variant | base | variant | base numbers | vs own base |
+|---|---|---|---|---|
+| `k100_reupE_ro` | LP version | 59.96% / −26.9% / 2.233; 0.578 / −0.626 / −0.048; 117 rebuilds, 83 legs filled by range order, 14 expired | 65.68% / −24.8% / 2.643; 0.610 / −0.287 / +0.324 | loses |
+| `k100_reupE_spot_ro` | spot version | 58.49% / −27.0% / 2.165; 106 rebuilds, 75 filled, 12 expired | 61.08% / −25.3% / 2.419 | loses |
+| `k100_reupE_gatevr` | LP version | 62.55% / −25.0% / 2.498; 0.333 / −0.280 / +0.053; 141 rebuilds | 65.68% / −24.8% / 2.643 | loses (beats spot: 61.08% / −25.3% / 2.419) |
+| `k100_reupE_gateer` | LP version | 57.97% / −24.9% / 2.324; 0.350 / −0.511 / −0.161; 191 rebuilds | 65.68% / −24.8% / 2.643 | loses |
+
+**Verdict: fail — no lever beats its base in-sample; no OOS run.**
+
+- Range orders fill most legs (83 of 97 on the LP version) and turn a 0.1% cost into a 0.05% rebate, yet cost 5.7 /
+  2.6 pts CAGR. A one-spacing order fills when the price moves its way (a reversal) and expires in a trend, so the trend
+  legs are executed a day late at a worse price: adverse selection, larger than the fee saved. The LP built at the
+  fill minute also lands on a worse path (IL −0.626 vs −0.287).
+- The gates cut LP time but also add rebuilds (141 / 191 vs 118). `gatevr` keeps most of the LP's IS fees per unit of
+  IL and lands between the LP and spot versions in-sample; against its pre-registered base (the LP version) it loses,
+  so it was not run OOS. `gateer` gates on a noisier signal and loses to both.
 
 ## Deviations
 
-(none yet)
+- `gatevr` beats the spot version in-sample. The spot version was not the pre-registered base for the gates, so no
+  OOS run was made; testing it against spot would be a new pre-registration.
