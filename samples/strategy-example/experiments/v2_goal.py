@@ -757,6 +757,13 @@ VARIANTS.update({
                   (WEAK_ALLOC, WEAK_ALLOC.replace('"lp": f, "eth": ZERO, "btc": ONE - f',
                                                   '"lp": ZERO, "eth": f / 2, "btc": f / 2 + ONE - f'), 1)]),
 })
+# ---- EXP-187 (Dino 2026-10-22: "目前btc那個策略，如果改成直接操作現貨的話績效是如何？"): the current best,
+# k100_f2low_rvol_reupE, with its only LP (the weak side, F at +-20%) replaced by spot: F held as 50% ETH / 50% BTC
+# tokens (about what a centred +-20% LP holds when built), the rest BTC as before. No LP, no fees; same signals, same
+# rebuild rules and 0.1% swap cost. EXP-186's abl_nolp is the same replacement on v2.
+VARIANTS["k100_reupE_spot"] = ("the LP", "spot only: the weak-side LP is held as 50% ETH / 50% BTC tokens",
+                               BASE184 + [(WEAK_ALLOC, WEAK_ALLOC.replace('"lp": f, "eth": ZERO, "btc": ONE - f',
+                                                                          '"lp": ZERO, "eth": f / 2, "btc": f / 2 + ONE - f'), 1)])
 # Logging only (EXP-184, no change in behaviour): LP accounting per position lifetime, in ETH. When a position is removed
 # (a rebuild, after its fees were collected) or at the end: fees = rewards collected since it was added, IL = its value
 # minus the value of the tokens it was built from at today's price, pnl = value + fees - value when built.
