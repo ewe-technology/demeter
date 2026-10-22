@@ -2,7 +2,7 @@
 
 - Jira: QUAN-1187 (subtask of QUAN-1107)
 - Status: fail — range-order rebuilds (LP / spot) and LP gates (VR / ER) all lose to their bases in-sample (no OOS run)
-- Pre-registration commit: 234ae70 · Result commit: (next commit)
+- Pre-registration commit: 234ae70 · Result commit: 5730539
 
 Dino (2026-10-22), after EXP-187 (spot only beats the LP version out of sample): "那有什麼樣的策略優化是只有lp能做的嗎"
 -> "做1,2,5". 1 = rebuild by range orders, 2 = an LP on/off gate; 5 (LP + perp hedge) is EXP-189.
