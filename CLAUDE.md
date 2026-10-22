@@ -117,6 +117,9 @@ EXP-186 (QUAN-1183, ablation of v2 = `1ETH_signal`, one element removed at a tim
 3 of 9 elements are effective on all three (F engine, strength switch vs always weak, 25% ETH keep). Replacing the LP
 by 50/50 tokens ties IS (−0.34 pt) and wins OOS +10.2 / Arbitrum +6.9 pts with shallower DD; the slope filter helps
 OOS + Arbitrum; four accounts vs one EMA100 account is neutral.
+EXP-187 (QUAN-1186): the current best as **spot only** (`k100_reupE_spot`, weak-side LP -> 50/50 ETH/BTC tokens) beats
+the LP version on OOS 33.05% vs 25.80%, 2022-25 54.65% vs 52.67% and Arbitrum 19.28% vs 16.39% (DD 3-4 pts shallower)
+and loses IS 61.08% vs 65.68%: the LP edge is positive only in IS (+0.32 ETH), negative everywhere else.
 
 ## Handoff 2026-10-06 (two sessions closed; a new session starts here)
 
