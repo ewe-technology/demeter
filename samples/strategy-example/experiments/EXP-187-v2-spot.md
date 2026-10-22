@@ -2,7 +2,7 @@
 
 - Jira: QUAN-1186 (subtask of QUAN-1107)
 - Status: done — spot only beats the LP version on OOS, 2022-25 and Arbitrum (CAGR +7.3 / +2.0 / +2.9 pts, DD 3-4 pts shallower), loses IS (−4.6 pts)
-- Pre-registration commit: 3dab11f · Result commit: (next commit)
+- Pre-registration commit: 3dab11f · Result commit: 8e5bfaa
 
 Dino (2026-10-22): "目前btc那個策略，如果改成直接操作現貨的話績效是如何？兩者比較一下"
 
