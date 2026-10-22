@@ -764,6 +764,87 @@ VARIANTS.update({
 VARIANTS["k100_reupE_spot"] = ("the LP", "spot only: the weak-side LP is held as 50% ETH / 50% BTC tokens",
                                BASE184 + [(WEAK_ALLOC, WEAK_ALLOC.replace('"lp": f, "eth": ZERO, "btc": ONE - f',
                                                                           '"lp": ZERO, "eth": f / 2, "btc": f / 2 + ONE - f'), 1)])
+# ---- EXP-188 (Dino 2026-10-22: "做1,2,5" — LP-only levers 1 and 2; 5 is EXP-189). Same IS / OOS rules as EXP-183.
+# 1. Range-order execution: a rebuild's BTC <-> ETH leg is not swapped at market (0.1% cost) but placed as a one-spacing
+#    (0.1%) single-sided range just beyond the price; when the minute price crosses it the leg fills at the band's
+#    midpoint and earns the pool fee (0.05%) instead of paying the swap cost; unfilled after 23h59m it swaps at market.
+#    The USDC leg (another pool) always swaps at market. Out-of-range rebuilds and the start swap at market.
+# 2. LP gate: while weak, the LP runs only when R looks range-bound; otherwise its share is held as 50/50 spot tokens.
+RO_CONST = ('SWAP_COST = Decimal("0.001")\n',
+            'SWAP_COST = Decimal("0.001")\n'
+            'RO_BAND, RO_REBATE, RO_MIN = Decimal("0.001"), Decimal("0.0005"), Decimal("0.005")  # v2_goal EXP-188\n', 1)
+RO_DAILY = ("            if out_of_range:\n                self.out_of_range_rebuilds += 1\n            self.rebuild(row_data, why)\n",
+            "            if out_of_range:\n                self.out_of_range_rebuilds += 1\n"
+            "            if out_of_range or not self._ro_place(row_data, why, p, value, btc):  # v2_goal EXP-188 range orders\n"
+            "                self.rebuild(row_data, why)\n", 1)
+RO_BAR = ("    def on_bar(self, row_data: Snapshot):\n        pass\n",
+          "    def _ro_place(self, row_data, why, p, value, btc) -> bool:  # v2_goal EXP-188 range orders\n"
+          "        if getattr(self, '_ro', None) is not None:\n"
+          "            return True\n"
+          "        shares, ratio, f, strong = self.target(row_data.timestamp)\n"
+          "        lp_market = self._lp_market()\n"
+          "        tick = lp_market.price_to_raw_tick(p)\n"
+          "        lp_btc = ZERO\n"
+          "        if shares['lp'] > ZERO:\n"
+          "            lo, hi = range_ticks(tick, ratio, self.utils.params.tick_spacing)\n"
+          "            lp_btc = shares['lp'] * value * (ONE - lp_quote_share(tick, lo, hi)) / p\n"
+          "        held = btc + (lp_market.get_market_balance().base_in_position if self.positions else ZERO)\n"
+          "        d = shares['btc'] * value / p + lp_btc - held\n"
+          "        if abs(d) * p < RO_MIN * value:\n"
+          "            return False\n"
+          "        s = ONE if d > ZERO else -ONE\n"
+          "        self._ro = {'why': why, 'buy': d > ZERO, 'limit': p * (ONE - s * RO_BAND), 'fill': p * (ONE - s * RO_BAND / 2),\n"
+          "                    'until': row_data.timestamp + timedelta(hours=23, minutes=59)}\n"
+          "        return True\n"
+          "\n"
+          "    def on_bar(self, row_data: Snapshot):\n"
+          "        o = getattr(self, '_ro', None)\n"
+          "        if o is None or self.out_of_fund_date is not None:\n"
+          "            return\n"
+          "        p = self._prices(row_data)[0]\n"
+          "        if (o['buy'] and p <= o['limit']) or (not o['buy'] and p >= o['limit']):\n"
+          "            self._ro, self._ro_exec = None, o['fill']\n"
+          "            self.rebuild(row_data, o['why'] + ' (range order filled)')\n"
+          "            self._ro_exec = None\n"
+          "        elif row_data.timestamp >= o['until']:\n"
+          "            self._ro = None\n"
+          "            self.rebuild(row_data, o['why'] + ' (range order expired)')\n", 1)
+RO_SWAP = ("        deltas, cost = swap_deltas([btc, eth, usdc], want, [p, ONE, u])\n",
+           "        _fill = getattr(self, '_ro_exec', None)  # v2_goal EXP-188: BTC leg filled by a range order at _fill\n"
+           "        if _fill is None:\n"
+           "            deltas, cost = swap_deltas([btc, eth, usdc], want, [p, ONE, u])\n"
+           "        else:\n"
+           "            deltas, _ = swap_deltas([btc, eth, usdc], want, [p, ONE, u], ZERO)\n"
+           "            _rebate = RO_REBATE * abs(deltas[0]) * _fill\n"
+           "            cost = SWAP_COST * abs(deltas[2]) * u - _rebate\n"
+           "            _adj = -deltas[0] * (_fill - p) - cost   # ETH value: fill vs market price, rebate, USDC leg cost\n"
+           "            _post = [(btc + deltas[0]) * p, eth + deltas[1], (usdc + deltas[2]) * u]\n"
+           "            _k = _post.index(max(_post))   # booked on the largest holding so no balance goes negative\n"
+           "            deltas[_k] += _adj / [p, ONE, u][_k]\n", 1)
+RO = [RO_CONST, RO_DAILY, RO_BAR, RO_SWAP]
+TARGET_ALLOC = "        shares, ratio = allocation(f, strong)\n"
+
+
+def LPGATE(code: str) -> list:
+    return BASE184 + [(RVOL_LINE, RVOL_LINE + "    _lr = _np.log(r).diff()  # v2_goal EXP-188 lp gate\n" + code, 1),
+                      (TARGET_ALLOC, TARGET_ALLOC +
+                       '        if not strong and "lpok" in row and not bool(row["lpok"]) and shares["lp"] > ZERO:  # v2_goal EXP-188\n'
+                       '            shares = {"lp": ZERO, "eth": shares["lp"] / 2, "btc": shares["btc"] + shares["lp"] / 2, "usdc": ZERO}\n', 1)]
+
+
+VARIANTS.update({
+    "k100_reupE_ro": ("rebuild execution", "BTC <-> ETH legs by range order (fee earned) instead of a market swap", BASE184 + RO),
+    "k100_reupE_spot_ro": ("rebuild execution (spot version)", "EXP-187's spot version, BTC <-> ETH legs by range order",
+                           VARIANTS["k100_reupE_spot"][2] + RO),
+    "k100_reupE_gatevr": ("added: LP gate (variance ratio)", "while weak, LP only while the 5-day variance ratio of log R over "
+                          "60 closes < 1 (mean-reverting); else 50/50 spot",
+                          LPGATE("    _vr = _lr.rolling(5).sum().rolling(60).var() / (5 * _lr.rolling(60).var())\n"
+                                 "    out['lpok'] = (_vr < 1.0).reindex(out.index).fillna(False).astype(bool)\n")),
+    "k100_reupE_gateer": ("added: LP gate (efficiency ratio)", "while weak, LP only while R's 30-day efficiency ratio is below "
+                          "its trailing 365-day median (range-bound); else 50/50 spot",
+                          LPGATE("    _er = _lr.rolling(30).sum().abs() / _lr.abs().rolling(30).sum()\n"
+                                 "    out['lpok'] = (_er < _er.rolling(365, min_periods=180).median()).reindex(out.index).fillna(False).astype(bool)\n")),
+})
 # Logging only (EXP-184, no change in behaviour): LP accounting per position lifetime, in ETH. When a position is removed
 # (a rebuild, after its fees were collected) or at the end: fees = rewards collected since it was added, IL = its value
 # minus the value of the tokens it was built from at today's price, pnl = value + fees - value when built.
