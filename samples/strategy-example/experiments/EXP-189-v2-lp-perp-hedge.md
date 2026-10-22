@@ -2,7 +2,7 @@
 
 - Jira: QUAN-1188 (subtask of QUAN-1107)
 - Status: fail — the perp-hedged LP loses IS (58.04% vs 65.68%), wins OOS (31.40% vs 25.80%) and loses to spot on both
-- Pre-registration commit: 021d266 · Result commit: (next commit)
+- Pre-registration commit: 021d266 · Result commit: b588371
 
 Dino (2026-10-22): "做1,2,5", item 5 = LP + perpetual hedge. This uses perps, outside the pure-LP scope set on
 2026-10-01; Dino asked for it explicitly, so it is run as his exception to that rule.
