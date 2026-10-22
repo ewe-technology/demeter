@@ -120,6 +120,10 @@ OOS + Arbitrum; four accounts vs one EMA100 account is neutral.
 EXP-187 (QUAN-1186): the current best as **spot only** (`k100_reupE_spot`, weak-side LP -> 50/50 ETH/BTC tokens) beats
 the LP version on OOS 33.05% vs 25.80%, 2022-25 54.65% vs 52.67% and Arbitrum 19.28% vs 16.39% (DD 3-4 pts shallower)
 and loses IS 61.08% vs 65.68%: the LP edge is positive only in IS (+0.32 ETH), negative everywhere else.
+EXP-188 (QUAN-1187, LP-only levers): **fail** — range-order rebuilds (earn the fee instead of paying the swap) fill
+83 of 97 legs but lose 5.7 / 2.6 pts IS (adverse selection: fill on reversals, expire in trends); weak-side LP gates on
+R's variance / efficiency ratio lose to the LP version. EXP-189 (QUAN-1188, perp-hedged LP, Dino's exception to the
+pure-LP scope): **fail** — hedge P&L −0.312 ETH IS / +0.022 OOS; loses to spot on both halves.
 
 ## Handoff 2026-10-06 (two sessions closed; a new session starts here)
 
