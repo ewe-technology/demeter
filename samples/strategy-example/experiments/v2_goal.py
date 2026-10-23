@@ -914,6 +914,27 @@ VARIANTS.update({
     "k100_reupE_margin": ("control: 10% ETH margin, no hedge", "the LP version with 10% of the LP's money held as ETH",
                           BASE184 + [HEDGE_CONST] + MARGIN),
 })
+# ---- EXP-190 (Dino 2026-10-23: "測" — two untested ways to place the LP's centre; same IS / OOS rules as EXP-183).
+# emacentre: a weak-side LP is centred on the 20-day EMA of the pool price (BTC in ETH = 1 / R) instead of the price
+#   now (a bet on reversion to the mean); when the price is more than 15% from that EMA it centres on the price now,
+#   so the new range always holds the price.
+# trail10: the range is rebuilt around the price as soon as the price is 10% from its centre (a bet on the trend going
+#   on), instead of waiting until it leaves the +-20% range.
+EMACENTRE = BASE184 + [
+    (RVOL_LINE, RVOL_LINE + "    out['pc'] = (1.0 / r).ewm(span=20, adjust=False).mean().reindex(out.index)  # v2_goal EXP-190 emacentre\n", 1),
+    (RANGE_LINE, RANGE_LINE +
+     "            _c = Decimal(str(self.daily.loc[pd.Timestamp(row_data.timestamp - timedelta(days=1)).normalize()]['pc']))\n"
+     "            if _c * Decimal('0.85') <= p <= _c * Decimal('1.15'):  # v2_goal EXP-190 emacentre\n"
+     "                tick_lo, tick_hi = range_ticks(lp_market.price_to_raw_tick(_c), ratio, self.utils.params.tick_spacing)\n", 1)]
+TRAIL10 = BASE184 + [
+    ('        if out_of_range:\n            why = "out of range"\n',
+     '        if out_of_range:\n            why = "out of range"\n'
+     '        elif self.positions and abs(tick - (self.positions[0][0] + self.positions[0][1]) / 2) >= math.log(1.10) / LOG_TICK:\n'
+     '            why = "trail 10%"  # v2_goal EXP-190 trail10\n', 1)]
+VARIANTS.update({
+    "k100_reupE_emacentre": ("LP centre", "weak-side LP centred on EMA20 of the pool price (price now if more than 15% away)", EMACENTRE),
+    "k100_reupE_trail10": ("LP recentring", "rebuild the range around the price once the price is 10% from its centre", TRAIL10),
+})
 # Logging only (EXP-184, no change in behaviour): LP accounting per position lifetime, in ETH. When a position is removed
 # (a rebuild, after its fees were collected) or at the end: fees = rewards collected since it was added, IL = its value
 # minus the value of the tokens it was built from at today's price, pnl = value + fees - value when built.
