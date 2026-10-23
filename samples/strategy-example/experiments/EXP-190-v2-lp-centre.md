@@ -2,7 +2,7 @@
 
 - Jira: QUAN-1192 (subtask of QUAN-1107)
 - Status: fail — EMA20 centre is the base within noise (Calmar −0.002), trailing 10% recentre doubles IL (−4.0 pts IS); no OOS run
-- Pre-registration commit: 6d884eb · Result commit: (next commit)
+- Pre-registration commit: 6d884eb · Result commit: 21a9e15
 
 Dino (2026-10-23), after asking how the AMM centre is chosen: "我找一些方法重擺中心點這方法有用嗎" -> "測": the two
 centring rules not yet tried.
