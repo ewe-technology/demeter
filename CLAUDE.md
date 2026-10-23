@@ -124,6 +124,9 @@ EXP-188 (QUAN-1187, LP-only levers): **fail** — range-order rebuilds (earn the
 83 of 97 legs but lose 5.7 / 2.6 pts IS (adverse selection: fill on reversals, expire in trends); weak-side LP gates on
 R's variance / efficiency ratio lose to the LP version. EXP-189 (QUAN-1188, perp-hedged LP, Dino's exception to the
 pure-LP scope): **fail** — hedge P&L −0.312 ETH IS / +0.022 OOS; loses to spot on both halves.
+EXP-190 (QUAN-1192, LP centre rules): **fail** — centring the weak-side LP on EMA20 of the pool price is the base within
+noise; recentring once the price is 10% from the centre doubles IL (−0.602 vs −0.287 ETH IS). Six centring rules now
+tried on `0x4585`; none beats centring on the price at each rebuild.
 
 ## Handoff 2026-10-06 (two sessions closed; a new session starts here)
 

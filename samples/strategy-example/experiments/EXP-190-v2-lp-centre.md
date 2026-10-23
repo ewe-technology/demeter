@@ -1,8 +1,8 @@
 # EXP-190: where to centre the LP — EMA20 centre vs trailing recentre, on k100_f2low_rvol_reupE, `0x4585` IS before 2025 / OOS after
 
 - Jira: QUAN-1192 (subtask of QUAN-1107)
-- Status: pre-registered
-- Pre-registration commit: (this commit) · Result commit: (pending)
+- Status: fail — EMA20 centre is the base within noise (Calmar −0.002), trailing 10% recentre doubles IL (−4.0 pts IS); no OOS run
+- Pre-registration commit: 6d884eb · Result commit: (next commit)
 
 Dino (2026-10-23), after asking how the AMM centre is chosen: "我找一些方法重擺中心點這方法有用嗎" -> "測": the two
 centring rules not yet tried.
@@ -38,8 +38,23 @@ range (`lpresize`, EXP-184), a mean-reversion gate on that (`mrgate`, EXP-185), 
 
 ## Result
 
-(pending)
+IS 2021-11-02..2024-12-31, in ETH:
+
+| variant | CAGR | max DD | Calmar | LP fees / IL / edge | swap cost | rebuilds | vs base |
+|---|---|---|---|---|---|---|---|
+| base (centre = price now) | 65.68% | −24.8% | 2.643 | 0.610 / −0.287 / +0.324 | 0.162 | 118 | |
+| `emacentre` | 65.81% | −24.9% | 2.641 | 0.617 / −0.288 / +0.329 | 0.159 | 118 | loses (Calmar −0.002) |
+| `trail10` | 61.79% | −24.8% | 2.487 | 0.594 / −0.602 / −0.008 | 0.165 | 126 (10 trail rebuilds) | loses |
+
+**Verdict: fail — neither centring rule beats the base in-sample; no OOS run.**
+
+- `emacentre` is the base within noise (+0.13 pt CAGR, LP edge +0.005 ETH, Calmar 0.002 lower): over IS the EMA20 of
+  the pool price sits close to the price at a rebuild, so the range barely moves.
+- `trail10` doubles the IL (−0.602 vs −0.287 ETH) with 10 extra recentres: each one locks in the IL accrued so far,
+  and over IS the price often came back after a 10% move. Recentring before the edge is the wrong bet here.
+- With EXP-184 / 185 this makes six centring rules on this pool (keep the old range, a mean-reversion gate, off-centre,
+  swap-free offset, EMA centre, trailing); none beats centring on the price at each rebuild.
 
 ## Deviations
 
-(none yet)
+(none)
