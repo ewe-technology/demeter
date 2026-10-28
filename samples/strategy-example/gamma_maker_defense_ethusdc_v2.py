@@ -88,7 +88,6 @@ conservative_fluctuation = CONSERVATIVE_FLUCTUATION
 
 BAND_COUNT = 17
 
-
 # short shape names for report files
 SHAPE_LABELS = {"inverted_gaussian_9": "ig9-tick", "inverted_gaussian": "ig17-tick", "inverted_gaussian_spec": "ig17s-tick",
                 "inverted_gaussian_spec_price": "ig17s-price"}
@@ -143,12 +142,12 @@ BINANCE_CSV = Path(__file__).with_name("binance_ethusdt_1d.csv")
 # the difference is charged on top). None = pool fee only. Fee-to-USDC sales are not charged: the spec pays
 # rewards in USDC, so it has no such swap. Currently None (pool fee 0.05%) plus SLIPPAGE_MODEL "depth"; for the
 # spec's flat 0.1% set Decimal("0.001") here and None below.
-SWAP_COST_RATE: Decimal | None = None
+SWAP_COST_RATE: Decimal | None = Decimal("0.001")
 # Price impact of the rebalance swaps from the pool's own depth. None = off (demeter fills at the data price, pool
 # fee only). "depth" = also charge swapped quote value squared over the quote token's virtual reserve at the current
 # tick (see quote_depth); about 0.6 to 8 bp of a $70k swap over 2022-2025. It is on top of SWAP_COST_RATE, so with
 # the spec's 0.1% (which may already include slippage) it double counts: use SWAP_COST_RATE = None with it.
-SLIPPAGE_MODEL: str | None = "depth"
+SLIPPAGE_MODEL: str | None = None #"depth"
 LOWER_STOP, UPPER_REBUILD = 0.80, 1.20
 REFILL_CONFIRM_DAYS = 3                                   # stage 1 needs this many consecutive closes
 REFILL_STAGES = ((1, 1.075), (2, 1.125), (3, 1.175), (4, 1.225))  # (stage, close / low), stage k -> k/4 deployed
@@ -1481,7 +1480,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     _aggressive = True
     # spec section 5: False = standard mode (fees stay outside the principal), True = compound mode (fees folded into the
     # principal on the 1st of every month). Each year still starts from the full init_quote, not continuous.
-    _compound = True
+    _compound = False
     # liquidity shape to backtest, one column of the shape sheet. switch it by hand
     # _shape: str = "triangle"
     # _shape: str = "gaussian"
@@ -1980,7 +1979,8 @@ if __name__ == "__main__":
         (datetime(2023, 1, 2, 0, 0, 0), date(2023, 1, 2), date(2023, 12, 31), "", []),
         (datetime(2024, 1, 2, 0, 0, 0), date(2024, 1, 2), date(2024, 12, 31), "", []),
         (datetime(2025, 1, 2, 0, 0, 0), date(2025, 1, 2), date(2025, 12, 31), "", []),
-        # (datetime(2022, 1, 2, 0, 0, 0), date(2022, 1, 2), date(2025, 12, 31), "", []),
+        (datetime(2022, 1, 2, 0, 0, 0), date(2022, 1, 2), date(2025, 12, 31), "", []),
+        (datetime(2026, 1, 2, 0, 0, 0), date(2026, 1, 2), date(2026, 9, 30), "", []),
 
 
         # (datetime(2024, 1, 1, 0, 0, 0), date(2024, 1, 1), date(2025, 1, 1), "", []),
