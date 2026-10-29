@@ -177,6 +177,14 @@ which mode your results should use, and do not compare numbers across modes.
 | 8 | `collect_fee` checks `if self._positions[position]:`, which is always true for a dataclass, so a collect action is always recorded. | `uniswap/market.py` | reproduced | same |
 | 9 | Precision: python Decimal rounds every operation to 35 digits. | everywhere | **reproduced exactly** since 2026-10-14 (`dec::Dec`, see "Python's decimal arithmetic" above); before, 38-digit arithmetic differed in the last digit | same |
 
+Not a quirk switch, a model fix in both engines (QUAN-1213): `market.fee_in_range_liquidity`
+(python `UniLpMarket`, Rust `UniLpMarket::fee_in_range_liquidity`, default `False`). Off, the fee
+denominator (`market_status.data.currentLiquidity`) is the pool's liquidity plus all our own; on,
+plus only our positions that earn a fee in that minute (`V3CoreLib.earns_fee` / `earns_fee`, the
+same rule as `update_fee`), so out-of-range positions stop diluting the in-range ones. A strategy
+that reads `currentLiquidity` for its own model (e.g. a depth slippage) sees the change too.
+`engine_check.py` compares the engines with it off and on.
+
 Also different, intentionally:
 
 - `Actuator.run` sets prices automatically from the first market when `set_price` was never

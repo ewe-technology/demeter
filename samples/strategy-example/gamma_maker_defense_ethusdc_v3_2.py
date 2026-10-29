@@ -43,6 +43,7 @@ import json
 from dataclasses import dataclass, field
 import math
 import multiprocessing
+import os
 import random
 import time
 from decimal import Decimal
@@ -217,6 +218,10 @@ REINVEST_MIN_USD = Decimal(5)
 # spec section 6: share of every claim the contract keeps as the success fee (spec 25%), taken in kind before the net ETH is sold;
 # only the net is paid out / reinvested. The spec's section 7 figures are before it, hence 0; Decimal("0.25") charges it.
 SUCCESS_FEE_RATE = Decimal(0)
+# QUAN-1213 engine fix: the fee share denominator counts only our liquidity that earns a fee this minute (out-of-range bands
+# of the ladder no longer dilute the in-range ones). Off by default (the numbers so far); FEE_IN_RANGE_LIQUIDITY=1 turns it on
+# and adds "-feeinrange" to the result folder. Validation runs with it on.
+FEE_IN_RANGE_LIQUIDITY = os.environ.get("FEE_IN_RANGE_LIQUIDITY") == "1"
 
 
 def build_virtual_lp(value: float, centre: float, eth_share: float) -> List[Tuple[float, float, float]]:
@@ -1419,6 +1424,7 @@ def run_test(bull_params: RemixDAOParams, bear_params: RemixDAOParams, params: T
         pool = UniV3Pool(gp.token0, gp.token1, gp.fee, gp.quote_token,
                          tick_spacing=bull_params.tick_spacing)  # declare pool, Arbitrum One
         market = UniLpMarketV2(market_key, pool)
+        market.fee_in_range_liquidity = FEE_IN_RANGE_LIQUIDITY
 
         broker.add_market(market)
         # broker.set_balance(gp.quote_token, gp.init_quote)
@@ -1668,6 +1674,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
                       f"{'' if SWAP_COST_RATE is None else f'-swap{float(SWAP_COST_RATE) * 10000:g}bp'}"
                       f"{'' if SLIPPAGE_MODEL is None else f'-slip{SLIPPAGE_MODEL}'}"
                       f"{'' if SUCCESS_FEE_RATE == ZERO else f'-sfee{float(SUCCESS_FEE_RATE) * 100:g}'}"
+                      f"{'-feeinrange' if FEE_IN_RANGE_LIQUIDITY else ''}"
                       f"{'' if F_BY_VALUE else '-fstage'}"
                       f"{'' if SPEC_START else '-v1start'}")
     _dca_add_if_non_empty = False

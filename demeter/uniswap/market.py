@@ -91,6 +91,9 @@ class UniLpMarket(Market):
         # self.action_buffer = []
         # tick of last minute(previous minute), to compatible with old version, keep default as None
         self.last_tick: int | None = None
+        # fee share denominator: False (default, old numbers) adds all our liquidity to the pool's, True only the
+        # positions that earn a fee this minute (QUAN-1213)
+        self.fee_in_range_liquidity: bool = False
 
     # region properties
 
@@ -195,6 +198,12 @@ class UniLpMarket(Market):
 
         if market_status.data is None:
             market_status.data = self.data.loc[market_status.timestamp].copy()
+        if self.fee_in_range_liquidity:
+            total_virtual_liq = sum(
+                p.liquidity
+                for k, p in self._positions.items()
+                if V3CoreLib.earns_fee(self.last_tick, k, market_status.data.closeTick)
+            )
         market_status.data.currentLiquidity = market_status.data.currentLiquidity + total_virtual_liq
         self._market_status = market_status
 

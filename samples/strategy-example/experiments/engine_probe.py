@@ -9,6 +9,7 @@ difference anywhere shows up here even when a backtest's rounded CSVs hide it.
 Operations: add_liquidity_by_tick (around the price, ending exactly at the current tick, below it),
 add_liquidity (by price), add_liquidity_by_value, collect_fee, partial and full remove_liquidity, buy, sell, swap,
 even_rebalance; every minute the account net value; every 30 minutes market balance, position status and balances.
+Every pool runs twice: fee_in_range_liquidity off (default) and on (QUAN-1213).
 """
 import sys
 from datetime import date, timedelta
@@ -27,12 +28,13 @@ POOLS = {
 DAYS = 2
 
 
-def run(pool: str, out):
+def run(pool: str, fee_in_range: bool, out):
     (n0, d0), (n1, d1), qi, fee, path, day = POOLS[pool]
     t0, t1 = TokenInfo(name=n0, decimal=d0), TokenInfo(name=n1, decimal=d1)
     quote = t0 if qi == 0 else t1
     base = t1 if qi == 0 else t0
     market = UniLpMarket(MarketInfo("lp"), UniV3Pool(t0, t1, fee, quote))
+    market.fee_in_range_liquidity = fee_in_range
     market.data_path = f"{path}/{pool}"
     market.load_data(ChainType.ethereum.name, pool, day, day + timedelta(days=DAYS - 1))
     spacing = int(fee * 200)
@@ -139,9 +141,10 @@ def run(pool: str, out):
 
 def main():
     with open(sys.argv[1], "w") as out:
-        for pool in POOLS:
-            out.write(f"== {pool}\n")
-            run(pool, out)
+        for fee_in_range in (False, True):
+            for pool in POOLS:
+                out.write(f"== {pool} fee_in_range_liquidity={fee_in_range}\n")
+                run(pool, fee_in_range, out)
     print(f"engine_probe: {'rust' if hasattr(demeter, '_rs') else 'python'} engine -> {sys.argv[1]}")
 
 

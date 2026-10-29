@@ -2,7 +2,8 @@
 Rust engine vs python engine, two checks; both must match byte for byte:
 
 1. engine_probe.py on both engines: every market operation on three pools, every value as its full Decimal text
-   (catches a last-digit difference anywhere, even one a backtest's rounded CSVs would hide);
+   (catches a last-digit difference anywhere, even one a backtest's rounded CSVs would hide), with the
+   fee_in_range_liquidity flag off and on;
 2. short v6_validate runs: every result file (and the summary CSV except its `secs` column).
 
 Run it after any change under rust/ or demeter/; the pre-commit hook (.githooks) runs it when a commit touches those

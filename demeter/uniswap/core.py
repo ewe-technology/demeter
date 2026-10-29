@@ -171,6 +171,29 @@ class V3CoreLib(object):
             calc_amounts(weight_decimal)
 
     @staticmethod
+    def earns_fee(last_tick, pos: PositionInfo, close_tick) -> bool:
+        """
+        True when update_fee pays `pos` a non-zero fee for the minute from last_tick to close_tick
+        (UniLpMarket.fee_in_range_liquidity counts only these positions in the fee denominator).
+        """
+
+        def in_range(tick):
+            if tick >= pos.upper_tick:
+                return 1
+            elif tick < pos.lower_tick:
+                return -1
+            else:
+                return 0
+
+        now_in_range = in_range(close_tick)
+        if last_tick is None or last_tick != last_tick:  # no previous tick (None / NaN): update_fee pays in range only
+            return now_in_range == 0
+        if now_in_range == in_range(last_tick):
+            return now_in_range == 0
+        range_list = sorted([pos.lower_tick, pos.upper_tick, last_tick, close_tick])
+        return range_list[2] != range_list[1]
+
+    @staticmethod
     def update_fee_old(last_tick: int, pool: UniV3Pool, pos: PositionInfo, position: Position, state: UniV3PoolStatus):
         """
         update fee
