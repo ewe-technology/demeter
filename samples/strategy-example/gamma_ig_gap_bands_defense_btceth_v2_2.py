@@ -8,10 +8,13 @@ ETH-cbBTC MGL 規格書 v2.2（自動再投入，2026-10-27）的回測入口。
 * 再投入開啟：每月 1 日 00:00 判定與 claim（與當天的重建）之後，cbBTC 獎勵餘額全額加入原資，依當時 F 與 ETH 強弱的
   「目標」配置（第 4 節表格）分到 LP / ETH / BTC / USDC（v2.1 複利模式用「當時」比例）。LP 部分加進現有區間；F = 0
   時全額為撤退標的（弱勢 BTC、強勢 USDC）。餘額 <= $5 的月份不再投入，累積到下月（v2.1 複利模式沒有門檻）
-* 假設（規格書未寫，同 v3.2 沒有階梯時的規則）：目標 LP > 0 但沒有 LP 部位（F 未達 12.5% 追隨門檻）時，LP 部分也放撤退標的
+* 假設 1（規格書未寫，同 v3.2 沒有階梯時的規則）：目標 LP > 0 但沒有 LP 部位（偏離未達 12.5% 重建門檻，還沒建 LP）時，
+  LP 部分也放撤退標的
+* 假設 2（同 v2.1 複利模式）：LP 部分加進現有區間，不以當下池價重新置中（第 4 節「追加存入」是否含再投入未寫明）
+* 1 日缺 Binance 收盤時當天整個跳過（同 v2.1），該月不再投入也不記錄，餘額留到下月
 * 每月再投入判定寫在 <run folder>/reinvest_<report>.csv（略過的月份也記）
 
-以下為 v2.1 的說明（除第 5 節的模式外不變）。從 gamma_ig_gap_bands_defense_btceth_v2.py 複製（v2 檔是依前版規格書「WB＋ETH強勢25%」寫的），逐項對齊 v2.1：
+以下沿用 v2.1 的說明（v2.1 從 gamma_ig_gap_bands_defense_btceth_v2.py 複製，v2 檔依前版規格書「WB＋ETH強勢25%」）：
 
 * 訊號只用 Binance 日K（第 2 節）：G = sqrt(ETHUSDT x BTCUSDT)，R = ETHBTC 交易對；池價只用於 LP 評價與手續費。
   EMA 以 2017-08-17 為初始值連續計算，虛擬帳戶 2017-08-18 起執行，收盤 >= EMA_n 為已武裝滿倉（第 3 節「啟動時」）
@@ -19,15 +22,14 @@ ETH-cbBTC MGL 規格書 v2.2（自動再投入，2026-10-27）的回測入口。
   （低於 EMA100(G) x 0.95 為 25%、高於 EMA_n 為 70%、其餘 50%）；F_BY_VALUE = False 退回階段值
 * 重建條件 3 是「目標 LP >= 99.9%」（v2 檔寫 >= 100%，階段值時等價，價值比例時不等價）
 * 獎勵（第 5 節）：每天未收取手續費超過 $5 就 claim，重建與結算時一律 claim；扣成功報酬（預設 0，規格書數字為扣前）後，
-  WETH 換成 cbBTC。標準模式全額留作可領取的 cbBTC 餘額；複利模式累積為「待再投入」，每月 1 日 00:00 判定後依當時
-  LP / ETH / BTC / USDC 比例加入原資（LP 部分加進現有區間）
+  WETH 換成 cbBTC，計入獎勵餘額（cbBTC）。再投入方式見上方 v2.2 的說明
 * 區間（第 4 節，v2.1 新增）：中心用執行當下的池價，中心與上下邊界各自取最近的 tick spacing 倍數
   （v2 檔是先取整中心再加取整後的寬度，邊界可能差一個 spacing）
 * daily 檔以判定日 D 標記（第 2 節「日期」），另列執行時間
 
 未建模：防操縱檢查（池價對 Chainlink，回測的池價即成交價）、gas 壅塞與執行手續費（規格書數字也未扣）。
 池子預設 Base WETH/cbBTC 0.05%（2024-09-13 起有資料）；主網 WBTC/WETH 0.05% 是規格書校正手續費的池子，兩種 token 順序都支援。
-mode=plain 是「一般LP 20%」對照組：均等型 ±10%、無訊號、出界即重建，獎勵同標準模式。
+mode=plain 是「一般LP 20%」對照組：均等型 ±10%、無訊號、出界即重建，獎勵同再投入關閉。
 """
 import copy
 import math
@@ -442,7 +444,7 @@ class EthBtcMglStrategy(BaseRemixDaoStrategy):
               f"{'strong' if strong else 'weak'} equity {float(value):.4f} ETH range +-{float(ratio):.0%}")
 
     def reinvest(self, row_data: Snapshot, f: Decimal, strong: bool) -> None:
-        """Spec v2.2 section 5 auto reinvest: on the 1st after the judgement, claim and rebuild, add the whole reward
+        """Spec v2.2 section 5 auto reinvest: on the 1st after the judgement, the claim and any rebuild, add the whole reward
         balance (cbBTC) to the principal at the target LP / ETH / BTC / USDC shares for F and strength judged on D
         (reinvest_allocation). The LP part is added to the existing range (no recentring). A balance of REINVEST_MIN_USD
         or less stays in the reward balance until the next month."""
@@ -655,7 +657,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, pool_name: str = "base
     token0, token1 = (btc, eth) if btc_token0 else (eth, btc)
     fee = 0.05
     contract_usdc = "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"                                                    # weth/usdc
-    modes = modes or [MODE_REINVEST, MODE_NO_REINVEST]   # auto reinvest on (default) / off; add MODE_PLAIN for the spec's 一般LP 20% comparison
+    modes = modes or [MODE_REINVEST, MODE_NO_REINVEST]   # add MODE_PLAIN for the spec's 一般LP 20% comparison
     tick_spacing = int(fee * 200)   # 10
 
     gp = GlobalParams(token0=token0, token1=token1, fee=fee, init_quote=init_quote, quote_token=quote_token,
@@ -722,7 +724,7 @@ def _self_check():
     assert reinvest_allocation(Decimal(100), ZERO, True, False) == {"lp": ZERO, "eth": ZERO, "btc": ZERO, "usdc": ONE}
     assert reinvest_allocation(Decimal(5), half, True, True) is None                # $5 or less: carried to next month
     assert reinvest_allocation(Decimal("5.01"), half, True, True) is not None
-    # target LP > 0 but no position yet (F under the 12.5% follow threshold): the LP part goes to the retreat asset
+    # target LP > 0 but no position yet (drift stayed under the 12.5% rebuild trigger): the LP part goes to the retreat asset
     assert reinvest_allocation(Decimal(100), tenth, False, False) == {"lp": ZERO, "eth": ZERO, "btc": ONE, "usdc": ZERO}
     assert reinvest_allocation(Decimal(100), tenth, True, False) == {
         "lp": ZERO, "eth": Decimal("0.025"), "btc": ZERO, "usdc": Decimal("0.975")}
