@@ -17,7 +17,6 @@ Usage, from samples/strategy-example with the Rust engine (no PYTHONPATH):
     $PY experiments/lookahead_audit.py v32|v22 [--leak] [YYYY-MM-DD[:pool] ...]   # default: the 5 dates below
 Results: RESULT_DIR/<strategy>[-leak]/<D>-short|long/ and summary_<strategy>[-leak].csv.
 """
-import os
 import sys
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -183,8 +182,8 @@ def run_v32(d: date, pool_name: str, leak: bool, folder: Path) -> dict:
     settings of its process_for_date."""
     if pool_name != "mainnet":
         raise ValueError("v3.2 runs on mainnet 0x88e6 only here")
-    os.environ.setdefault("FEE_IN_RANGE_LIQUIDITY", "1")   # read when the module is imported
     import gamma_maker_defense_ethusdc_v3_2 as m
+    m.FEE_IN_RANGE_LIQUIDITY = True   # the validation setting (QUAN-1213); run_test reads it per run
     from demeter import ChainType, TokenInfo
     from demeter.uniswap import UniV3Pool
     from market_v2 import UniLpMarketV2
@@ -234,10 +233,13 @@ def run_v32(d: date, pool_name: str, leak: bool, folder: Path) -> dict:
     return out
 
 
+RUNNERS = {"v32": run_v32, "v22": run_v22}
+
+
 def truncation_test(strategy: str, d: date, pool_name: str, leak: bool) -> dict:
     """One date: run short and long, compare everything up to D 00:00. Returns one summary row."""
     folder = RESULT_DIR / f"{strategy}{'-leak' if leak else ''}"
-    runs = (run_v32 if strategy == "v32" else run_v22)(d, pool_name, leak, folder)
+    runs = RUNNERS[strategy](d, pool_name, leak, folder)
     short, long = runs["short"], runs["long"]
     cut = datetime.combine(d, datetime.min.time())
     row = {"strategy": strategy, "pool": pool_name, "D": d, "start": d - timedelta(days=LEAD_DAYS), "leak": leak}
@@ -340,5 +342,8 @@ def _self_check():
 if __name__ == "__main__":
     _self_check()
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))   # the strategy scripts
+    if len(sys.argv) > 1 and sys.argv[1] != "gas":
+        import engine_guard
+        engine_guard.require_rust("lookahead_audit.py")
     if len(sys.argv) > 1:
         main(sys.argv[1:])
