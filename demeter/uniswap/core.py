@@ -186,7 +186,8 @@ class V3CoreLib(object):
                 return 0
 
         now_in_range = in_range(close_tick)
-        if last_tick is None or last_tick != last_tick:  # no previous tick (None / NaN): update_fee pays in range only
+        # no previous tick (None / NaN): update_fee pays in range only (out of range it raises)
+        if last_tick is None or last_tick != last_tick:
             return now_in_range == 0
         if now_in_range == in_range(last_tick):
             return now_in_range == 0

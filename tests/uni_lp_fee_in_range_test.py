@@ -67,7 +67,8 @@ class FeeInRangeLiquidityTest(unittest.TestCase):
         self.assertEqual(self.denominator(), POOL_LIQ + self.liq(self.inside) + self.liq(self.below))
 
     def test_on_skips_a_range_the_price_only_touched_at_its_edge(self):
-        # TICK -> TICK + 2000: ends exactly on `above`'s lower tick, which update_fee pays no fee for (zero overlap)
+        # judged minute TICK + 1000 -> TICK + 2000: ends exactly on `above`'s lower tick, which update_fee pays no fee
+        # for (zero overlap)
         self.market.fee_in_range_liquidity = True
         self.set_tick(TICK + 1000)   # leave `inside` (upper tick is exclusive)
         self.set_tick(TICK + 2000)

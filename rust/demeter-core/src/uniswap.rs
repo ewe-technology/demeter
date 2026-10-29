@@ -69,7 +69,7 @@ pub fn earns_fee(last_tick: Option<i32>, info: &PositionInfo, close_tick: i32) -
     };
     let now = in_range(close_tick);
     match last_tick {
-        // no previous tick: update pays in range only
+        // no previous tick: update pays in range only (out of range it pays nothing or raises, QUIRK 1)
         None => now == 0,
         Some(last) if in_range(last) == now => now == 0,
         Some(last) => {
@@ -240,6 +240,18 @@ impl UniLpMarket {
         Ok(v)
     }
 
+    /// Our liquidity added to the pool's in the fee denominator: all of it, or with
+    /// `fee_in_range_liquidity` only the positions that earn a fee from `last_tick` to `close_tick`.
+    fn own_fee_liquidity(&self, close_tick: i32) -> u128 {
+        self.positions
+            .iter()
+            .filter(|(info, _)| {
+                !self.fee_in_range_liquidity || earns_fee(self.last_tick, info, close_tick)
+            })
+            .map(|(_, p)| p.liquidity)
+            .sum()
+    }
+
     /// python `set_market_status` (called by the actuator at the start of every iteration and
     /// again after `on_bar` when `has_update` is set).
     pub fn set_market_status(&mut self, ts: Ts) -> Result<()> {
@@ -247,7 +259,6 @@ impl UniLpMarket {
         let row = data.row_of(ts);
         self.is_open = row.is_some();
         self.has_update = false;
-        let total_virtual_liq: u128 = self.positions.iter().map(|(_, p)| p.liquidity).sum();
         match &self.status {
             None => self.last_tick = None,
             Some(prev) if prev.ts != ts => self.last_tick = Some(prev.bar.close_tick),
@@ -267,16 +278,7 @@ impl UniLpMarket {
             ))
         })?;
         let mut bar = data.bars[row].clone();
-        let total_virtual_liq = if self.fee_in_range_liquidity {
-            self.positions
-                .iter()
-                .filter(|(info, _)| earns_fee(self.last_tick, info, bar.close_tick))
-                .map(|(_, p)| p.liquidity)
-                .sum()
-        } else {
-            total_virtual_liq
-        };
-        bar.current_liquidity += total_virtual_liq;
+        bar.current_liquidity += self.own_fee_liquidity(bar.close_tick);
         self.status = Some(MarketStatus {
             ts,
             row,
@@ -295,7 +297,6 @@ impl UniLpMarket {
             Some(d) => d.row_of(ts).is_some(),
         };
         self.has_update = false;
-        let total_virtual_liq: u128 = self.positions.iter().map(|(_, p)| p.liquidity).sum();
         match &self.status {
             None => self.last_tick = None,
             Some(prev) if prev.ts != ts => self.last_tick = Some(prev.bar.close_tick),
@@ -309,16 +310,7 @@ impl UniLpMarket {
             .and_then(|d| d.row_of(ts))
             .unwrap_or(usize::MAX);
         let mut bar = bar;
-        let total_virtual_liq = if self.fee_in_range_liquidity {
-            self.positions
-                .iter()
-                .filter(|(info, _)| earns_fee(self.last_tick, info, bar.close_tick))
-                .map(|(_, p)| p.liquidity)
-                .sum()
-        } else {
-            total_virtual_liq
-        };
-        bar.current_liquidity += total_virtual_liq;
+        bar.current_liquidity += self.own_fee_liquidity(bar.close_tick);
         self.status = Some(MarketStatus {
             ts,
             row,

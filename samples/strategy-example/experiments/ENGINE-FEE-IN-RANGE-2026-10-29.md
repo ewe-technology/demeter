@@ -37,8 +37,11 @@ Raw: `result/quan1213/` in the main checkout (four run folders, logs, `compare_v
 | end value | 222,864 | 220,393 (−1.11%) | 295,614 | 298,873 (+1.10%) |
 | max DD, UTC-0 daily % | −17.82% | −19.35% | −24.16% | −24.10% |
 
-**2. Fee effect alone: depth fixed at the pool's own liquidity** (scratch copy, depth = data `currentLiquidity`
-without ours, in both arms; same swap costs, so only the fee changes):
+**2. Fee effect alone: depth fixed at the pool's own liquidity** (same swap costs, so only the fee changes). Scratch
+copy of the script, not committed: in `execute_swap`, `liquidity = status.currentLiquidity` becomes the data row's
+own value, `lp_market.data["currentLiquidity"].loc[lp_market.market_status.timestamp]` (series cached once), and
+`-rawdepth` is added to the folder name; both arms use it. Numbers: `experiments/fee_in_range_compare.py
+result/quan1213 -rawdepth` (table 1: no suffix).
 
 | | reinvest off: flag off | on | reinvest on: flag off | on |
 |---|---|---|---|---|

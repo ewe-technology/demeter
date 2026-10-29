@@ -180,7 +180,7 @@ which mode your results should use, and do not compare numbers across modes.
 Not a quirk switch, a model fix in both engines (QUAN-1213): `market.fee_in_range_liquidity`
 (python `UniLpMarket`, Rust `UniLpMarket::fee_in_range_liquidity`, default `False`). Off, the fee
 denominator (`market_status.data.currentLiquidity`) is the pool's liquidity plus all our own; on,
-plus only our positions that earn a fee in that minute (`V3CoreLib.earns_fee` / `earns_fee`, the
+plus only our positions that earn a fee in that minute (python `V3CoreLib.earns_fee`, Rust `uniswap::earns_fee`, the
 same rule as `update_fee`), so out-of-range positions stop diluting the in-range ones. A strategy
 that reads `currentLiquidity` for its own model (e.g. a depth slippage) sees the change too.
 `engine_check.py` compares the engines with it off and on.
