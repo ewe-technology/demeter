@@ -1,0 +1,65 @@
+# Validation layer fit: L0-L10 for ETH-USDC v3.2 / ETH-cbBTC v2.2 (2026-10-29)
+
+Jira QUAN-1211 (stage 1 of QUAN-1209). For each of Maker's 11 validation layers (`GLOSSARY.md`), says whether it can
+run on our two strategies, why in one line, and what method and data it needs. No backtest was run for this note.
+
+Sources: Maker's ladder and his advice in #scrum-quant-amm, 2026-10-28 15:23
+([link](https://ewetechnology.slack.com/archives/C0BQH8SBV9Q/p1793172230988799));
+`RESEARCH-2026-10-13-strategy-validation.md` (methods, primary sources); `VALIDATION-2026-10-13-defense-v1-v3-demeter.md`
+(the last scorecard, v1-v3); `REPRO-2026-10-29-remix-v3_2-v2_1.md` (engine and data audit); `INVENTORY.md` (pools).
+
+## What the two strategies give the layers to work with
+
+| | ETH-USDC MGL v3.2 | ETH-cbBTC MGL v2.2 |
+|---|---|---|
+| code | `gamma_maker_defense_ethusdc_v3_2.py` (Steven, remix `a042a82`) | none yet: v2.1 + target-allocation reinvest (QUAN-1212) |
+| unit | USD, $100k | ETH, 1 ETH |
+| target pool | mainnet USDC/WETH 0.05% `0x88e6` (spec); Base contract runs WETH/USDC `0xd0b5` | Base WETH/cbBTC 0.05% `0x7aea` (spec calibrated on mainnet WBTC/WETH `0x4585`) |
+| pool minute data | `0x88e6` 2021-05-06..2026-09-30 (5.4 y); `0xd0b5` from 2023-12-01 (2.8 y) | `0x4585` 2021-11-02..2026-09-30 (4.9 y); `0x7aea` from 2024-09-13 (2.0 y) |
+| signal data | Binance ETHUSDT daily closes from 2017-08 | Binance ETHUSDT, BTCUSDT, ETHBTC daily closes from 2017-08 |
+| fitted per window? | no: spec constants (EMA 90-120, ±20% valley, refill ladder, +40% divergence exit) | no: spec constants (same F engine on G, strength switch on R, 25% ETH keep) |
+| constants frozen | spec v3.2, 2026-10-27, after all the pool data above | spec v2.1, 2026-10-27, same |
+
+Two facts drive most verdicts below. Nothing is refitted per window, so layers built around a fitting step test
+nothing new. Every year of pool data was seen before the constants were frozen, so no backtest window is a clean
+out-of-sample test; only data after 2026-10-27 is.
+
+## Layer table
+
+"can" = runs on the data and code we have, with a meaningful answer. "can, limited" = runs, but the answer is weak for
+the reason given. "can't" = no meaningful answer now.
+
+| layer | v3.2 | v2.2 | 1-line reason | method + data it needs | Maker 10-28 |
+|---|---|---|---|---|---|
+| L0 backtest | can | can (after QUAN-1212) | Engine and data pass the audit; three cost / metric defects must be fixed first | demeter on Rust, full history per pool; fee denominator in-range only (QUAN-1213), % DD from daily NV, reward valuation stated (fixed vs marked), gas charged at the target chain's price, swap cost as the spec says (flat 0.1%) and as the pool says (fee + depth) | do first (cost P0) |
+| L1 walk-forward | can, limited | can, limited | Nothing is refitted, so walk-forward reduces to a yearly expanding-window report with constants held fixed | one continuous run, results cut per calendar year 2022 / 2023 / 2024 / 2025 / 2026-01..09; anchored windows 2022, 2022-23, ... ; `0x88e6`, `0x4585` | do (with L5) |
+| L2 MCPT | can, limited | can, limited | Permuting prices needs synthetic swap data (demeter replays real swaps); permuting the strategy's own decisions on the real path does not | decision-permutation: keep the real pool path, shuffle the dates of F changes / exits (same count and sizes), 500-1,000 reruns, p = share of shuffles that beat the real rule; needs a rerun harness (~1 min per run per year on Rust) | skip for now |
+| L3 block bootstrap | can | can | Daily NV returns exist for every run; resampling returns needs no new backtest (resampling prices would) | stationary bootstrap of daily log returns, mean block 20 d (mean) and 90 d (one-year paths, DD and loss probability); `strategy_validation.py` methods 3 / 5 already do it | skip for now (price paths) |
+| L4 multiple testing | can | can | The spec went through many versions and sweeps; the count of tries is the input, not a Bonferroni divisor | trial ledger: every spec version (v1, v2, v3, v3.1, v3.2 / v1..v2.1) and every parameter sweep Maker / Steven / CTO ran counts as a trial; haircut the Sharpe by N (DSR) and report N beside every result; our own `registry.csv` covers only this branch | do (ledger, not Bonferroni) |
+| L5 out-of-sample | can, limited | can, limited | All pool data predates the 2026-10-27 freeze: years are pseudo-OOS; clean OOS is 2026-10 onward only | pseudo-OOS: the L1 yearly table, judged on the later years; clean OOS: refetch `0x88e6` / `0xd0b5` / `0x7aea` after 2026-10-27 each month (`fetch_uni_minute.py`) and rerun frozen code | do (with L1) |
+| L6 regime split | can | can | Bull / bear / chop labels split the existing runs; ~5 years give few episodes per regime | label each day or window bull / bear / range with Maker's `pair_regime.py` (not in this repo or on `remix` / `maker-defense`: ask Maker) or an EMA200-slope + drawdown rule fixed before looking; report return and DD per regime; v3.2 on ETH/USD, v2.2 on ETH/BTC (R) | do |
+| L7 CPCV | can't | can't | CPCV checks a fitting step on held-out folds; nothing is fitted, and 4-5 years of daily data give too few independent folds | would need a parameter-selection step plus purged folds | skip |
+| L8 PSR | can | can | One formula on daily returns, already in `strategy_validation.py`; LP returns are fat-tailed, so it is a report, not a gate | PSR from daily log returns (skew, kurtosis), bar 0.95; for v2.2 on returns in ETH | optional, add to metrics |
+| L9 reality check / SPA | can't | can't | No competing set of daily return series exists for these specs (the versions were not run side by side), and 4-5 years give little power | would need daily NV of every tried version / sweep on the same window, then `arch.bootstrap.SPA` | skip |
+| L10 paper trading | can (not in this story) | can (not in this story) | Only a live dry-run shows fills, slippage and gas; it takes 6-12 months, past QUAN-1209's due date (2026-11-13) | a bot runs the frozen code on live Base data without funds; compare daily its intended actions, fills and costs with the backtest replay of the same days | do before deploy |
+
+## Plan for stage 3 (QUAN-1216)
+
+Order follows Maker's advice; stage 3 starts only when the stage-2 preconditions pass (QUAN-1212..1215).
+
+1. L0 on both strategies with the fixed engine and stated costs.
+2. L1 + L5 as one yearly table per pool, constants frozen; clean OOS rows added monthly.
+3. L6 per-regime rows from the same runs.
+4. L4 trial count beside every number; L3 and L8 from the same daily returns (no new backtests).
+5. L2 decision-permutation only if steps 1-4 leave the verdict open.
+
+Scorecard rows for L7 and L9 say "not applicable" with the reason above. L10 is recorded as "pending" and opens its
+own ticket.
+
+## Open questions
+
+- `pair_regime.py`, `BACKTEST_COST_TODO.md`, `RANGE_TUNING` and "T16" in Maker's message are not in this repo or on
+  `remix` / `maker-defense`: need Maker's copy or location before L6 uses his labels.
+- v3.2 target pool for the scorecard: mainnet `0x88e6` (spec numbers, 5.4 y) or Base `0xd0b5` (the contract's chain,
+  2.8 y). Proposal: score both, judge on `0x88e6`, show Base as the target-chain check.
+- The trial count for L4 needs Maker / Steven's list of versions and sweeps behind each spec.
