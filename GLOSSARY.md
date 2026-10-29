@@ -16,6 +16,11 @@ _Avoid_: method (the old 1-5 numbering of `strategy_validation.py`), level, test
 The per-layer pass / fail table for one strategy on one pool.
 _Avoid_: report, verdict table
 
+**Truncation test**:
+The look-ahead check: one backtest gets only the inputs a live bot has at D 00:00 UTC, one gets 30 more days; every
+action up to D 00:00 must be identical (`experiments/lookahead_audit.py`).
+_Avoid_: leak test, cut test
+
 ## Accounting
 
 **Reward valuation**:
