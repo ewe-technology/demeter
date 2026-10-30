@@ -7,6 +7,9 @@ ETH-USDC MGL 規格書 v3.2 的回測入口。從 gamma_maker_defense_ethusdc_v3
 3. 成功報酬：每次 claim 由合約先扣 SUCCESS_FEE_RATE（規格 25%，預設 0 = 規格書第 7 節的扣除前數字），只有淨獎勵進餘額／再投入。
 4. 回測：2021/5/5 收盤（5/6 00:00）〜2026/8/31 連續一段，$100k，乖離撤出中以全額 USDC 開始。
 每月再投入記錄寫在 <run folder>/reinvest_<report>.jsonl。
+QUAN-1215（2026-10-30）：第 4 節每日規則 1、2 改以 Binance 收盤價判定（收盤 > 中心收盤 × 1.20 / < 中心收盤 × 0.80，
+中心收盤 = 建立階梯當天判定用的收盤價，range_break）；池價只用來放區間。BREAK_ON_POOL_TICK=1 恢復舊判定（00:00 池價 tick
+超出最外側區段，結果資料夾加 "-breaktick"）。
 以下為 v3.1 的說明：
 
 ETH-USDC MGL 規格書 v3.1 的回測入口。從 gamma_maker_defense_ethusdc_v3.py 複製，對齊 v3.1 與 v3 程式的差異：
@@ -189,7 +192,7 @@ REFILL_STAGES = ((1, 1.075), (2, 1.125), (3, 1.175), (4, 1.225))  # (stage, clos
 FOLLOW_THRESHOLD = Decimal("0.125")
 # spec section 4 rule 3, besides |F - current| >= FOLLOW_THRESHOLD: rebuild when F >= FOLLOW_FULL_F but the book is more than
 # FOLLOW_FULL_GAP short of full, or when F is 0 but more than FOLLOW_EMPTY_TOL is still in the ladder (spec: any position).
-# ponytail: the spec's tight values; a dropped zero-liquidity band leaves ~1.3% out of the ladder, so a rebuild that cannot
+# ponytail: the spec's tight values; a dropped zero-liquidity band leaves <= 0.84% out of the ladder, so a rebuild that cannot
 # reach 99% would repeat daily until the price leaves that tick. The earlier runs used 0.98 / 0.02 / 0.02: widen if it loops.
 FOLLOW_FULL_F, FOLLOW_FULL_GAP, FOLLOW_EMPTY_TOL = Decimal("0.999"), Decimal("0.01"), Decimal("0")
 # spec section 3: a virtual account's share in the LP is (virtual LP value / virtual account assets), which drifts
@@ -222,6 +225,11 @@ SUCCESS_FEE_RATE = Decimal(0)
 # of the ladder no longer dilute the in-range ones). Off by default (the numbers so far); FEE_IN_RANGE_LIQUIDITY=1 turns it on
 # and adds "-feeinrange" to the result folder. Validation runs with it on.
 FEE_IN_RANGE_LIQUIDITY = os.environ.get("FEE_IN_RANGE_LIQUIDITY") == "1"
+# QUAN-1215, spec section 4 daily rules 1-2: in signal mode the range break is judged on the Binance close of day D against the
+# Binance close the ladder was built on (close > centre x UPPER_REBUILD / < centre x LOWER_STOP); the pool price only places
+# the bands. BREAK_ON_POOL_TICK=1 restores the earlier check (the 00:00 pool tick outside the placed ticks, 1 of 16 breaks
+# differs on 0x88e6) and adds "-breaktick" to the result folder.
+BREAK_ON_POOL_TICK = os.environ.get("BREAK_ON_POOL_TICK") == "1"
 
 
 def build_virtual_lp(value: float, centre: float, eth_share: float) -> List[Tuple[float, float, float]]:
@@ -411,6 +419,16 @@ def target_fraction_for(daily: pd.DataFrame, timestamp: datetime) -> Decimal:
 def diverged_for(daily: pd.DataFrame, timestamp: datetime) -> bool:
     """Divergence flag (spec v3 section 5) on the last completed day."""
     return bool(daily_row_for(daily, timestamp)[1]["diverged"])
+
+
+def range_break(close: float, centre: float) -> int:
+    """Spec section 4 daily rules 1-2 on daily closes: 1 = upper break (close > centre x UPPER_REBUILD, recentre),
+    -1 = lower break (close < centre x LOWER_STOP, all USDC), 0 = inside (both edges included)."""
+    if close > centre * UPPER_REBUILD:
+        return 1
+    if close < centre * LOWER_STOP:
+        return -1
+    return 0
 
 
 def reinvest_split(balance: Decimal, target: Decimal) -> Tuple[Decimal, Decimal, bool]:
@@ -656,6 +674,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         # spec section 4 rules 1-2, set by rescale_work for a range-break rebuild (signal mode): upper break keeps the
         # current size, lower break goes all quote; the follow-F step of the same day then sizes it to F if due
         self.build_fraction: Decimal | None = None
+        self.centre_close: float | None = None  # Binance close the ladder was (re)built on (signal mode), for range_break
         self.follow_rebuild_count = 0
         self.fee_log: List[dict] = []    # daily: collected fees (quote) + pending fees still in the positions
         # spec sheet s: base (ETH) share of total value before the bands are placed. None keeps the
@@ -997,14 +1016,28 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         free_quote = self.broker.get_token_balance(self.gp.quote_token) - self.held_quote_fee
         return max(ZERO, min(base * share, free_base)), max(ZERO, min(quote * share, free_quote))
 
-    def check_rebalance(self, lp_market: UniLpMarketV2, current_tick: int) -> bool:
-        # Check if the current price is outside the current LP range
-        rebalance = False
-        if not (self.positions[0][0] <= current_tick < self.positions[-1][1]):
-            rebalance = True
+    def range_side(self, current_tick: int, timestamp: datetime) -> int:
+        """Which edge of the ladder the price broke (1 upper, -1 lower, 0 none). Signal mode: range_break on the judged
+        Binance close (spec); otherwise, or with BREAK_ON_POOL_TICK, the pool tick outside the placed ticks (when token0
+        is the quote a lower tick is a higher ETH price, so below the lowest tick = upper break)."""
+        if not self.positions:
+            return 0
+        if self.signal_deploy and not BREAK_ON_POOL_TICK:
+            return range_break(self.judged_close(timestamp), self.centre_close)
+        side = 1 if self.positions[0][0] > current_tick else -1 if current_tick >= self.positions[-1][1] else 0
+        if side:
             print("allow rescale", self.positions[0][0], current_tick, self.positions[-1][1])
+        return side
 
-        return rebalance
+    def judged_close(self, timestamp: datetime) -> float:
+        """Binance close of the last completed day, the one every rule at `timestamp` judges on."""
+        return float(daily_row_for(self.daily_ema, timestamp)[1]["close"])
+
+    def note_centre(self, timestamp: datetime):
+        """Remember the Binance close a (re)build is centred on (the pool price places the bands, spec v3.1 section 4).
+        Every path that refills self.positions (first_lp, rescale_work) must call it."""
+        if self.signal_deploy:
+            self.centre_close = self.judged_close(timestamp)
 
     def get_balance_base_quote_amounts(self) -> tuple[Decimal, Decimal]:
         base = self.broker.get_token_balance(self.gp.base_token)
@@ -1027,7 +1060,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         current_price = row_data.prices[self.gp.base_token.name]
         try:
             current_tick = lp_market.price_to_raw_tick(current_price)
-            allow_rescale = self.force_rebuild or self.check_rebalance(lp_market, current_tick)
+            side = self.range_side(current_tick, row_data.timestamp)
+            allow_rescale = self.force_rebuild or side != 0
 
             # Check if rescaling is allowed
             if not allow_rescale:
@@ -1038,13 +1072,13 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
 
             if not old_position_infos:
                 pass  # follow rebuild from an empty book (F was 0)
-            elif old_position_infos[0][0] > current_tick:
+            elif side == 1:
                 self.upper_rescale_count += 1
                 if self.signal_deploy and not self.force_rebuild:  # spec rule 1: recentre, keep the current size
                     # v3: flag ON means F' = 0, so go straight to USDC instead of rebuilding and withdrawing at the next follow_work
                     self.build_fraction = ZERO if diverged_for(self.daily_ema, row_data.timestamp) \
                         else self.lp_fraction(lp_market, current_price)
-            elif current_tick >= old_position_infos[-1][1]:
+            elif side == -1:
                 self.lower_rescale_count += 1
                 if self.signal_deploy and not self.force_rebuild:  # spec rule 2: everything to quote, follow F re-enters
                     self.build_fraction = ZERO
@@ -1203,6 +1237,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             #     f"tick: {current_tick}, s: {old_position_info}, position_info: {str(self.utils.current_position_info)}, was_in_range: {self.was_in_range}, price: {current_price}")
 
             self.last_rescale_tick = current_tick
+            self.note_centre(row_data.timestamp)
             self.was_in_range = False
 
         finally:
@@ -1275,6 +1310,7 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         print(
             f"\nadding first liquidity, price: {str(current_price)}, range: {str(lower_boundary)} ~ {str(upper_boundary)}, price: {_lower_price} ~ {_upper_price}, current tick: {current_tick}")
 
+        self.note_centre(row_data.timestamp)
         self.was_in_range = True
         self.last_price = self.last_dca_price = self.last_check_price = current_price
 
@@ -1675,6 +1711,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
                       f"{'' if SLIPPAGE_MODEL is None else f'-slip{SLIPPAGE_MODEL}'}"
                       f"{'' if SUCCESS_FEE_RATE == ZERO else f'-sfee{float(SUCCESS_FEE_RATE) * 100:g}'}"
                       f"{'-feeinrange' if FEE_IN_RANGE_LIQUIDITY else ''}"
+                      f"{'-breaktick' if BREAK_ON_POOL_TICK else ''}"
                       f"{'' if F_BY_VALUE else '-fstage'}"
                       f"{'' if SPEC_START else '-v1start'}")
     _dca_add_if_non_empty = False
@@ -2025,6 +2062,10 @@ def _self_check():
     assert reinvest_split(Decimal(1000), Decimal("0.75")) == (Decimal(750), Decimal(250), False)
     assert reinvest_split(Decimal(1000), ZERO) == (ZERO, Decimal(1000), False)
     assert reinvest_split(Decimal(5), ONE) == (ZERO, ZERO, True) and reinvest_split(Decimal("5.01"), ONE)[2] is False
+    # spec section 4 daily rules 1-2 on the Binance close vs the ladder's centre close: > c x 1.20 upper, < c x 0.80 lower,
+    # both edges themselves stay inside (strict comparisons)
+    assert range_break(2401.0, 2000.0) == 1 and range_break(2400.0, 2000.0) == 0
+    assert range_break(1599.0, 2000.0) == -1 and range_break(1600.0, 2000.0) == 0 and range_break(2000.0, 2000.0) == 0
     # swap_to_value_share: after the swap, base holds exactly base_share of total value
     for base, quote, price, want in [(Decimal(0), Decimal(100000), Decimal(2000), Decimal("0.7")),
                                      (Decimal(25), Decimal(50000), Decimal(2000), Decimal("0.7")),
