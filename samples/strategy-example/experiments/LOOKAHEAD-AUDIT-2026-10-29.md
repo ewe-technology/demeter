@@ -84,7 +84,9 @@ never read (Chainlink, gas).
 
    Gas units are assumptions (no contract to measure). On `0x88e6` the full-ladder claim never passes: live, rewards
    would be claimed only at rebuilds, so the reward balance and the monthly reinvest are smaller than the backtest's.
-   On Base (`0xd0b5`, the other v3.2 pool candidate) gas is cents or less, so the rule holds as modelled. Not sized here.
+   On Base (the contract's LP pool WETH/USDC 0.3% `0x6c56`) gas is cents or less, so the rule holds as modelled. Not
+   sized here. Decision 2026-10-30 (Dino): judge v3.2 on `0x88e6` with this condition modelled; `0x6c56` is the
+   contract check.
 2. **Anti-manipulation check (both).** Not modelled. Live it can only skip or delay a trade the backtest makes, on days
    the pool and Chainlink disagree beyond the spec's tolerance.
 3. **Execution delay (both).** Live fills seconds to minutes after 00:00 at that moment's pool price; the backtest uses
