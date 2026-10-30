@@ -86,7 +86,10 @@ never read (Chainlink, gas).
    would be claimed only at rebuilds, so the reward balance and the monthly reinvest are smaller than the backtest's.
    On Base (the contract's LP pool WETH/USDC 0.3% `0x6c56`) gas is cents or less, so the rule holds as modelled. Not
    sized here. Decision 2026-10-30 (Dino): judge v3.2 on `0x88e6` with this condition modelled; `0x6c56` is the
-   contract check.
+   contract check. Modelled 2026-10-30 (QUAN-1216, `CLAIM_GAS_CAP=1`, gas units as above per live band): 0 daily
+   claims in 2021-05..2026-08, rewards claimed at rebuilds only; end value +0.96% (reinvest off) / +0.86% (on), see
+   `VALIDATION-2026-10-29-v3_2-v2_2.md`. v2.2's spec has the same condition (CODE-VS-SPEC section 2 row 39): not
+   modelled on mainnet `0x4585`.
 2. **Anti-manipulation check (both).** Not modelled. Live it can only skip or delay a trade the backtest makes, on days
    the pool and Chainlink disagree beyond the spec's tolerance.
 3. **Execution delay (both).** Live fills seconds to minutes after 00:00 at that moment's pool price; the backtest uses

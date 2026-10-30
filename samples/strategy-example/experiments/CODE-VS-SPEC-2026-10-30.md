@@ -12,7 +12,7 @@ deposits while the flag is ON). Of the 6 that differ:
 * fixed here: the range break is now judged on the Binance close (row 24);
 * kept and reported: depth slippage instead of the flat 0.1% (row 31), real pool fees instead of the fee formula (row 54);
 * kept and documented: the dropped empty band (row 30), mainnet instead of Base (row 34);
-* not modelled: the gas <= $0.2 claim condition (row 44).
+* not modelled at first: the gas <= $0.2 claim condition (row 44); modelled since QUAN-1216 (`CLAIM_GAS_CAP=1`).
 
 v2.2: 56 rules, no logic bug. One open point is for the spec: v2.2 judges "out of range" on the pool price, and its
 spec does not say which price. The fix moves 1 of v3.2's 16 range breaks by 3 days and the end value by +$0.3k
@@ -27,7 +27,7 @@ the spec; keep, report = kept, number reported both ways; keep, documented = kep
 Known gaps decided in the ticket: (a) range break on the pool tick -> fix to the Binance close; (b) depth slippage
 instead of a flat 0.1% -> keep, also report flat 0.1% (2026-10-30: validation uses the flat 0.1%, see
 ENGINE-FEE-IN-RANGE-2026-10-29.md); (c) an inner band left without ETH by rounding is dropped -> keep
-(<= 0.84% of the book idle); (d) gas <= $0.2 claim condition not modelled (LOOKAHEAD-AUDIT section 3).
+(<= 0.84% of the book idle); (d) gas <= $0.2 claim condition not modelled (LOOKAHEAD-AUDIT section 3) -> modelled in QUAN-1216.
 
 | # | section | spec rule | code (file:line, what it does) | same / differs | action |
 |---|---|---|---|---|---|
@@ -74,7 +74,7 @@ ENGINE-FEE-IN-RANGE-2026-10-29.md); (c) an inner band left without ETH by roundi
 | 41 | 5 | Back to OFF: F' = F at once, full ladder if F = 1, no staged refill | `follow_work` rebuilds at F' (L926-937) | same | none |
 | 42 | 5 | New deposits held in USDC while ON | One initial deposit only | not modelled | not modelled |
 | 43 | 6 | Daily claim after the judgement when unclaimed > $5 | `claim_work` L829-845, `CLAIM_MIN_USD=5` L212 | same | none |
-| 44 | 6 | ... and estimated gas <= $0.2 (else delay) | Not modelled (comment L211) | differs (d) | not modelled |
+| 44 | 6 | ... and estimated gas <= $0.2 (else delay) | Not modelled (comment L211); QUAN-1216: `claim_work` waits while `claim_gas_usd` > $0.2 (`CLAIM_GAS_CAP=1`) | same with the flag (d) | fixed (QUAN-1216) |
 | 45 | 6 | Claim at every rebuild regardless of size | `rescale_work` L1055-1056 | same | none |
 | 46 | 6 | Success fee 25% deducted at claim | `SUCCESS_FEE_RATE=0` L220 (spec section 7 is before the fee) | same as the spec backtest | keep, documented |
 | 47 | 6 | ETH part of the net reward swapped to USDC | L983-986, after the success fee (pays the 0.05% pool fee, N2) | same | none |

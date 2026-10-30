@@ -10,6 +10,9 @@ ETH-USDC MGL 規格書 v3.2 的回測入口。從 gamma_maker_defense_ethusdc_v3
 QUAN-1215（2026-10-30）：第 4 節每日規則 1、2 改以 Binance 收盤價判定（收盤 > 中心收盤 × 1.20 / < 中心收盤 × 0.80，
 中心收盤 = 建立階梯當天判定用的收盤價，range_break）；池價只用來放區間。BREAK_ON_POOL_TICK=1 恢復舊判定（00:00 池價 tick
 超出最外側區段，結果資料夾加 "-breaktick"）。
+QUAN-1216（2026-10-30）：第 6 節每日 claim 另需預估 gas ≤ $0.2，否則延到之後的日子（CLAIM_GAS_CAP=1 開啟，資料夾加
+"-gascap"，只限 mainnet）。gas = 每個有效區段一次 collect 75k + 一次 ETH→USDC swap 120k，gas 價取判定時點前最後一筆
+（samples/gas_ethereum_hourly.csv），ETH 價用池價。重建時的 claim 不受限。
 以下為 v3.1 的說明：
 
 ETH-USDC MGL 規格書 v3.1 的回測入口。從 gamma_maker_defense_ethusdc_v3.py 複製，對齊 v3.1 與 v3 程式的差異：
@@ -18,7 +21,7 @@ ETH-USDC MGL 規格書 v3.1 的回測入口。從 gamma_maker_defense_ethusdc_v3
 2. 第 4 節「中心價的決定方式」：中心與 16 條邊界都取「最近的 tick spacing 倍數」，即每條邊界 = 池價 tick + 精確偏移後再取整
    （ROUND_EACH_BOUNDARY）。v3 是中心與偏移各自取整再相加，最多差 1 個 spacing。
 3. 第 6 節一般 claim：每天 00:00 判定後，未收取獎勵 > $5 就 claim 並把 ETH 換成 USDC（CLAIM_MIN_USD）。v3 只在重建與每月 1 日 claim。
-   預估 gas 費 ≤ $0.2 的條件、成功報酬與執行手續費不計（規格書第 7 節回測同樣不扣）。
+   預估 gas 費 ≤ $0.2 的條件（v3.2 由 QUAN-1216 補上，見上方）、成功報酬與執行手續費不計（規格書第 7 節回測同樣不扣）。
 4. 回測期間改為規格書第 7 節的 v3 上線 2021/5/5〜2026/8/31（5/5 收盤 = 5/6 00:00 加入，乖離旗標 ON，以全額 USDC 開始）。
 「目前 LP 比例」的定義（LP 價值 ÷（LP 價值＋LP 外 USDC），不含未領取與已領取獎勵，區間外處理之後比較）與 v3 的 lp_fraction 相同，未改。
 以下為 v3 的說明：
@@ -215,8 +218,16 @@ BAND_STEP = 0.025  # spec section 4: every band is 2.5% of the centre price wide
 # round(pool tick + exact offset). False = v3: round the centre and the offset separately and add them (up to 1 spacing apart).
 ROUND_EACH_BOUNDARY = True
 # spec section 6 general claim: after the 00:00 judgement, claim every position's fees (ETH sold to USDC) once the unclaimed
-# value is above this many USDC. The gas <= $0.2 condition is not modelled. None = v3: claim only at a rebuild and on the 1st.
+# value is above this many USDC. None = v3: claim only at a rebuild and on the 1st.
 CLAIM_MIN_USD: Decimal | None = Decimal(5)
+# QUAN-1216, spec section 6: the daily claim also needs the estimated gas <= CLAIM_GAS_MAX_USD, else it waits for a later day
+# (rebuild claims are not gated). Mainnet 0x88e6 only (on Base gas is cents). CLAIM_GAS_CAP=1 turns it on and adds "-gascap"
+# to the result folder; validation runs with it on. Gas units are assumptions (LOOKAHEAD-AUDIT-2026-10-29.md section 3): one
+# collect per live band + one ETH -> USDC swap; gas price = the last hourly sample at or before the judgement.
+CLAIM_GAS_CAP = os.environ.get("CLAIM_GAS_CAP") == "1"
+CLAIM_GAS_MAX_USD = Decimal("0.2")
+COLLECT_GAS, SWAP_GAS = 75_000, 120_000
+GAS_CSV = Path(__file__).resolve().parent.parent / "gas_ethereum_hourly.csv"
 # spec v3.2 sections 1 / 6, auto reinvest (replaces v3.1's standard / compound modes): on the 1st at 00:00, after the judgement
 # and the daily claim, the whole reward balance (net claims not reinvested yet) joins the principal, F' of it in the LP and the
 # rest as USDC outside it; a balance of REINVEST_MIN_USD or less is left for the next month. One run per entry, True = on (default).
@@ -433,6 +444,20 @@ def range_break(close: float, centre: float) -> int:
     if close < centre * LOWER_STOP:
         return -1
     return 0
+
+
+def claim_gas_usd(bands: int, gwei: float, eth_usd: Decimal) -> Decimal:
+    """Estimated mainnet gas of a daily claim in USD: one collect per live band plus one ETH -> USDC swap."""
+    return Decimal(bands * COLLECT_GAS + SWAP_GAS) * Decimal(str(gwei)) * Decimal("1e-9") * eth_usd
+
+
+def gwei_at(gas: pd.Series, timestamp: datetime) -> float:
+    """The last gas price (gwei) sampled at or before `timestamp`; KeyError when there is none in the day before it
+    (outside the gas data)."""
+    i = gas.index.searchsorted(timestamp, side="right") - 1
+    if i < 0 or timestamp - gas.index[i] > timedelta(days=1):
+        raise KeyError(f"no gas sample in the day before {timestamp}")
+    return float(gas.iloc[i])
 
 
 def reinvest_split(balance: Decimal, target: Decimal) -> Tuple[Decimal, Decimal, bool]:
@@ -699,6 +724,12 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.reinvest_log: List[dict] = []  # one entry per month-end reinvest check, written to reinvest_<report>.jsonl
         self.total_success_fee = ZERO    # quote value of the success fee taken at the claims (SUCCESS_FEE_RATE)
         self.claim_count = 0             # daily general claims (spec section 6), rebuild claims not counted
+        self.claim_gas_waits = 0         # days a due claim waited because its gas estimate was above CLAIM_GAS_MAX_USD
+        # 22 of the 45k hourly samples have no gas price: dropped, the judgement then sees the sample before
+        self.gas_gwei = (pd.read_csv(GAS_CSV, parse_dates=["timestamp"]).set_index("timestamp")["gwei"].dropna().sort_index()
+                         if CLAIM_GAS_CAP else None)
+        if CLAIM_GAS_CAP and self.gp.chain_name != ChainType.ethereum.name:
+            raise ValueError(f"CLAIM_GAS_CAP uses mainnet gas, not {self.gp.chain_name}")
         self.export_actions = []
         self.lock_until_time = None
         self.last_price = ZERO
@@ -862,6 +893,9 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
             base, quote = lp_market._convert_pair(lp_market.positions[pos].pending_amount0, lp_market.positions[pos].pending_amount1)
             pending += base * price + quote
         if pending <= CLAIM_MIN_USD:
+            return
+        if CLAIM_GAS_CAP and claim_gas_usd(len(live), gwei_at(self.gas_gwei, row_data.timestamp), price) > CLAIM_GAS_MAX_USD:
+            self.claim_gas_waits += 1
             return
         for pos in live:
             self.collect_fee_as_quote(lp_market, pos)
@@ -1324,7 +1358,8 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         if self.fee_log:
             pd.DataFrame(self.fee_log).to_csv(f"{self.params.folder}/fees_{self.params.report_name}.csv", index=False)
         print(f"final result: rescale_left_too_much_count: {self.rescale_left_too_much_count}, "
-              f"follow rebuilds: {self.follow_rebuild_count}, claims: {self.claim_count}, reinvests: {self.reinvest_count}, "
+              f"follow rebuilds: {self.follow_rebuild_count}, claims: {self.claim_count}, "
+              f"claim gas waits: {self.claim_gas_waits}, reinvests: {self.reinvest_count}, "
               f"success fee: {float(self.total_success_fee):,.0f}, "
               f"share picks: {self.share_picks}, "
               f"last F: {float(self.deployed_at_build):.4f}")
@@ -1716,6 +1751,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
                       f"{'' if SUCCESS_FEE_RATE == ZERO else f'-sfee{float(SUCCESS_FEE_RATE) * 100:g}'}"
                       f"{'-feeinrange' if FEE_IN_RANGE_LIQUIDITY else ''}"
                       f"{'-breaktick' if BREAK_ON_POOL_TICK else ''}"
+                      f"{'-gascap' if CLAIM_GAS_CAP else ''}"
                       f"{'' if F_BY_VALUE else '-fstage'}"
                       f"{'' if SPEC_START else '-v1start'}")
     _dca_add_if_non_empty = False
@@ -2070,6 +2106,19 @@ def _self_check():
     # both edges themselves stay inside (strict comparisons)
     assert range_break(2401.0, 2000.0) == 1 and range_break(2400.0, 2000.0) == 0
     assert range_break(1599.0, 2000.0) == -1 and range_break(1600.0, 2000.0) == 0 and range_break(2000.0, 2000.0) == 0
+    # spec section 6 gas condition: 16 collects + one swap = 1.32M gas; at 0.1 gwei and $1,500 that is $0.198 (claims), at
+    # 0.2 gwei $0.396 (waits); one band + swap = 195k gas
+    assert claim_gas_usd(16, 0.1, Decimal(1500)) == Decimal("0.198") and claim_gas_usd(16, 0.2, Decimal(1500)) > CLAIM_GAS_MAX_USD
+    assert claim_gas_usd(1, 1.0, Decimal(1000)) == Decimal("0.195")
+    # the 00:00 judgement sees the last sample at or before it, never a later one; no sample in the day before it = error
+    gas = pd.Series([3.0, 2.0, 1.0], index=pd.to_datetime(["2024-01-01 22:00:00", "2024-01-02 00:00:00", "2024-01-02 00:00:25"]))
+    assert gwei_at(gas, datetime(2024, 1, 2)) == 2.0 and gwei_at(gas, datetime(2024, 1, 1, 23, 59)) == 3.0
+    for stale in (datetime(2024, 1, 1, 21), datetime(2024, 1, 3, 1)):
+        try:
+            gwei_at(gas, stale)
+            raise AssertionError(stale)
+        except KeyError:
+            pass
     # swap_to_value_share: after the swap, base holds exactly base_share of total value
     for base, quote, price, want in [(Decimal(0), Decimal(100000), Decimal(2000), Decimal("0.7")),
                                      (Decimal(25), Decimal(50000), Decimal(2000), Decimal("0.7")),
