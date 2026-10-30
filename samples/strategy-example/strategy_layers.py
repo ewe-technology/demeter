@@ -38,7 +38,10 @@ def daily_net_value(folder: str | Path, mode: str) -> pd.Series:
     d = pd.read_csv(v22[0], parse_dates=["exec"]).set_index("exec").sort_index()
     nv = (d["principal_eth"] + d["reward_btc"] * d["btc_eth"]).astype(float)
     # the first row is after the first build (swap cost paid): the start capital (in the file name) opens the series
-    start = float(re.search(r"daily_([\d.]+)ETH_", Path(v22[0]).name).group(1))
+    found = re.search(r"daily_([\d.]+)ETH_", Path(v22[0]).name)
+    if found is None:
+        raise ValueError(f"{v22[0]}: no start capital in the name (want daily_<n>ETH_<mode>.csv)")
+    start = float(found.group(1))
     return pd.concat([pd.Series([start], index=[nv.index[0] - pd.Timedelta(days=1)]), nv])
 
 

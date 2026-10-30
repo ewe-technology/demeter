@@ -227,6 +227,7 @@ CLAIM_MIN_USD: Decimal | None = Decimal(5)
 CLAIM_GAS_CAP = os.environ.get("CLAIM_GAS_CAP") == "1"
 CLAIM_GAS_MAX_USD = Decimal("0.2")
 COLLECT_GAS, SWAP_GAS = 75_000, 120_000
+MIN_GWEI = 0.001  # mainnet gas samples at or below this are data errors (valid_gas)
 GAS_CSV = Path(__file__).resolve().parent.parent / "gas_ethereum_hourly.csv"
 # spec v3.2 sections 1 / 6, auto reinvest (replaces v3.1's standard / compound modes): on the 1st at 00:00, after the judgement
 # and the daily claim, the whole reward balance (net claims not reinvested yet) joins the principal, F' of it in the LP and the
@@ -449,6 +450,12 @@ def range_break(close: float, centre: float) -> int:
 def claim_gas_usd(bands: int, gwei: float, eth_usd: Decimal) -> Decimal:
     """Estimated mainnet gas of a daily claim in USD: one collect per live band plus one ETH -> USDC swap."""
     return Decimal(bands * COLLECT_GAS + SWAP_GAS) * Decimal(str(gwei)) * Decimal("1e-9") * eth_usd
+
+
+def valid_gas(gwei: pd.Series) -> pd.Series:
+    """The hourly gas prices without data errors: 22 empty, 13 zero and 3 ~1e-7 gwei samples in gas_ethereum_hourly.csv
+    (a zero would pass any claim). Anything at or below MIN_GWEI counts as an error."""
+    return gwei[gwei > MIN_GWEI].sort_index()
 
 
 def gwei_at(gas: pd.Series, timestamp: datetime) -> float:
@@ -725,11 +732,10 @@ class RemixDaoDcaWeekStratStrategy(BaseRemixDaoStrategy):
         self.total_success_fee = ZERO    # quote value of the success fee taken at the claims (SUCCESS_FEE_RATE)
         self.claim_count = 0             # daily general claims (spec section 6), rebuild claims not counted
         self.claim_gas_waits = 0         # days a due claim waited because its gas estimate was above CLAIM_GAS_MAX_USD
-        # 22 of the 45k hourly samples have no gas price: dropped, the judgement then sees the sample before
-        self.gas_gwei = (pd.read_csv(GAS_CSV, parse_dates=["timestamp"]).set_index("timestamp")["gwei"].dropna().sort_index()
-                         if CLAIM_GAS_CAP else None)
         if CLAIM_GAS_CAP and self.gp.chain_name != ChainType.ethereum.name:
             raise ValueError(f"CLAIM_GAS_CAP uses mainnet gas, not {self.gp.chain_name}")
+        self.gas_gwei = (valid_gas(pd.read_csv(GAS_CSV, parse_dates=["timestamp"]).set_index("timestamp")["gwei"])
+                         if CLAIM_GAS_CAP else None)
         self.export_actions = []
         self.lock_until_time = None
         self.last_price = ZERO
@@ -2113,6 +2119,9 @@ def _self_check():
     # the 00:00 judgement sees the last sample at or before it, never a later one; no sample in the day before it = error
     gas = pd.Series([3.0, 2.0, 1.0], index=pd.to_datetime(["2024-01-01 22:00:00", "2024-01-02 00:00:00", "2024-01-02 00:00:25"]))
     assert gwei_at(gas, datetime(2024, 1, 2)) == 2.0 and gwei_at(gas, datetime(2024, 1, 1, 23, 59)) == 3.0
+    # empty, zero and ~1e-7 gwei samples are data errors: dropped, so the judgement sees the last real price
+    raw = pd.Series([3.0, float("nan"), 0.0, 9.4e-8], index=pd.date_range("2024-01-01 21:00", periods=4, freq="h"))
+    assert gwei_at(valid_gas(raw), datetime(2024, 1, 2)) == 3.0
     for stale in (datetime(2024, 1, 1, 21), datetime(2024, 1, 3, 1)):
         try:
             gwei_at(gas, stale)

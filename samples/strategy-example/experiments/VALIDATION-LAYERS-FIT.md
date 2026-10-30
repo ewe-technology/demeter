@@ -64,7 +64,7 @@ own ticket.
   our own regime rule and L0 our own cost list, both as written above.
 - Settled 2026-10-30 (Dino, option 1): v3.2 is judged on mainnet `0x88e6` (spec numbers, 5.4 y), with the spec's
   gas <= $0.2 claim condition modelled there (`LOOKAHEAD-AUDIT-2026-10-29.md` section 3: on mainnet a full-ladder claim
-  never passes it; modelled in QUAN-1216 as `CLAIM_GAS_CAP=1`, L0 in `VALIDATION-2026-10-29-v3_2-v2_2.md`). Base WETH/USDC 0.3% `0x6c56` (the contract's LP pool, 2.7 y) is scored as the contract check, not
-  judged. An earlier version of this file named `0xd0b5`: that is the contract's 0.05% swap pool, not its LP pool.
+  never passes it; modelled in QUAN-1216 as `CLAIM_GAS_CAP=1`, L0 in `VALIDATION-2026-10-29-v3_2-v2_2.md`). Base
+  WETH/USDC 0.3% `0x6c56` (the contract's LP pool, 2.7 y) is scored as the contract check, not judged. An earlier version of this file named `0xd0b5`: that is the contract's 0.05% swap pool, not its LP pool.
 - The trial count for L4: count the versions and sweeps from the spec sheets' version history and the `remix` /
   `maker-defense` git history; anything not recorded there stays uncounted and is reported as a lower bound.
