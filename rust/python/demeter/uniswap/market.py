@@ -225,6 +225,15 @@ class UniLpMarket(Market):
         pass  # computed by the engine from the data index
 
     @property
+    def fee_in_range_liquidity(self) -> bool:
+        """Fee share denominator: False (default) adds all our liquidity, True only positions earning a fee this minute."""
+        return self._core.fee_in_range_liquidity
+
+    @fee_in_range_liquidity.setter
+    def fee_in_range_liquidity(self, value: bool):
+        self._core.fee_in_range_liquidity = bool(value)
+
+    @property
     def last_tick(self):
         return self._core.last_tick
 

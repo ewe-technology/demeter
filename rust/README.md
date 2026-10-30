@@ -191,6 +191,14 @@ which mode your results should use, and do not compare numbers across modes.
 | 15 | Cached values: `change_collateral` refreshes only the collateral values, so `supplies[token].collateral` shows the old flag until the next minute or operation. | `aave/market.py` | reproduced | all values refreshed |
 | 16 | A liquidation compares the debt *value* to cover (USD) with the debt *amount* (tokens). No effect for USD stablecoin debt. | `aave/market.py` `_do_liquidate` | always reproduced | same |
 
+Not a quirk switch, a model fix in both engines (QUAN-1213): `market.fee_in_range_liquidity`
+(python `UniLpMarket`, Rust `UniLpMarket::fee_in_range_liquidity`, default `False`). Off, the fee
+denominator (`market_status.data.currentLiquidity`) is the pool's liquidity plus all our own; on,
+plus only our positions that earn a fee in that minute (python `V3CoreLib.earns_fee`, Rust `uniswap::earns_fee`, the
+same rule as `update_fee`), so out-of-range positions stop diluting the in-range ones. A strategy
+that reads `currentLiquidity` for its own model (e.g. a depth slippage) sees the change too.
+`engine_check.py` compares the engines with it off and on.
+
 Also different, intentionally:
 
 - `Actuator.run` sets prices automatically from the first market when `set_price` was never
