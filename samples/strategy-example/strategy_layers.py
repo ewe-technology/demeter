@@ -11,7 +11,8 @@ and mode; the net value is read from
   first execution (the file has no row before the first build).
 
 L1 + L5 (the yearly table): the same daily net value cut per calendar year and into anchored windows, judged by the
-pre-registered rules in the results file (yearly_windows, judge_l1_l5).
+pre-registered reference rules in the results file (yearly_windows, judge_l1_l5), plus Sharpe / PSR(0) per full year
+and per L5 window, a Sharpe difference test and Pardo's walk-forward efficiency (l1_l5_stats).
 
 Usage, from samples/strategy-example:
     python strategy_layers.py l0 <label>=<result folder>:<mode> ...      # mode: reinvest | noreinvest
@@ -24,7 +25,9 @@ import re
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+from scipy.stats import norm
 
 import strategy_validation as SV
 
@@ -60,6 +63,7 @@ def l0(nv: pd.Series) -> dict:
 # the pre-registered L1 / L5 rule (VALIDATION-2026-10-29-v3_2-v2_2.md): anchored windows and the earlier L5 window start
 # at ANCHOR, the later L5 window at L5_SPLIT; L1 counts the full years L1_YEARS (inclusive)
 ANCHOR, L5_SPLIT, L1_YEARS = "2022-01-01", "2024-01-01", (2022, 2025)
+MIN_DAYS = 30   # fewer daily returns than this: no Sharpe / PSR for the window (its variance means nothing)
 
 
 def _window(nv: pd.Series, kind: str, label: str, lo: pd.Timestamp, hi: pd.Timestamp, partial: bool) -> dict:
@@ -114,6 +118,39 @@ def judge_l1_l5(nv: pd.Series) -> dict:
     return out
 
 
+def significance(r: pd.Series) -> dict:
+    """strategy_validation's method 3 on daily log returns: Sharpe, PSR(0) with skew / kurtosis, bootstrap 1 - p."""
+    return SV.method3_significance(r, SV.Settings(), np.random.default_rng(SV.Settings.seed))
+
+
+def sharpe_diff(r_earlier: pd.Series, r_later: pd.Series) -> dict:
+    """Is the later Sharpe below the earlier one? Two non-overlapping samples of daily returns, each Sharpe with the
+    asymptotic variance under non-normal returns that PSR also uses (Mertens 2002; Opdyke 2007): Var(SR) = D^2 / (T - 1),
+    D^2 = 1 - skew x SR + (kurt - 1) / 4 x SR^2. z = (SR_later - SR_earlier) / sqrt(Var_earlier + Var_later);
+    p_later_worse = Phi(z), the one-sided p of a later Sharpe this low if both periods share one true Sharpe."""
+    e, l = significance(r_earlier), significance(r_later)
+    se = np.sqrt(e["D"] ** 2 / (e["days"] - 1) + l["D"] ** 2 / (l["days"] - 1))
+    z = (l["sharpe_daily"] - e["sharpe_daily"]) / se
+    return {"z": float(z), "p_later_worse": float(norm.cdf(z))}
+
+
+def l1_l5_stats(nv: pd.Series) -> dict:
+    """Statistics beside the L1 / L5 reference rule: Sharpe and PSR(0) of each full calendar year (L1) and of the
+    earlier / later L5 windows, the Sharpe difference test between them, and Pardo's walk-forward efficiency
+    WFE = later CAGR / earlier CAGR (None when the run does not cover the L5 windows)."""
+    cut = lambda lo, hi: SV.daily_log_returns(nv[(nv.index >= lo) & (nv.index <= hi)])
+    years = [{"window": r["window"], **significance(cut(r["start"], r["end"]))}
+             for r in yearly_windows(nv) if r["kind"] == "year" and not r["partial"]
+             and len(cut(r["start"], r["end"])) >= MIN_DAYS]
+    out = {"years": years, "earlier": None, "later": None, "diff": None, "wfe": None}
+    j = judge_l1_l5(nv)
+    if j["l5_earlier"] is not None and min(len(cut(w["start"], w["end"])) for w in (j["l5_earlier"], j["l5_later"])) >= MIN_DAYS:
+        e, l = j["l5_earlier"], j["l5_later"]
+        re, rl = cut(e["start"], e["end"]), cut(l["start"], l["end"])
+        out.update(earlier=significance(re), later=significance(rl), diff=sharpe_diff(re, rl), wfe=l["cagr"] / e["cagr"])
+    return out
+
+
 def l0_table(runs: dict[str, tuple[str, str]]) -> str:
     """Markdown table, one row per labelled run (result folder, mode)."""
     lines = ["| run | window | start | end value | multiple | CAGR | max DD (daily) | Calmar |", "|---|---|---|---|---|---|---|---|"]
@@ -149,6 +186,16 @@ def yearly_report(runs: dict[str, tuple[str, str]]) -> str:
         j = judge_l1_l5(nv)
         out.append(f"| {label} | {j['l1_up_years']} of {j['l1_full_years']} | {word(j['l1_pass'])} | "
                    f"{cagr_dd_calmar(j['l5_earlier'])} | {cagr_dd_calmar(j['l5_later'])} | {word(j['l5_pass'])} |")
+    out += ["", "Statistics: annual Sharpe / PSR(0) of daily log returns per full year; L5 earlier vs later Sharpe / PSR(0), "
+            "Sharpe difference z and one-sided p (later worse), WFE = later CAGR / earlier CAGR", "",
+            "| run | full years | L5 earlier | L5 later | z / p (later worse) | WFE |", "|---|---|---|---|---|---|"]
+    sp = lambda m: f"{m['sharpe_annual']:.2f} / {m['psr']:.3f}"
+    for label, nv in data.items():
+        st = l1_l5_stats(nv)
+        yrs = "<br>".join(f"{y['window']}: {sp(y)}" for y in st["years"])
+        l5 = (f"{sp(st['earlier'])} | {sp(st['later'])} | {st['diff']['z']:+.2f} / {st['diff']['p_later_worse']:.3f} | "
+              f"{st['wfe']:.2f}") if st["diff"] else "| | |"
+        out.append(f"| {label} | {yrs} | {l5} |")
     return "\n".join(out)
 
 
@@ -202,8 +249,26 @@ def _self_check(tmp: Path):
     # no drawdown in 2022-23: the earlier Calmar is infinite, which the rule does not cover -> not judged
     j = judge_l1_l5(pd.Series([100.0, 120.0, 110.0], index=pd.to_datetime(["2022-01-01", "2024-01-01", "2025-01-01"])))
     assert j["l5_earlier"]["max_drawdown"] == 0 and j["l5_pass"] is None, j
+    # Sharpe difference: equal samples -> z 0, p 0.5; a later sample that loses steadily -> p near 0; swapping flips z
+    rng = np.random.default_rng(1)
+    a = pd.Series(rng.normal(0.001, 0.01, 500))
+    d = sharpe_diff(a, a)
+    assert abs(d["z"]) < 1e-12 and abs(d["p_later_worse"] - 0.5) < 1e-12, d
+    b = pd.Series(rng.normal(-0.002, 0.01, 500))
+    d, back = sharpe_diff(a, b), sharpe_diff(b, a)
+    assert d["p_later_worse"] < 0.001 and abs(d["z"] + back["z"]) < 1e-12, d
+    # L1 / L5 statistics of a daily net value: per full year and per L5 window; WFE = later CAGR / earlier CAGR
+    days = pd.date_range("2022-01-01", "2025-06-30")
+    nv = pd.Series(100 * np.exp(np.cumsum(rng.normal(0.0005, 0.01, len(days)))), index=days)
+    st = l1_l5_stats(nv)
+    assert [y["window"] for y in st["years"]] == ["2022", "2023", "2024"], st["years"]   # 2025 is partial
+    assert all(0 <= y["psr"] <= 1 for y in st["years"]), st
+    j = judge_l1_l5(nv)
+    assert abs(st["wfe"] - j["l5_later"]["cagr"] / j["l5_earlier"]["cagr"]) < 1e-12, st
+    assert 0 <= st["later"]["psr"] <= 1 and 0 <= st["diff"]["p_later_worse"] <= 1, st
     # report: the v3.2 run above (2024-01-01..2025-12-31 23:59) -> one full year 2024 (-20%), one partial 2025 (+50%)
     rep = yearly_report({"r": (str(tmp / "v32"), "reinvest")})
+    assert "| r |  | | | |" in rep, rep   # 2 daily returns: too few for any statistic
     assert "| r | -20.0% / -20.0% | +50.0% / 0.0% * |" in rep and "| r | 0 of 1 | not judged |" in rep, rep
 
 

@@ -52,7 +52,11 @@ Order follows Maker's advice; stage 3 starts only when the stage-2 preconditions
 2. L1 + L5: the yearly table; clean OOS rows added monthly.
 3. L6 per-regime rows from the same runs, plus the one-step-either-side runs.
 4. L4 trial count beside every number; L3 and L8 from the same daily returns (no new backtests), reported, not gating.
-5. L2 decision-permutation only if steps 1-4 leave the verdict open.
+5. L2 decision-permutation (run it as well: every feasible layer gets its numbers, ruling below).
+
+Ruling 2026-10-30 (Dino): every layer reports its method, theory (with sources), results and an objective assessment.
+Pass / fail rules are written down beforehand as references; the team, not the scorecard, decides whether a strategy
+is good.
 
 Scorecard rows for L7 and L9 say "not applicable" with the reason above. L10 is recorded as "pending" and opens its
 own ticket.
