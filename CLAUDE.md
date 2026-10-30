@@ -206,6 +206,9 @@ Dino names versions `v6.1`, `v6.2`, ...; each is one experiment `EXP-NNN` (next 
   (engine comparisons only). Commits that touch `rust/` or `demeter/` must pass `experiments/engine_check.py` (hook).
 - Baseline v6 runs in the same invocation. Costs: pool fee + price impact; gas reported, not charged. From EXP-157 on, run with
   `SPEC=v1` (baseline = spec v1, flat 0.1% swap cost; see "Baseline since 2026-10-06 evening").
+- **Gas is not charged (team ruling, Dino 2026-10-30)**: at our capital it is left out of every backtest and validation
+  (QUAN-1209 L0 included). A strategy that rebuilds more than ~1,000 times over its run is flagged and discussed with
+  Dino before any gas is charged. Spec rules that only use gas as a condition (v3.2's gas <= $0.2 claim gate) stay modelled.
 - **No in-sample / out-of-sample split (Dino, 2026-10-06).** Every pool in `INVENTORY.md`, local or in the team S3 bucket, may be
   used, and a pool may be downloaded from S3 (or with `fetch_uni_minute.py`) without asking; add it to `POOLS` and `INVENTORY.md`
   in the same commit. A strategy is judged on its **full-history** result: one continuous run per pool over all the data that pool
