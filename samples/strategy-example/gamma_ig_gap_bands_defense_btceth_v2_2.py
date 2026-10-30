@@ -34,6 +34,7 @@ mode=plain 是「一般LP 20%」對照組：均等型 ±10%、無訊號、出界
 import copy
 import math
 import multiprocessing
+import os
 import random
 import time
 from datetime import date, datetime, timedelta
@@ -69,6 +70,13 @@ EMA_SEED_DAY = date(2017, 8, 17)
 
 # spec section 3: four virtual accounts on G, each with its own EMA; F = mean of their LP shares
 EMA_SPANS = (90, 100, 110, 120)
+# QUAN-1216 L6 robustness runs (VALIDATION-2026-10-29-v3_2-v2_2.md, L6): L6_EMA_SHIFT=-10 / 10 shifts the four account spans by
+# one grid step; VIRTUAL_EMA and STRENGTH_SPAN stay. L6_WIDTH=0.9 / 1.1 multiplies every width: the real LP ranges, the
+# virtual band step and the lower stop / upper rebuild distance. Off = the spec; the folder gets "-l6ema-10" / "-l6w0.9".
+L6_EMA_SHIFT = int(os.environ.get("L6_EMA_SHIFT", "0"))
+L6_WIDTH = Decimal(os.environ.get("L6_WIDTH", "1"))
+L6_TAG = f"{f'-l6ema{L6_EMA_SHIFT:+d}' if L6_EMA_SHIFT else ''}{f'-l6w{L6_WIDTH}' if L6_WIDTH != 1 else ''}"
+EMA_SPANS = tuple(n + L6_EMA_SHIFT for n in EMA_SPANS)
 EMA_SLOPE_DAYS = 20                                     # exit also needs EMA_n < EMA_n 20 days ago
 LOWER_STOP, UPPER_REBUILD = 0.80, 1.20
 REFILL_CONFIRM_DAYS = 3
@@ -87,6 +95,10 @@ VIRTUAL_SHARE_WEAK, WEAK_EMA_FACTOR, VIRTUAL_EMA = 0.25, 0.95, 100
 STRENGTH_SPAN = 100
 ETH_KEEP = Decimal("0.25")
 RANGE_STRONG, RANGE_WEAK = Decimal("0.10"), Decimal("0.20")   # half width: 合計 20% / 40%
+if L6_WIDTH != 1:   # off: the spec constants untouched, bit for bit
+    BAND_STEP *= float(L6_WIDTH)
+    LOWER_STOP, UPPER_REBUILD = 1 - (1 - LOWER_STOP) * float(L6_WIDTH), 1 + (UPPER_REBUILD - 1) * float(L6_WIDTH)
+    RANGE_STRONG, RANGE_WEAK = RANGE_STRONG * L6_WIDTH, RANGE_WEAK * L6_WIDTH
 
 # spec section 4 rebuild conditions
 FOLLOW_THRESHOLD = Decimal("0.125")   # any of LP / ETH / BTC / USDC this far from target -> rebuild
@@ -212,7 +224,7 @@ def signal_engine(g: pd.Series, r: pd.Series) -> pd.DataFrame:
     Returns G, R, EMA100(R), strong flag, F and the per-account state (spec section 7 stage 1 reconciliation view).
     The first close only seeds the EMAs; the accounts start the next day."""
     r_ema = r.ewm(span=STRENGTH_SPAN, adjust=False).mean()
-    emas = {n: g.ewm(span=n, adjust=False).mean() for n in EMA_SPANS}
+    emas = {n: g.ewm(span=n, adjust=False).mean() for n in (*EMA_SPANS, VIRTUAL_EMA)}   # an L6 shift may drop 100
     prevs = {n: emas[n].shift(EMA_SLOPE_DAYS) for n in EMA_SPANS}
     accounts = [VirtualAccount(n) for n in EMA_SPANS]
     fractions, states = [], []
@@ -668,7 +680,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, pool_name: str = "base
                           rescale_tick_lower_boundary_offset=0, init_tick_spread=120, tick_spacing=tick_spacing,
                           tick_gap_lower=1, tick_gap_upper=1)
     fee_tag = "" if PERFORMANCE_FEE == ZERO else f"-perf{float(PERFORMANCE_FEE) * 100:g}"
-    folder = f"result/{pool_name}-ethbtc-mgl-v2_2{fee_tag}-{csd:%Y%m%d}-{ded:%Y%m%d}"
+    folder = f"result/{pool_name}-ethbtc-mgl-v2_2{fee_tag}{L6_TAG}-{csd:%Y%m%d}-{ded:%Y%m%d}"
     Path(folder).mkdir(parents=True, exist_ok=True)
 
     def load(pool: UniV3Pool, address: str, start: date, end: date, chain_name_str: str | None = None) -> UniLpMarketV2:

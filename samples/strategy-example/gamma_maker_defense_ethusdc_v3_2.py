@@ -166,6 +166,10 @@ SHARE_ABOVE_EMA, SHARE_BELOW_EMA = Decimal("0.7"), Decimal("0.5")
 # spec sheet 2.3: the real ladder is rebuilt to F x equity when |F - current| >= FOLLOW_THRESHOLD.
 DEPLOY_FULL, DEPLOY_SIGNAL = "full", "signal"
 EMA_SPANS = (90, 100, 110, 120)
+# QUAN-1216 L6 robustness runs (VALIDATION-2026-10-29-v3_2-v2_2.md, L6): L6_EMA_SHIFT=-10 / 10 shifts the four account spans by
+# one grid step ("-l6ema-10" in the folder); EMA_SPAN (ETH share, divergence) stays. L6_WIDTH below. Off = the spec.
+L6_EMA_SHIFT = int(os.environ.get("L6_EMA_SHIFT", "0"))
+EMA_SPANS = tuple(n + L6_EMA_SHIFT for n in EMA_SPANS)
 POOL_DATA_START = date(2021, 5, 5)  # first day of the mainnet WETH/USDC 0.05% minute data; 2022 gets ~240 warm-up days
 EMA_WARMUP_DAYS = 3 * max(EMA_SPANS)  # adjust=False EMA needs ~3 spans of history to forget its seed
 # where the signal's UTC daily closes come from. The LP itself always trades at pool prices; this only
@@ -212,6 +216,13 @@ F_BY_VALUE = True
 # first EMA exit; on the Binance history from 2017 it made no difference to 2022-2025.
 SPEC_START = True
 BAND_STEP = 0.025  # spec section 4: every band is 2.5% of the centre price wide, 8 per side
+# QUAN-1216 L6: L6_WIDTH=0.9 / 1.1 multiplies every +-20% width: the LP ratio (process_for_date), the virtual band step and
+# the lower stop / upper rebuild distance ("-l6w0.9" in the folder). The divergence thresholds are not widths and stay.
+L6_WIDTH = Decimal(os.environ.get("L6_WIDTH", "1"))
+if L6_WIDTH != 1:   # off: the spec floats untouched, bit for bit
+    BAND_STEP *= float(L6_WIDTH)
+    LOWER_STOP, UPPER_REBUILD = 1 - (1 - LOWER_STOP) * float(L6_WIDTH), 1 + (UPPER_REBUILD - 1) * float(L6_WIDTH)
+L6_TAG = f"{f'-l6ema{L6_EMA_SHIFT:+d}' if L6_EMA_SHIFT else ''}{f'-l6w{L6_WIDTH}' if L6_WIDTH != 1 else ''}"
 # spec v3.1 section 3 rule 4: ETH share of a virtual ladder is 70% above the account's own EMA, else 50% (v3's 25% below
 # EMA100 x 0.95 is deleted). Assumption: refills and the initial build use the same rule (the spec only states it for the rebuild).
 # spec v3.1 section 4: the centre and all 16 boundaries are each the nearest tick spacing multiple, i.e. every boundary is
@@ -371,7 +382,7 @@ def daily_ema_frame(minute_price: pd.Series) -> pd.DataFrame:
         fractions.append(sum(a.deployed for a in accounts) / len(accounts))
     # close / ema / F first (the strategy reads those); the per-account columns are the signal_daily.csv
     # reconciliation view of spec section 7 stage 1
-    frame = pd.DataFrame({"close": close, "ema": emas[EMA_SPAN], "F": fractions})
+    frame = pd.DataFrame({"close": close, "ema": emas.get(EMA_SPAN, close.ewm(span=EMA_SPAN, adjust=False).mean()), "F": fractions})
     frame["d"] = frame["close"] / frame["ema"] - 1
     frame["diverged"] = divergence_flags(frame["d"]) if DIVERGENCE_RULE else 0
     frame["Fp"] = frame["F"].where(frame["diverged"] == 0, 0.0)
@@ -1719,7 +1730,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
     # count downwards, the original gamma layout (+50% / -33% at 0.50)
     # every upper ratio to sweep; each is one more row per gap x frequency
     # _upper_ratios: List[Decimal] = [Decimal(r) for r in ("0.10", "0.20", "0.30", "0.40", "0.50")]
-    _upper_ratios: List[Decimal] = [Decimal(r) for r in ("0.20",)]
+    _upper_ratios: List[Decimal] = [Decimal(r) * L6_WIDTH for r in ("0.20",)]  # L6_WIDTH 1 = the spec
     # _upper_ratios: List[Decimal] = [Decimal(r) for r in ("0.20", "0.50")]
     # _lower_ratio: Decimal | str = Decimal("0.50")
     # MIRROR_TICKS: -33% at +50% (same ticks); MIRROR_PRICE: -50% at +50% (same percentage)
@@ -1759,7 +1770,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
                       f"{'-breaktick' if BREAK_ON_POOL_TICK else ''}"
                       f"{'-gascap' if CLAIM_GAS_CAP else ''}"
                       f"{'' if F_BY_VALUE else '-fstage'}"
-                      f"{'' if SPEC_START else '-v1start'}")
+                      f"{'' if SPEC_START else '-v1start'}{L6_TAG}")
     _dca_add_if_non_empty = False
     _dca_timing = DcaTiming.none
     _dca_addon_price_percent = ZERO  # Decimal(0.5)
@@ -2007,7 +2018,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
             print(f"[{source}] ema{EMA_SPAN}: {len(daily_ema)} daily closes, day before window close {first['close']:.0f} ema {first['ema']:.0f} F {first['F']:.3f}, "
                   f"last close {last['close']:.0f} ema {last['ema']:.0f} F {last['F']:.3f}")
             Path("result").mkdir(exist_ok=True)  # spec section 7 stage 1: daily EMA / state / F for reconciliation
-            tag = "v3.2_" + ("" if source == POOL_SIGNAL else "bn_")  # v3 writes the same window without the prefix
+            tag = "v3.2_" + ("" if source == POOL_SIGNAL else "bn_") + (f"{L6_TAG[1:]}_" if L6_TAG else "")  # v3: no prefix
             daily_ema.rename_axis("date").to_csv(f"result/signal_daily_{tag}{dsd.strftime('%Y%m%d')}_{ded.strftime('%Y%m%d')}.csv")
             window = daily_ema.loc[pd.Timestamp(dsd):]
             print(f"[{source}] signal engine F over the window: mean {window['F'].mean():.3f}, days at 0: {(window['F'] == 0).sum()}, "
@@ -2223,7 +2234,8 @@ def _self_check():
     SPEC_START = saved_start
 
 if __name__ == "__main__":
-    _self_check()
+    if not L6_TAG:   # the self-check asserts the spec spans and widths; an L6 variant changes them
+        _self_check()
 
     date_ranges: List[tuple[datetime, date, date, str, list[datetime]]] = [
         # (_cal_start_date, _data_start_date, _data_end_date)

@@ -14,9 +14,15 @@ L1 + L5 (the yearly table): the same daily net value cut per calendar year and i
 pre-registered reference rules in the results file (yearly_windows, judge_l1_l5), plus Sharpe / PSR(0) per full year
 and per L5 window, a Sharpe difference test and Pardo's walk-forward efficiency (l1_l5_stats).
 
+L6 (regime split): each daily return labelled bull / bear / range by the pre-registered rule on a Binance daily close
+(regime_labels: EMA200 slope + drawdown from the 365-day high), per-regime numbers (regime_split) and the reference
+rules L6a (gains in every regime) and L6b (the best of three settings per constant is the same in every regime).
+
 Usage, from samples/strategy-example:
     python strategy_layers.py l0 <label>=<result folder>:<mode> ...      # mode: reinvest | noreinvest
     python strategy_layers.py yearly <label>=<result folder>:<mode> ...  # L1 + L5 tables
+    python strategy_layers.py regime [--parts] <label>=<result folder>:<mode>:<pair> ...   # pair: ethusdt | ethbtc
+    python strategy_layers.py robust <pair> <mode> spec=<folder> ema-=<folder> ema+=<folder> w-=<folder> w+=<folder>
 """
 from __future__ import annotations
 
@@ -156,6 +162,141 @@ def l1_l5_stats(nv: pd.Series) -> dict:
     return out
 
 
+# the pre-registered L6 regime rule (VALIDATION-2026-10-29-v3_2-v2_2.md, L6): EMA200 of the daily close, its change over
+# SLOPE_DAYS and the close's drawdown from its HIGH_DAYS high, judged on day D's close
+REGIME_EMA, SLOPE_DAYS, HIGH_DAYS = 200, 30, 365
+SLOPE_MIN, BEAR_DD = 0.02, -0.20
+REGIMES = ("bull", "bear", "range")
+
+
+def _slope_dd(close: pd.Series) -> tuple[pd.Series, pd.Series]:
+    ema = close.ewm(span=REGIME_EMA, adjust=False).mean()
+    return ema / ema.shift(freq=f"{SLOPE_DAYS}D").reindex(close.index) - 1, close / close.rolling(f"{HIGH_DAYS}D").max() - 1
+
+
+def regime_labels(close: pd.Series) -> pd.Series:
+    """bull / bear / range per daily close (index = day D): bull = EMA200 up >= 2% over 30 days and the close less than
+    20% below its 365-day high; bear = EMA200 down >= 2% and the close 20% or more below the high; range = the rest.
+    NaN while the 30-day slope does not exist yet. The EMA is seeded on the first close (adjust=False)."""
+    slope, dd = _slope_dd(close)
+    label = pd.Series("range", index=close.index, dtype=object)
+    label[(slope >= SLOPE_MIN) & (dd > BEAR_DD)] = "bull"
+    label[(slope <= -SLOPE_MIN) & (dd <= BEAR_DD)] = "bear"
+    label[slope.isna()] = np.nan
+    return label
+
+
+RANGE_PARTS = ("range: flat EMA", "range: drop, EMA up", "range: rebound, EMA down")
+
+
+def range_parts(close: pd.Series) -> pd.Series:
+    """regime_labels with range split in its three parts (a post-hoc diagnostic, not part of the pre-registered rule):
+    flat EMA200 (|slope| < 2%), a close 20% or more below the high while the EMA200 still rises, a close less than 20%
+    below the high while the EMA200 still falls."""
+    slope, dd = _slope_dd(close)
+    label = regime_labels(close)
+    rng = label == "range"
+    label[rng & (slope.abs() < SLOPE_MIN)] = RANGE_PARTS[0]
+    label[rng & (slope >= SLOPE_MIN)] = RANGE_PARTS[1]
+    label[rng & (slope <= -SLOPE_MIN)] = RANGE_PARTS[2]
+    return label
+
+
+def regime_split(nv: pd.Series, labels: pd.Series, price: pd.Series, groups: tuple[str, ...] = REGIMES) -> dict[str, dict]:
+    """Per regime (each label in `groups`), the daily log returns of a daily net value whose return from day D's value to the next one takes
+    the label of day D's close (`labels` and `price` indexed by day D): days, share of the labelled days, episodes (runs
+    of consecutive days with that label), chained return, annualised return exp(mean x 365) - 1, annualised Sharpe, max
+    drawdown of the chained days, and the price's chained / annualised change close(D) / close(D - 1) on the same days."""
+    r = np.log(nv.values[1:] / nv.values[:-1])
+    day = nv.index[:-1].normalize()
+    lab = labels.reindex(day).to_numpy()
+    p = np.log(price / price.shift(1)).reindex(day).to_numpy()
+    known = pd.notna(lab)
+    out = {}
+    for g in groups:
+        on = lab == g
+        x, px = r[on], p[on]
+        path = np.exp(np.cumsum(np.r_[0.0, x]))
+        out[g] = {"days": int(on.sum()), "share": on.sum() / known.sum() if known.any() else np.nan,
+                  "episodes": int((on & ~np.r_[False, on[:-1]]).sum()),
+                  "chained": float(path[-1] - 1), "annual": float(np.expm1(x.mean() * 365)) if len(x) else np.nan,
+                  "sharpe": float(x.mean() / x.std(ddof=1) * np.sqrt(365)) if len(x) > 1 and x.std(ddof=1) > 0 else np.nan,
+                  "max_drawdown": float((path / np.maximum.accumulate(path) - 1).min()),
+                  "price_chained": float(np.expm1(px.sum())), "price_annual": float(np.expm1(px.mean() * 365)) if len(x) else np.nan}
+    return out
+
+
+def judge_l6a(split: dict[str, dict]) -> bool | None:
+    """The pre-registered L6a rule: annualised return > 0 in every regime with at least MIN_DAYS days; None when no
+    regime has that many."""
+    judged = [s["annual"] > 0 for s in split.values() if s["days"] >= MIN_DAYS]
+    return all(judged) if judged else None
+
+
+def judge_l6b(settings: dict[str, dict[str, dict]]) -> dict:
+    """The pre-registered L6b rule for one constant: `settings` maps "-" / "spec" / "+" to regime_split(); per regime with
+    at least MIN_DAYS days in the spec run, the setting with the highest annualised return; stable = one setting wins
+    every judged regime."""
+    best = {g: max(settings, key=lambda k: settings[k][g]["annual"])
+            for g in REGIMES if settings["spec"][g]["days"] >= MIN_DAYS}
+    return {"best": best, "stable": len(set(best.values())) == 1}
+
+
+def binance_close(pair: str) -> pd.Series:
+    """Binance daily closes binance_<pair>_1d.csv (date = the UTC day D, close = its 24:00 close), next to this file."""
+    f = Path(__file__).with_name(f"binance_{pair}_1d.csv")
+    return pd.read_csv(f, parse_dates=["date"]).set_index("date")["close"].astype(float)
+
+
+def _pct(x: float) -> str:
+    return "n/a" if x != x else f"{x * 100:+.1f}%"
+
+
+def _word(p: bool | None) -> str:
+    return "not judged" if p is None else ("pass" if p else "fail")
+
+
+def regime_report(runs: dict[str, tuple[str, str, str]], parts: bool = False) -> str:
+    """Markdown for L6a, one row per labelled run (result folder, mode, Binance pair that labels it): per regime days
+    (share) / episodes, annualised return, Sharpe, max DD of the chained days and the pair's annualised change.
+    parts=True: the range days split by range_parts (post-hoc, no L6a verdict)."""
+    groups = ("bull", "bear") + RANGE_PARTS if parts else REGIMES
+    out = ["Per regime: days (share) / episodes; annualised return; Sharpe; max DD of the chained days; pair annualised",
+           "", "| run | pair | " + " | ".join(groups) + (" |" if parts else " | L6a |"),
+           "|---|---|" + "---|" * (len(groups) + (0 if parts else 1))]
+    for label, (folder, mode, pair) in runs.items():
+        close = binance_close(pair)
+        s = regime_split(daily_net_value(folder, mode), (range_parts if parts else regime_labels)(close), close, groups)
+        cell = lambda g: (f"{s[g]['days']} ({s[g]['share'] * 100:.0f}%) / {s[g]['episodes']}; {_pct(s[g]['annual'])}; "
+                          f"{s[g]['sharpe']:.2f}; {_pct(s[g]['max_drawdown'])}; {_pct(s[g]['price_annual'])}")
+        out.append(f"| {label} | {pair} | " + " | ".join(cell(g) for g in groups)
+                   + (" |" if parts else f" | {_word(judge_l6a(s))} |"))
+    return "\n".join(out)
+
+
+ROBUST = {"ema": ("ema-", "spec", "ema+"), "width": ("w-", "spec", "w+")}
+
+
+def robust_report(pair: str, mode: str, folders: dict[str, str]) -> str:
+    """Markdown for L6b on one pool: per setting (spec, ema-, ema+, w-, w+) the full-run CAGR / max DD / Calmar and the
+    annualised return per regime, then per constant the best setting per regime and whether it is stable."""
+    close = binance_close(pair)
+    labels = regime_labels(close)
+    nv = {k: daily_net_value(f, mode) for k, f in folders.items()}
+    split = {k: regime_split(v, labels, close) for k, v in nv.items()}
+    out = [f"| setting | CAGR / max DD / Calmar | " + " | ".join(REGIMES) + " |", "|---|---|" + "---|" * len(REGIMES)]
+    for k in folders:
+        m = l0(nv[k])
+        out.append(f"| {k} | {_pct(m['cagr'])} / {_pct(m['max_drawdown'])} / {m['calmar']:.2f} | "
+                   + " | ".join(_pct(split[k][g]["annual"]) for g in REGIMES) + " |")
+    out += ["", "| constant | best per regime | L6b |", "|---|---|---|"]
+    for name, keys in ROBUST.items():
+        if all(k in split for k in keys):
+            b = judge_l6b({("-", "spec", "+")[i]: split[k] for i, k in enumerate(keys)})
+            out.append(f"| {name} | " + ", ".join(f"{g}: {w}" for g, w in b["best"].items()) + f" | {_word(b['stable'])} |")
+    return "\n".join(out)
+
+
 def l0_table(runs: dict[str, tuple[str, str]]) -> str:
     """Markdown table, one row per labelled run (result folder, mode)."""
     lines = ["| run | window | start | end value | multiple | CAGR | max DD (daily) | Calmar |", "|---|---|---|---|---|---|---|---|"]
@@ -281,11 +422,77 @@ def _self_check(tmp: Path):
     rep = yearly_report({"r": (str(tmp / "v32"), "reinvest")})
     assert "| r |  |  | | | | |" in rep, rep   # 2 daily returns: too few for any statistic
     assert "| r | -20.0% / -20.0% | +50.0% / 0.0% * |" in rep and "| r | 0 of 1 | not judged |" in rep, rep
+    # L6 regime labels: +1% a day -> EMA200 rises ~35% in 30 days at no drawdown: bull; -1% a day -> bear once 20% below
+    # the high; flat -> range; the first 30 days have no slope: no label
+    days = pd.date_range("2018-01-01", periods=400)
+    up = regime_labels(pd.Series(100 * 1.01 ** np.arange(400), index=days))
+    assert up.iloc[:30].isna().all() and (up.iloc[300:] == "bull").all(), up.value_counts()
+    down = regime_labels(pd.Series(100 * 0.99 ** np.arange(400), index=days))
+    assert (down.iloc[300:] == "bear").all(), down.value_counts()
+    assert (regime_labels(pd.Series(100.0, index=days)).iloc[30:] == "range").all()
+    # a 25% fall after a long rise: the EMA200 still climbs but the close is > 20% below the high -> range, not bull
+    fall = pd.Series(np.r_[100 * 1.01 ** np.arange(399), 100 * 1.01 ** 398 * 0.75], index=days)
+    assert regime_labels(fall).iloc[-1] == "range", regime_labels(fall).iloc[-3:]
+    # range parts (post-hoc diagnostic): flat EMA200, a fall > 20% while the EMA200 still rises, a fall < 20% while it drops
+    parts = range_parts(fall)
+    assert parts.iloc[-1] == "range: drop, EMA up" and parts.iloc[300] == "bull", parts.iloc[-3:]
+    assert (range_parts(pd.Series(100.0, index=days)).iloc[30:] == "range: flat EMA").all()
+    # -1% a day, then a close at 85% of the 365-day high (day 35, ~70): 15% below the high while the EMA200 still drops
+    bounce = pd.Series(np.r_[100 * 0.99 ** np.arange(399), 0.85 * 100 * 0.99 ** 35], index=days)
+    assert range_parts(bounce).iloc[-1] == "range: rebound, EMA down", range_parts(bounce).iloc[-3:]
+    # L6 split: the return from 00:00 of D to the next value takes D's label. +10% bull, -10% bear, 0 bear, +10% bull
+    # (the last value is at 23:59, as v3.2's run end); the price doubles on bull days and halves on the first bear day
+    t = pd.to_datetime(["2024-01-01 00:00", "2024-01-02 00:00", "2024-01-03 00:00", "2024-01-04 00:00", "2024-01-04 23:59"])
+    nv = pd.Series([100.0, 110.0, 99.0, 99.0, 108.9], index=t)
+    days = pd.date_range("2024-01-01", periods=4)
+    labels = pd.Series(["bull", "bear", "bear", "bull"], index=days)
+    price = pd.Series([10.0, 20.0, 10.0, 10.0, 20.0], index=pd.date_range("2023-12-31", periods=5))   # closes of D - 1..D
+    s = regime_split(nv, labels, price)
+    assert (s["bull"]["days"], s["bull"]["episodes"], s["bear"]["days"], s["bear"]["episodes"]) == (2, 2, 2, 1), s
+    assert abs(s["bull"]["chained"] - 0.21) < 1e-12 and s["bull"]["max_drawdown"] == 0, s["bull"]
+    assert abs(s["bear"]["chained"] + 0.10) < 1e-12 and abs(s["bear"]["max_drawdown"] + 0.10) < 1e-12, s["bear"]
+    assert abs(s["bull"]["price_chained"] - 3.0) < 1e-12 and abs(s["bear"]["price_chained"] + 0.5) < 1e-12, s
+    assert abs(s["bull"]["share"] - 0.5) < 1e-12 and s["range"]["days"] == 0, s
+    assert abs(s["bull"]["annual"] - (1.21 ** (365 / 2) - 1)) < 1e-6 * 1.21 ** (365 / 2), s["bull"]
+    # L6a: every regime with >= 30 days must gain; a short regime is not judged; nothing long enough -> None
+    reg = lambda **a: {g: {"days": a[g][0], "annual": a[g][1]} for g in REGIMES}
+    assert judge_l6a(reg(bull=(300, 0.3), bear=(200, 0.01), range=(500, 0.1))) is True
+    assert judge_l6a(reg(bull=(300, 0.3), bear=(200, -0.01), range=(500, 0.1))) is False
+    assert judge_l6a(reg(bull=(300, 0.3), bear=(29, -0.5), range=(500, 0.1))) is True   # bear too short to judge
+    assert judge_l6a(reg(bull=(10, 0.3), bear=(29, -0.5), range=(0, np.nan))) is None
+    # L6b: the best of the three settings per judged regime; stable when one setting wins every judged regime
+    b = judge_l6b({"-": reg(bull=(300, 0.2), bear=(200, 0.0), range=(500, 0.1)),
+                   "spec": reg(bull=(300, 0.3), bear=(200, 0.1), range=(500, 0.2)),
+                   "+": reg(bull=(300, 0.1), bear=(200, 0.05), range=(500, 0.15))})
+    assert b == {"best": {"bull": "spec", "bear": "spec", "range": "spec"}, "stable": True}, b
+    b = judge_l6b({"-": reg(bull=(300, 0.4), bear=(20, 0.9), range=(500, 0.1)),
+                   "spec": reg(bull=(300, 0.3), bear=(20, 0.1), range=(500, 0.2)),
+                   "+": reg(bull=(300, 0.1), bear=(20, 0.05), range=(500, 0.15))})
+    assert b == {"best": {"bull": "-", "range": "spec"}, "stable": False}, b   # bear has < 30 days in the spec run
+    # reports: the v3.2 run above (2024-01-01..2025-12-31, 3 values) on the real ETH/USD labels renders, too short to judge
+    rep = regime_report({"r": (str(tmp / "v32"), "reinvest", "ethusdt")})
+    assert rep.count("| r | ethusdt |") == 1 and rep.endswith("| not judged |"), rep
+    rep = regime_report({"r": (str(tmp / "v32"), "reinvest", "ethusdt")}, parts=True)
+    assert "range: flat EMA" in rep and "L6a" not in rep, rep
+    rep = robust_report("ethusdt", "reinvest", {k: str(tmp / "v32") for k in ("spec", "ema-", "ema+", "w-", "w+")})
+    assert "| ema | " in rep and "| width | " in rep, rep
 
 
 def main(argv: list[str]) -> None:
-    if not argv or argv[0] not in ("l0", "yearly"):
+    if not argv or argv[0] not in ("l0", "yearly", "regime", "robust"):
         sys.exit(__doc__)
+    if argv[0] == "robust":
+        print(robust_report(argv[1], argv[2], dict(a.split("=", 1) for a in argv[3:])))
+        return
+    if argv[0] == "regime":
+        parts = argv[1:2] == ["--parts"]
+        runs = {}
+        for a in argv[1 + parts:]:
+            label, spec = a.split("=", 1)
+            folder, mode, pair = spec.rsplit(":", 2)
+            runs[label] = (folder, mode, pair)
+        print(regime_report(runs, parts))
+        return
     runs = {}
     for a in argv[1:]:
         label, spec = a.split("=", 1)
