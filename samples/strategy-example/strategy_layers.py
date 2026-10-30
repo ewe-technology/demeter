@@ -27,7 +27,7 @@ Usage, from samples/strategy-example:
     python strategy_layers.py yearly <label>=<result folder>:<mode> ...  # L1 + L5 tables
     python strategy_layers.py regime [--parts] <label>=<result folder>:<mode>:<pair> ...   # pair: ethusdt | ethbtc
     python strategy_layers.py robust <pair> <mode> spec=<folder> ema-=<folder> ema+=<folder> w-=<folder> w+=<folder>
-    python strategy_layers.py psr <N trials> <label>=<result folder>:<mode> ...   # L8 + L4 + L3 tables
+    python strategy_layers.py psr <N trials> <label>=<result folder>:<mode>[:reported] ...   # L8 + L4 + L3 tables
 """
 from __future__ import annotations
 
@@ -300,21 +300,28 @@ def expected_max_sharpe(n: int, var: float) -> float:
     return float(np.sqrt(var) * ((1 - EULER_GAMMA) * norm.ppf(1 - 1 / n) + EULER_GAMMA * norm.ppf(1 - 1 / (n * np.e))))
 
 
-def deflated_sharpe(s: dict, n: int) -> float:
-    """DSR = PSR(SR0), SR0 = the expected maximum Sharpe of n null trials; with no return series of the other trials,
+def null_sharpe0(s: dict, n: int) -> float:
+    """SR0 of the DSR (daily): the expected maximum Sharpe of n null trials; with no return series of the other trials,
     their Sharpe variance is taken as one estimate's under the null, 1 / (T - 1) (pre-registered L4 rule)."""
-    return psr_at(s, expected_max_sharpe(n, 1 / (s["days"] - 1)))
+    return expected_max_sharpe(n, 1 / (s["days"] - 1))
+
+
+def deflated_sharpe(s: dict, n: int) -> float:
+    """DSR = PSR(SR0), SR0 = null_sharpe0(s, n)."""
+    return psr_at(s, null_sharpe0(s, n))
 
 
 def breakeven_n(s: dict, bar: float = PSR_BAR, cap: int = 10 ** 12) -> int:
-    """The largest trial count n with DSR >= bar (DSR falls with n); 0 when even one trial fails, `cap` if none fails."""
+    """The largest trial count n <= cap with DSR >= bar (DSR falls with n); 0 when even one trial fails."""
     if deflated_sharpe(s, 1) < bar:
         return 0
     lo, hi = 1, 2
-    while hi < cap and deflated_sharpe(s, hi) >= bar:
+    while hi <= cap and deflated_sharpe(s, hi) >= bar:
         lo, hi = hi, hi * 2
-    if hi >= cap:
-        return cap
+    if hi > cap:
+        if deflated_sharpe(s, cap) >= bar:
+            return cap
+        hi = cap
     while hi - lo > 1:   # DSR(lo) >= bar > DSR(hi)
         mid = (lo + hi) // 2
         lo, hi = (mid, hi) if deflated_sharpe(s, mid) >= bar else (lo, mid)
@@ -329,17 +336,20 @@ def worst_year_return(nv: pd.Series) -> float:
 
 def l3_bootstrap(nv: pd.Series) -> dict:
     """L3 of a daily net value over the whole run, strategy_validation's stationary bootstrap of its daily log returns
-    with one random stream seeded Settings.seed, used in this order: the mean test (method 3, 1 - p that the mean is
-    > 0) at each mean block in BOOT_BLOCKS, the 90-day kill line (method 4), the one-year paths (method 5). Beside them
-    the real run's worst 365-day return and max drawdown. Pass: 1 - p >= PSR_BAR at the first block and the one-year
-    loss probability <= LOSS_BAR."""
+    with one random stream seeded Settings.seed, used in the pre-registered order: the mean test (method 3, 1 - p that
+    the mean is > 0) at each mean block in BOOT_BLOCKS, the one-year paths (method 5), the 90-day kill line (method 4).
+    Beside them the real run's worst 365-day return and max drawdown. Pass: 1 - p >= PSR_BAR at the first block and
+    the one-year loss probability <= LOSS_BAR. Needs at least Settings.mc_days daily returns (else the paths would be
+    shorter than a year)."""
     r = SV.daily_log_returns(nv)
     s = SV.Settings()
+    if len(r) < s.mc_days:
+        raise ValueError(f"{len(r)} daily returns: one-year paths need {s.mc_days}")
     rng = np.random.default_rng(s.seed)
     one_minus_p = {b: SV.method3_significance(r, SV.Settings(sig_block=b), rng)["bootstrap_one_minus_p"]
                    for b in BOOT_BLOCKS}
-    kill = SV.method4_kill_line(r, s, rng)
     mc = SV.method5_monte_carlo(r, s, rng)
+    kill = SV.method4_kill_line(r, s, rng)
     return {"one_minus_p": one_minus_p, "kill_line": kill, **mc, "worst_year": worst_year_return(nv),
             "max_drawdown": float((nv / nv.cummax() - 1).min()),
             "l3_pass": one_minus_p[BOOT_BLOCKS[0]] >= PSR_BAR and mc["loss_probability"] <= LOSS_BAR}
@@ -405,42 +415,50 @@ def robust_report(pair: str, mode: str, folders: dict[str, str]) -> str:
     return "\n".join(out)
 
 
-def psr_report(runs: dict[str, tuple[str, str]], n_trials: int) -> str:
-    """Markdown for L8, L4 (DSR at the ledger's n_trials) and L3, one row per labelled run (result folder, mode), each
-    over the whole run. A run with fewer than MIN_DAYS daily returns gets one "too few" row per table."""
-    data = {label: daily_net_value(folder, mode) for label, (folder, mode) in runs.items()}
-    ok = {label: len(SV.daily_log_returns(nv)) >= MIN_DAYS for label, nv in data.items()}
-    p8 = {label: l8_psr(nv) for label, nv in data.items() if ok[label]}
+def psr_report(runs: dict[str, tuple], n_trials: int) -> str:
+    """Markdown for L8, L4 (DSR at the ledger's n_trials) and L3, one row per labelled run (result folder, mode and an
+    optional judged flag, default True), each over the whole run; N stands beside the L8 and L4 numbers. A run not
+    judged prints "reported" for its verdicts. A run with fewer than MIN_DAYS daily returns gets one "too few" row per
+    table; one with fewer than a year of them gets no L3 row."""
+    data = {label: daily_net_value(r[0], r[1]) for label, r in runs.items()}
+    judged = {label: r[2] if len(r) > 2 else True for label, r in runs.items()}
+    days = {label: len(SV.daily_log_returns(nv)) for label, nv in data.items()}
+    verdict = lambda label, p: _word(p) if judged[label] else "reported"
     ann = lambda sr: sr * np.sqrt(365)
-    l8 = ["L8: whole run, daily log returns", "",
-          "| run | window | days | Sharpe | skew / kurt | PSR(0) | MinTRL days | rho1 | Ljung-Box Q(10) / p | "
-          "T_eff / PSR(0) at T_eff | L8 |", "|---|---|---|---|---|---|---|---|---|---|---|"]
-    l4 = [f"L4: DSR at the ledger's N = {n_trials} (SR0 = expected max Sharpe of N null trials, annualised)", "",
-          "| run | SR0 at N | DSR at N | DSR at N = 1 / 10 / 100 / 1,000 | break-even N | L4 |", "|---|---|---|---|---|---|"]
-    l3 = ["L3: stationary bootstrap of daily log returns (one-year paths: 365 days, block 90)", "",
-          "| run | 1 − p block 20 / 5 / 60 | 90-day kill line (P5) | 1-year max DD median / P5 | "
+    st = SV.Settings()
+    blocks = " / ".join(f"{b:g}" for b in BOOT_BLOCKS)
+    l8 = ["L8: whole run, daily log returns; N = the L4 trial count", "",
+          f"| run | N | window | days | Sharpe | skew / kurt | PSR(0) | MinTRL days | rho1 | Ljung-Box Q({LB_LAGS}) / p | "
+          "T_eff / PSR(0) at T_eff | L8 |", "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+    l4 = ["L4: DSR at the ledger's N (SR0 = expected max Sharpe of N null trials, annualised)", "",
+          "| run | N | SR0 at N | DSR at N | DSR at N = 1 / 10 / 100 / 1,000 | break-even N | L4 |",
+          "|---|---|---|---|---|---|---|"]
+    l3 = [f"L3: stationary bootstrap of daily log returns (one-year paths: {st.mc_days} days, block {st.mc_block:g})", "",
+          f"| run | 1 − p block {blocks} | {st.kill_days}-day kill line (P{st.kill_pct:g}) | 1-year max DD median / P5 | "
           "1-year return median / P5 | loss probability | real worst 365-day / max DD | L3 |",
           "|---|---|---|---|---|---|---|---|"]
     for label, nv in data.items():
-        if not ok[label]:
+        if days[label] < MIN_DAYS:
             for t in (l8, l4, l3):
                 t.append(f"| {label} | too few daily returns |")
             continue
-        s = p8[label]
+        s = l8_psr(nv)
         eff = f"{s['t_eff']:.0f} / {s['psr_eff']:.3f}" if s["t_eff"] else "rho1 <= 0"
-        l8.append(f"| {label} | {nv.index[0]:%Y-%m-%d}..{nv.index[-1]:%Y-%m-%d} | {s['days']} | {s['sharpe_annual']:.2f} | "
-                  f"{s['skew']:.2f} / {s['kurt']:.1f} | {s['psr']:.3f} | {s['min_trl']:,.0f} | {s['rho1']:+.3f} | "
-                  f"{s['lb_q']:.1f} / {s['lb_p']:.3f} | {eff} | {_word(s['l8_pass'])} |")
+        l8.append(f"| {label} | {n_trials} | {nv.index[0]:%Y-%m-%d}..{nv.index[-1]:%Y-%m-%d} | {s['days']} | "
+                  f"{s['sharpe_annual']:.2f} | {s['skew']:.2f} / {s['kurt']:.1f} | {s['psr']:.3f} | {s['min_trl']:,.0f} | "
+                  f"{s['rho1']:+.3f} | {s['lb_q']:.1f} / {s['lb_p']:.3f} | {eff} | {verdict(label, s['l8_pass'])} |")
         dsr = deflated_sharpe(s, n_trials)
-        sr0 = expected_max_sharpe(n_trials, 1 / (s["days"] - 1))
-        l4.append(f"| {label} | {ann(sr0):.2f} | {dsr:.3f} | "
+        l4.append(f"| {label} | {n_trials} | {ann(null_sharpe0(s, n_trials)):.2f} | {dsr:.3f} | "
                   + " / ".join(f"{deflated_sharpe(s, n):.3f}" for n in (1, 10, 100, 1000))
-                  + f" | {breakeven_n(s):,} | {_word(dsr >= PSR_BAR)} |")
+                  + f" | {breakeven_n(s):,} | {verdict(label, dsr >= PSR_BAR)} |")
+        if days[label] < st.mc_days:
+            l3.append(f"| {label} | fewer than {st.mc_days} daily returns |")
+            continue
         b = l3_bootstrap(nv)
         l3.append(f"| {label} | " + " / ".join(f"{b['one_minus_p'][k]:.3f}" for k in BOOT_BLOCKS)
                   + f" | {_pct(b['kill_line'])} | {_pct(b['max_drawdown_median'])} / {_pct(b['max_drawdown_p5'])} | "
-                  f"{_pct(b['return_median'])} / {_pct(b['return_p5'])} | {b['loss_probability'] * 100:.1f}% | "
-                  f"{_pct(b['worst_year'])} / {_pct(b['max_drawdown'])} | {_word(b['l3_pass'])} |")
+                  f"{_pct(b['return_median'])} / {_pct(b['return_p5'])} | {b['loss_probability'] * 100:.2f}% | "
+                  f"{_pct(b['worst_year'])} / {_pct(b['max_drawdown'])} | {verdict(label, b['l3_pass'])} |")
     return "\n".join(l8 + [""] + l4 + [""] + l3)
 
 
@@ -649,6 +667,7 @@ def _self_check(tmp: Path):
     be = breakeven_n(s)
     assert deflated_sharpe(s, be) >= PSR_BAR > deflated_sharpe(s, be + 1), be
     assert breakeven_n({**s, "sharpe_daily": 0.01}) == 0   # PSR(0) already below the bar: no N passes
+    assert breakeven_n(s, cap=be + 7) == be and breakeven_n(s, cap=be) == be   # a cap above the answer still finds it
     # L3: a steady gainer passes both parts at every block; a loser fails; one seed per run -> same numbers twice
     days = pd.date_range("2020-01-01", periods=1000)
     win = pd.Series(100 * np.exp(np.cumsum(rng.normal(0.002, 0.01, len(days)))), index=days)
@@ -666,18 +685,29 @@ def _self_check(tmp: Path):
     run.mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"net_value": win.values}, index=win.index).to_csv(run / "netvalue_x_reinvest.csv")
     rep = psr_report({"w": (str(run), "reinvest"), "r": (str(tmp / "v32"), "reinvest")}, n_trials=50)
-    assert rep.count("| w | ") == 3 and rep.count("| pass |") == 3, rep
-    assert rep.count("| r | too few daily returns |") == 3 and "N = 50" in rep, rep
+    assert rep.count("| w | 50 | ") == 2 and rep.count("| pass |") == 3, rep   # N beside the L8 and L4 numbers
+    assert rep.count("| r | too few daily returns |") == 3, rep
+    # a run marked not judged prints "reported"; a run shorter than a year has no one-year paths
+    short = tmp / "short"
+    short.mkdir(parents=True, exist_ok=True)
+    w200 = win.iloc[:200]
+    pd.DataFrame({"net_value": w200.values}, index=w200.index).to_csv(short / "netvalue_x_reinvest.csv")
+    rep = psr_report({"w": (str(run), "reinvest", False), "s": (str(short), "reinvest")}, n_trials=50)
+    w_rows = [x for x in rep.split("\n") if x.startswith("| w |")]
+    assert len(w_rows) == 3 and all(x.endswith("| reported |") for x in w_rows), rep
+    assert "| s | fewer than 365 daily returns |" in rep and rep.count("| s | 50 | ") == 2, rep
 
 
 def main(argv: list[str]) -> None:
     if not argv or argv[0] not in ("l0", "yearly", "regime", "robust", "psr"):
         sys.exit(__doc__)
-    if argv[0] == "psr":
+    if argv[0] == "psr":   # <label>=<folder>:<mode>[:reported]; ":reported" marks a run that is not judged
         runs = {}
         for a in argv[2:]:
             label, spec = a.split("=", 1)
-            runs[label] = tuple(spec.rsplit(":", 1))
+            reported = spec.endswith(":reported")
+            folder, mode = spec.removesuffix(":reported").rsplit(":", 1)
+            runs[label] = (folder, mode, not reported)
         print(psr_report(runs, int(argv[1])))
         return
     if argv[0] == "robust":
