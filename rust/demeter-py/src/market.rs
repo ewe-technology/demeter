@@ -215,6 +215,14 @@ impl PyMarketCore {
         self.inner.borrow_mut().compat.legacy_quirks = v;
     }
     #[getter]
+    fn fee_in_range_liquidity(&self) -> bool {
+        self.inner.borrow().fee_in_range_liquidity
+    }
+    #[setter]
+    fn set_fee_in_range_liquidity(&self, v: bool) {
+        self.inner.borrow_mut().fee_in_range_liquidity = v;
+    }
+    #[getter]
     fn last_tick(&self) -> Option<i32> {
         self.inner.borrow().last_tick
     }
