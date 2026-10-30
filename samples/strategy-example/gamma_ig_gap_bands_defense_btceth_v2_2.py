@@ -75,7 +75,11 @@ EMA_SPANS = (90, 100, 110, 120)
 # virtual band step and the lower stop / upper rebuild distance. Off = the spec; the folder gets "-l6ema-10" / "-l6w0.9".
 L6_EMA_SHIFT = int(os.environ.get("L6_EMA_SHIFT", "0"))
 L6_WIDTH = Decimal(os.environ.get("L6_WIDTH", "1"))
-L6_TAG = f"{f'-l6ema{L6_EMA_SHIFT:+d}' if L6_EMA_SHIFT else ''}{f'-l6w{L6_WIDTH}' if L6_WIDTH != 1 else ''}"
+# QUAN-1216 L2 decision test (VALIDATION-2026-10-29-v3_2-v2_2.md, L2): L2_SHIFT=k rotates F and the strong flag k days around
+# the run's judged days ("-l2sk" in the folder); prices and range breaks stay real. Off = the spec.
+L2_SHIFT = int(os.environ.get("L2_SHIFT", "0"))
+L6_TAG = (f"{f'-l6ema{L6_EMA_SHIFT:+d}' if L6_EMA_SHIFT else ''}{f'-l6w{L6_WIDTH}' if L6_WIDTH != 1 else ''}"
+          f"{f'-l2s{L2_SHIFT}' if L2_SHIFT else ''}")
 EMA_SPANS = tuple(n + L6_EMA_SHIFT for n in EMA_SPANS)
 EMA_SLOPE_DAYS = 20                                     # exit also needs EMA_n < EMA_n 20 days ago
 LOWER_STOP, UPPER_REBUILD = 0.80, 1.20
@@ -696,6 +700,9 @@ def process_for_date(csd: datetime, dsd: date, ded: date, pool_name: str = "base
     daily = None
     if any(m != MODE_PLAIN for m in modes):
         daily = binance_signal_frame(ded)
+        if L2_SHIFT:
+            from strategy_layers import rotate_decisions
+            daily = rotate_decisions(daily, dsd, ded, ("F", "strong"), L2_SHIFT)
         window = daily.loc[pd.Timestamp(dsd):]
         print(f"signal F over the window: mean {window['F'].mean():.3f}, days at 0: {(window['F'] == 0).sum()}, "
               f"days >= 0.999: {(window['F'] >= 0.999).sum()}, strong days: {int(window['strong'].sum())}/{len(window)}")

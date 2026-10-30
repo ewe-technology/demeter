@@ -222,7 +222,11 @@ L6_WIDTH = Decimal(os.environ.get("L6_WIDTH", "1"))
 if L6_WIDTH != 1:   # off: the spec floats untouched, bit for bit
     BAND_STEP *= float(L6_WIDTH)
     LOWER_STOP, UPPER_REBUILD = 1 - (1 - LOWER_STOP) * float(L6_WIDTH), 1 + (UPPER_REBUILD - 1) * float(L6_WIDTH)
-L6_TAG = f"{f'-l6ema{L6_EMA_SHIFT:+d}' if L6_EMA_SHIFT else ''}{f'-l6w{L6_WIDTH}' if L6_WIDTH != 1 else ''}"
+# QUAN-1216 L2 decision test (VALIDATION-2026-10-29-v3_2-v2_2.md, L2): L2_SHIFT=k rotates F' and the divergence flag k days
+# around the run's judged days ("-l2sk" in the folder); prices, EMA share and range breaks stay real. Off = the spec.
+L2_SHIFT = int(os.environ.get("L2_SHIFT", "0"))
+L6_TAG = (f"{f'-l6ema{L6_EMA_SHIFT:+d}' if L6_EMA_SHIFT else ''}{f'-l6w{L6_WIDTH}' if L6_WIDTH != 1 else ''}"
+          f"{f'-l2s{L2_SHIFT}' if L2_SHIFT else ''}")
 # spec v3.1 section 3 rule 4: ETH share of a virtual ladder is 70% above the account's own EMA, else 50% (v3's 25% below
 # EMA100 x 0.95 is deleted). Assumption: refills and the initial build use the same rule (the spec only states it for the rebuild).
 # spec v3.1 section 4: the centre and all 16 boundaries are each the nearest tick spacing multiple, i.e. every boundary is
@@ -2013,6 +2017,9 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
                 daily_ema = daily_ema_frame(pd.concat([warm.data.price, market.data.price]))
             else:
                 daily_ema = binance_daily_frame(dsd, ded)
+            if L2_SHIFT:
+                from strategy_layers import rotate_decisions
+                daily_ema = rotate_decisions(daily_ema, dsd, ded, ("Fp", "diverged"), L2_SHIFT)
             daily_emas[source] = daily_ema
             first, last = daily_ema.loc[pd.Timestamp(dsd) - timedelta(days=1)], daily_ema.iloc[-1]
             print(f"[{source}] ema{EMA_SPAN}: {len(daily_ema)} daily closes, day before window close {first['close']:.0f} ema {first['ema']:.0f} F {first['F']:.3f}, "

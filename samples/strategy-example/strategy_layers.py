@@ -22,18 +22,23 @@ L8 + L4 + L3 (whole run, daily log returns, no new backtest): PSR(0), MinTRL and
 deflated Sharpe ratio at the trial ledger's N and the break-even N (deflated_sharpe, breakeven_n), and the stationary
 bootstrap's mean test, one-year paths and kill line (l3_bootstrap), judged by the pre-registered reference rules.
 
+L2 (decision test, our substitute for Maker's MCPT): the real price path with the strategy's decision series rotated in
+time (rotate_decisions, run by l2_runs.py), the real CAGR and Calmar against the shifted runs' (l2_row, l2_report).
+
 Usage, from samples/strategy-example:
     python strategy_layers.py l0 <label>=<result folder>:<mode> ...      # mode: reinvest | noreinvest
     python strategy_layers.py yearly <label>=<result folder>:<mode> ...  # L1 + L5 tables
     python strategy_layers.py regime [--parts] <label>=<result folder>:<mode>:<pair> ...   # pair: ethusdt | ethbtc
     python strategy_layers.py robust <pair> <mode> spec=<folder> ema-=<folder> ema+=<folder> w-=<folder> w+=<folder>
     python strategy_layers.py psr <N trials> <label>=<result folder>:<mode>[:reported] ...   # L8 + L4 + L3 tables
+    python strategy_layers.py l2 <label>=<result folder>:<mode>:<shift folder>:<signal csv>:<column>[:reported] ...
 """
 from __future__ import annotations
 
 import glob
 import re
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -353,6 +358,92 @@ def l3_bootstrap(nv: pd.Series) -> dict:
     return {"one_minus_p": one_minus_p, "kill_line": kill, **mc, "worst_year": worst_year_return(nv),
             "max_drawdown": float((nv / nv.cummax() - 1).min()),
             "l3_pass": one_minus_p[BOOT_BLOCKS[0]] >= PSR_BAR and mc["loss_probability"] <= LOSS_BAR}
+
+
+L2_GUARD, L2_MIN_SHIFTS, L2_BAR = 30, 500, 0.05   # pre-registered, VALIDATION-2026-10-29-v3_2-v2_2.md L2
+
+
+def rotate_decisions(frame: pd.DataFrame, start: date, end: date, columns: tuple[str, ...], k: int) -> pd.DataFrame:
+    """L2: a copy of a daily signal frame with `columns` rotated `k` days around the run's judged days (start - 1 ..
+    end - 1: a day's close is executed the next day). F'(D) = F(D - k), the last k days wrapping to the front. All values
+    and spacings stay; only their alignment with the prices changes."""
+    out = frame.copy()
+    judged = (out.index >= pd.Timestamp(start) - timedelta(days=1)) & (out.index <= pd.Timestamp(end) - timedelta(days=1))
+    for c in columns:
+        out.loc[judged, c] = np.roll(frame.loc[judged, c].to_numpy(), k)
+    return out
+
+
+def shift_grid(days: int, step: int, guard: int = L2_GUARD) -> list[int]:
+    """The shifts of a run with `days` judged days, every `step` days and at least `guard` days from the real alignment
+    on both sides of the circle."""
+    return list(range(guard, days - guard + 1, step))
+
+
+def permutation_p(real: float, shifted) -> float:
+    """(1 + shifts at least as good as the real rule) / (1 + shifts), Phipson & Smyth (2010): never 0."""
+    s = np.asarray(shifted, dtype=float)
+    return float((1 + np.sum(s >= real)) / (1 + len(s)))
+
+
+def decision_memory_days(decisions: pd.Series) -> int:
+    """First lag at which the decision series' autocorrelation is under 1/e: roughly how far two shifts must be apart
+    to give a different alignment."""
+    x = decisions.astype(float).to_numpy()
+    x = x - x.mean()
+    var = float(np.dot(x, x))
+    if var == 0:
+        raise ValueError("flat decision series: no timing to test")
+    for lag in range(1, len(x)):
+        if float(np.dot(x[:-lag], x[lag:])) / var < np.exp(-1):
+            return lag
+    return len(x)
+
+
+def rebuild_count(folder: str | Path, mode: str) -> int:
+    """Rebuilds of a run, from its summary file: v2.2 eth_summary.csv, v3.2 apr_remix_*_results.csv."""
+    v22 = Path(folder) / "eth_summary.csv"
+    if v22.exists():
+        s = pd.read_csv(v22, index_col=0)
+        return int(s.loc[s.index.str.endswith(f"_{mode}"), "rescale_count"].iloc[0])
+    s = pd.read_csv(glob.glob(f"{folder}/apr_remix_*_results.csv")[0])
+    return int(s.loc[s["Strategy"].str.endswith(f"_{mode}"), "Rebalance/Rescale Count"].iloc[0])
+
+
+def l2_row(nv: pd.Series, shifted: dict[int, pd.Series]) -> dict:
+    """L2 of one run: its CAGR and Calmar against the same numbers of its shifted runs, which must cover the same days.
+    Reference: p(CAGR) <= L2_BAR."""
+    for k, s in shifted.items():
+        if not s.index.equals(nv.index):
+            raise ValueError(f"shift {k} does not cover the real run's days")
+    real, null = l0(nv), [l0(s) for s in shifted.values()]
+    cagr, calmar = [m["cagr"] for m in null], [m["calmar"] for m in null]
+    cagr_p = permutation_p(real["cagr"], cagr)
+    return {"shifts": len(null), "cagr": real["cagr"], "cagr_p": cagr_p, "cagr_p5": float(np.percentile(cagr, 5)),
+            "cagr_median": float(np.median(cagr)), "cagr_p95": float(np.percentile(cagr, 95)),
+            "calmar": real["calmar"], "calmar_median": float(np.median(calmar)),
+            "calmar_p": permutation_p(real["calmar"], calmar), "l2_pass": bool(cagr_p <= L2_BAR)}
+
+
+def l2_report(runs: dict[str, tuple[str, str, str, str, str, bool]]) -> str:
+    """L2 table. runs: label -> (real run folder, mode, shift folder from l2_runs.py, signal csv, decision column, judged)."""
+    out = ["| run | mode | shifts | CAGR | shifted CAGR 5% / median / 95% | p CAGR | Calmar | shifted median Calmar | p Calmar "
+           "| memory days | independent alignments | rebuilds | shifted median rebuilds | reference p <= 0.05 |",
+           "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+    for label, (folder, mode, shift_dir, signal, column, judged) in runs.items():
+        nv = daily_net_value(folder, mode)
+        files = glob.glob(f"{shift_dir}/shift_*_{mode}.csv")
+        frames = {int(re.search(r"shift_(\d+)_", f).group(1)): pd.read_csv(f, index_col=0, parse_dates=True) for f in files}
+        r = l2_row(nv, {k: x["net_value"] for k, x in frames.items()})
+        rebuilds = np.median([x["rebuilds"].iloc[0] for x in frames.values()])
+        decisions = pd.read_csv(signal, index_col=0, parse_dates=True)[column]
+        decisions = decisions.loc[nv.index[0].normalize():nv.index[-1].normalize()]
+        memory = decision_memory_days(decisions)
+        word = _word(r["l2_pass"]) if judged else "reported"
+        out.append(f"| {label} | {mode} | {r['shifts']} | {_pct(r['cagr'])} | {_pct(r['cagr_p5'])} / {_pct(r['cagr_median'])} / "
+                   f"{_pct(r['cagr_p95'])} | {r['cagr_p']:.3f} | {r['calmar']:.2f} | {r['calmar_median']:.2f} | {r['calmar_p']:.3f} "
+                   f"| {memory} | {len(decisions) / memory:.1f} | {rebuild_count(folder, mode)} | {rebuilds:.0f} | {word} |")
+    return "\n".join(out)
 
 
 def binance_close(pair: str) -> pd.Series:
@@ -697,10 +788,77 @@ def _self_check(tmp: Path):
     assert len(w_rows) == 3 and all(x.endswith("| reported |") for x in w_rows), rep
     assert "| s | fewer than 365 daily returns |" in rep and rep.count("| s | 50 | ") == 2, rep
 
+    # L2: the judged days of a 01-02..01-05 run are 01-01..01-04; only those rows and only the named columns rotate
+    days = pd.date_range("2024-01-01", periods=6, freq="D")
+    frame = pd.DataFrame({"F": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6], "strong": [True, False, False, True, True, False],
+                          "close": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]}, index=days)
+    rot = rotate_decisions(frame, date(2024, 1, 2), date(2024, 1, 5), ("F", "strong"), 1)
+    assert rot["F"].tolist() == [0.4, 0.1, 0.2, 0.3, 0.5, 0.6], rot["F"].tolist()
+    assert rot["strong"].tolist() == [True, True, False, False, True, False], rot["strong"].tolist()
+    assert rot["close"].tolist() == frame["close"].tolist() and frame["F"].iloc[0] == 0.1   # prices stay, input untouched
+    assert rotate_decisions(frame, date(2024, 1, 2), date(2024, 1, 5), ("F",), 4)["F"].tolist() == frame["F"].tolist()
+    # the grid keeps every shift at least `guard` days from the real alignment, on both sides of the circle
+    assert shift_grid(100, 20, 30) == [30, 50, 70], shift_grid(100, 20, 30)
+    # Phipson & Smyth p: (1 + shifts at least as good) / (1 + shifts); it can never be 0
+    assert abs(permutation_p(0.30, [0.1, 0.2, 0.3, 0.4]) - 3 / 5) < 1e-12
+    assert abs(permutation_p(0.50, [0.1, 0.2, 0.3, 0.4]) - 1 / 5) < 1e-12
+    # 50 zeros then 50 ones: autocorrelation at lag l is (100 - 3l) / 100, first under 1/e at l = 22
+    assert decision_memory_days(pd.Series([0.0] * 50 + [1.0] * 50)) == 22
+    try:
+        decision_memory_days(pd.Series([0.5] * 10))
+        raise AssertionError("a flat decision series has no timing to test")
+    except ValueError:
+        pass
+    # L2 report: three shifts around a real run that ends at 200 (one shift beats it), all with the same 10% dip
+    idx = pd.date_range("2024-01-01", periods=400, freq="D")
+
+    def path(end: float) -> pd.Series:
+        return pd.Series(np.r_[100.0, 90.0, np.linspace(90.0, end, 398)], index=idx)
+
+    row = l2_row(path(200.0), {30: path(150.0), 40: path(300.0), 50: path(120.0)})
+    assert row["shifts"] == 3 and abs(row["cagr_p"] - 0.5) < 1e-12 and abs(row["calmar_p"] - 0.5) < 1e-12, row
+    assert row["l2_pass"] is False and abs(row["cagr_median"] - l0(path(150.0))["cagr"]) < 1e-12, row
+    # 19 shifts all below the real run: p = 1 / 20, on the pre-registered bar
+    assert l2_row(path(200.0), {k: path(150.0) for k in range(19)})["l2_pass"] is True
+    try:
+        l2_row(path(200.0), {30: path(150.0).iloc[:-1]})
+        raise AssertionError("a shift over other days is not comparable")
+    except ValueError:
+        pass
+    # the table: real run, shift files and decision column; 200 zeros then 200 ones remember 85 days
+    l2_real, l2_dir = tmp / "l2_real", tmp / "l2_shifts"
+    l2_real.mkdir(parents=True, exist_ok=True)
+    l2_dir.mkdir(parents=True, exist_ok=True)
+    path(200.0).rename("net_value").rename_axis("timestamp").to_frame().to_csv(l2_real / "netvalue_x_reinvest.csv")
+    pd.DataFrame({"Strategy": ["x_reinvest", "x_noreinvest"], "Rebalance/Rescale Count": [7, 9]}).to_csv(
+        l2_real / "apr_remix_100000_results.csv", index=False)
+    assert rebuild_count(l2_real, "reinvest") == 7 and rebuild_count(l2_real, "noreinvest") == 9
+    pd.DataFrame({"name": ["1ETH_reinvest", "1ETH_noreinvest"], "rescale_count": [211.0, 200.0]}).set_index("name").to_csv(
+        l2_real / "eth_summary.csv")
+    assert rebuild_count(l2_real, "noreinvest") == 200   # v2.2's summary wins over a v3.2 file only in this test folder
+    (l2_real / "eth_summary.csv").unlink()
+    for k, end, n in ((30, 150.0, 4), (40, 300.0, 6), (50, 120.0, 10)):
+        (path(end).rename("net_value").rename_axis("timestamp").to_frame().assign(rebuilds=n)
+         .to_csv(l2_dir / f"shift_{k}_reinvest.csv"))
+    signal = tmp / "signal.csv"
+    pd.DataFrame({"date": idx, "Fp": [0.0] * 200 + [1.0] * 200}).to_csv(signal, index=False)
+    rep = l2_report({"r": (str(l2_real), "reinvest", str(l2_dir), str(signal), "Fp", True)})
+    r_row = [x for x in rep.split("\n") if x.startswith("| r |")]
+    assert len(r_row) == 1 and "| 3 |" in r_row[0] and "| 85 | 4.7 |" in r_row[0] and "| 7 | 6 |" in r_row[0], rep
+    assert r_row[0].endswith("| fail |"), rep
+
 
 def main(argv: list[str]) -> None:
-    if not argv or argv[0] not in ("l0", "yearly", "regime", "robust", "psr"):
+    if not argv or argv[0] not in ("l0", "yearly", "regime", "robust", "psr", "l2"):
         sys.exit(__doc__)
+    if argv[0] == "l2":   # <label>=<real folder>:<mode>:<shift folder>:<signal csv>:<column>[:reported]
+        runs = {}
+        for a in argv[1:]:
+            label, spec = a.split("=", 1)
+            reported = spec.endswith(":reported")
+            runs[label] = (*spec.removesuffix(":reported").split(":"), not reported)
+        print(l2_report(runs))
+        return
     if argv[0] == "psr":   # <label>=<folder>:<mode>[:reported]; ":reported" marks a run that is not judged
         runs = {}
         for a in argv[2:]:
