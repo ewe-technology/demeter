@@ -1,0 +1,760 @@
+"""
+ETH-cbBTC MGL 規格書 v2（標準模式／複利模式，2026-09-30）的回測入口。
+
+從 gamma_maker_defense_btceth_v1.py（WB＋ETH強勢25% 規格書）複製，邏輯（訊號、配置、區間）與 v1 相同，
+依 v2 規格書改了：
+* 兩種模式同跑：signal = 標準模式（獎勵發放、不再投入）；compound = 複利模式（已收手續費每月 1 日判定後
+  併入原資，並依當時目標配置重建）。plain 對照組預設關閉
+* ETH 強弱：R > EMA100(R) 才算強（v1 是 R >= EMA100），剛好相等時算弱
+* 重建條件 3：目標 LP >= 99.9% 但實際 LP 差距 > 1%（v1 是目標 LP = 100%）
+* 規格書第 3 節的虛擬帳戶：美元現金 + G 上的谷型虛擬 LP（中心上下各 8 段、每段 2.5%，ETH 側比例 25%/50%/70%），
+  F = 四個帳戶「虛擬 LP 價值 ÷ 帳戶資產」的平均，會隨價格漂移（F_BY_VALUE，v1 是階段值 stage/4）；
+  啟動：EMA 以 2017-08-17 為種子，虛擬帳戶從隔天開始，收盤 >= EMA 時已武裝、全額（SPEC_START）
+* 結果資料夾前綴 ethbtc-mglv2-，不覆蓋 v1 的結果
+未實作：claim 規則與 25% 成功報酬、執行手續費（規格書回測數字本來就是扣除前）。tick 仍對齊 spacing 10，
+所以是 -1050/+950 與 -2230/+1820，不是規格書的 -1054/+953、-2231/+1823。F_BY_VALUE = False、SPEC_START = False
+可回到 v1 的算法。
+
+以下為 v1 的說明（ETH-cbBTC 防禦邏輯 規格書 WB＋ETH強勢25%）：
+從 gamma_maker_defense_ethusdc_v1.py 複製後改寫，沿用資料載入、平行執行、報表框架與四個 EMA 虛擬帳戶
+的階段復歸邏輯；訊號價格、資產配置、LP 形狀與獎勵處理改為新規格書版本。與 v6 的差異：
+
+* 訊號價格 G = sqrt(ETH/USD x BTC/USD)，EMA 退避多一條「EMA 低於 20 日前」的斜率條件
+* ETH 強弱 = R(ETH/BTC) 對 EMA100；強勢時 F 的 25% 留 ETH、退避資金放 USDC，弱勢時退避資金放 BTC
+* LP 為均等單一區間：強勢合計 20%（±10%），弱勢合計 40%（±20%）；上下出界都以當時價格為中心重建
+* 四種資產（LP、ETH、BTC、USDC）任一項偏離目標 12.5% 才重建；換倉成本 0.1%（只算最小兌換量）
+* 手續費不再投入，以 ETH 計 1 ETH 起算；報表以 ETH 枚數為主，另列 BTC 與美元
+
+池子用主網 WBTC/WETH 0.05%（repo 內有資料，也是規格書校正手續費的池子），Base cbBTC/WETH 沒有資料。
+mode=plain 是規格書的「通常LP」對照組：均等型 ±10%、無訊號、出界即重建。
+"""
+import copy
+import math
+import multiprocessing
+import random
+import time
+from datetime import date, datetime, timedelta
+from decimal import Decimal
+from pathlib import Path
+from typing import Dict, List, Tuple
+
+import pandas as pd
+
+import demeter
+from demeter import Actuator, AtTimeTrigger, ChainType, MarketInfo, PeriodTrigger, Snapshot, TokenInfo
+from demeter.result import return_rate
+from demeter.result.metrics.calculator import max_draw_down
+from demeter.uniswap import UniV3Pool
+
+from base_strategy import BaseRemixDaoStrategy
+from export_file import export_stable_apr_results
+from market_v2 import UniLpMarketV2
+from math_const import ZERO, ONE
+from remix_dao_utils import RemixDaoUtils, RemixDAOParams, performance_metrics_for_dca
+from rm_types import RescaleFrequency, TestParams, GlobalParams, RangeStrategy
+
+USDC = TokenInfo(name="usdc", decimal=6)
+MODE_SIGNAL, MODE_PLAIN, MODE_COMPOUND = "signal", "plain", "compound"   # signal = 標準模式
+
+# price source for the signal's daily closes. POOL_SIGNAL = the pools' own minute prices (last tick of each UTC day),
+# BINANCE_SIGNAL = the spec sheet's Binance daily closes: G from BTCUSDT x ETHUSDT, R from ETHBTC (files hold date, close)
+POOL_SIGNAL, BINANCE_SIGNAL = "pool", "binance"
+SIGNAL_SOURCES = [BINANCE_SIGNAL]   # add POOL_SIGNAL to also run it; every listed source shares the minute data, one result folder each
+BINANCE_DIR = Path(__file__).parent
+
+# spec sheet 2.3: four virtual accounts on G, each with its own EMA; F = mean of their deployed fractions
+EMA_SPANS = (90, 100, 110, 120)
+EMA_SLOPE_DAYS = 20                                     # exit also needs EMA_n < EMA_n 20 days ago
+EMA_WARMUP_DAYS = 3 * max(EMA_SPANS) + EMA_SLOPE_DAYS   # adjust=False EMA needs ~3 spans to forget its seed
+DATA_FLOOR = date(2021, 5, 13)   # first day with minute data for both pools (WBTC/WETH lacks 2021-05-12);
+                                # 2022 runs warm up from here, ~230 days instead of the spec sheet's 2017 start
+LOWER_STOP, UPPER_REBUILD = 0.80, 1.20
+REFILL_CONFIRM_DAYS = 3
+REFILL_STAGES = ((1, 1.05), (2, 1.0833), (3, 1.1167), (4, 1.15))  # (stage, close / low), stage k -> k/4 deployed
+
+# spec sheet 2.1 / 2.5: strength on R = ETH/BTC vs EMA100(R); strong keeps 25% of LP allocation as ETH
+STRENGTH_SPAN = 100
+ETH_KEEP = Decimal("0.25")
+RANGE_STRONG, RANGE_WEAK = Decimal("0.10"), Decimal("0.20")   # half width: 合計 20% / 40%
+
+# spec sheet 2.6
+FOLLOW_THRESHOLD = Decimal("0.125")   # any of LP / ETH / BTC / USDC this far from target -> rebuild
+LP_FULL_TARGET = Decimal("0.999")     # spec v2 section 4 rule 3: target LP at least this ...
+LP_SHORT_TOL = Decimal("0.01")        # ... but the book is short of the target by more than this
+USDC_DUST = Decimal("0.001")          # target USDC 0 but holding more than this
+# Cost of each rebalance swap, charged on the minimum converted volume. Default = spec sheet 2.6: 0.1%, with the 0.5%
+# slippage cap not counted as a cost. For the pool fee 0.05% plus depth slippage instead (about what a live swap pays;
+# the spec's 0.1% may already contain slippage, so 0.1% together with slippage would double count) set
+# SWAP_COST = Decimal("0.0005") and SLIPPAGE_MODEL = "depth".
+SWAP_COST = Decimal("0.001")
+# Price impact of the rebalance swaps from the pools' own depth. None = off. "depth" = for each pool leg (BTC <-> ETH on
+# WBTC/WETH, USDC <-> ETH on WETH/USDC) charge volume^2 / virtual ETH reserve at the current price (see eth_depth), in
+# ETH. A swap of D ETH moves the average price by about D / depth.
+SLIPPAGE_MODEL: str | None = None
+LOG_TICK = math.log(1.0001)
+
+
+# spec v2 section 3: a virtual account is a USD cash balance plus a valley-shaped virtual ladder on G (8 bands of 2.5% on
+# each side of the centre, +-20%), and F is the mean of (ladder value / account assets), which drifts with the price.
+# False = v1's stage / 4. The ladder's ETH-side share (same rule as ETH-USDC v2): 25% when close < EMA100(G) x 0.95,
+# 70% when close > the account's own EMA, else 50%.
+F_BY_VALUE = True
+VIRTUAL_SHARE_WEAK, VIRTUAL_SHARE_STRONG, VIRTUAL_SHARE_MID, WEAK_EMA_FACTOR = 0.25, 0.7, 0.5, 0.95
+BAND_STEP = 0.025
+SPEC_SIDE_WEIGHTS = (0.006, 0.023, 0.044, 0.065, 0.08, 0.09, 0.095, 0.097)   # centre outward, ETH-USDC v2 "inverted_gaussian_spec"
+# spec v2 section 3 start: the first close (2017-08-17) only seeds the EMAs; the accounts start the next day, armed and
+# fully in when close >= EMA, else unarmed from that low. False = v1's start on the first close, armed only when close > EMA.
+SPEC_START = True
+
+
+def build_virtual_lp(value: float, centre: float, eth_share: float) -> List[Tuple[float, float, float]]:
+    """Ladder as (price_low, price_high, liquidity) per band, holding `value` USD at G = `centre`: eth_share of it as
+    G-asset in the 8 bands above (valued at the centre), the rest as USD in the 8 below, each side split by the spec
+    weights from the centre outward."""
+    total = sum(SPEC_SIDE_WEIGHTS)
+    bands = []
+    for i, w in enumerate(SPEC_SIDE_WEIGHTS):
+        up_lo, up_hi = centre * (1 + BAND_STEP * i), centre * (1 + BAND_STEP * (i + 1))
+        eth = value * eth_share * w / total / centre
+        bands.append((up_lo, up_hi, eth / (1 / math.sqrt(up_lo) - 1 / math.sqrt(up_hi))))
+        dn_hi, dn_lo = centre * (1 - BAND_STEP * i), centre * (1 - BAND_STEP * (i + 1))
+        usd = value * (1 - eth_share) * w / total
+        bands.append((dn_lo, dn_hi, usd / (math.sqrt(dn_hi) - math.sqrt(dn_lo))))
+    return bands
+
+
+def virtual_lp_value(bands: List[Tuple[float, float, float]], price: float) -> float:
+    """USD value of a virtual ladder at `price`; fees and swap costs are not modelled."""
+    value = 0.0
+    for lo, hi, liq in bands:
+        if price <= lo:    # below the band: all G-asset
+            eth, usd = liq * (1 / math.sqrt(lo) - 1 / math.sqrt(hi)), 0.0
+        elif price >= hi:  # above the band: all USD
+            eth, usd = 0.0, liq * (math.sqrt(hi) - math.sqrt(lo))
+        else:
+            eth, usd = liq * (1 / math.sqrt(price) - 1 / math.sqrt(hi)), liq * (math.sqrt(price) - math.sqrt(lo))
+        value += price * eth + usd
+    return value
+
+
+class VirtualAccount:
+    """One spec sheet 2.3 virtual account, stepped once per daily close of G. Floats: it only produces F.
+    It holds virtual USD (`cash`) and a virtual ladder (`bands`); `assets` is their value at the last close."""
+
+    def __init__(self, span: int):
+        self.span = span
+        self.armed = False          # True once close was above the EMA since the last exit
+        self.deployed = 0.0         # ladder value / assets (F_BY_VALUE) or stage / 4
+        self.assets, self.cash = 1.0, 1.0
+        self.bands: list = []
+        self.centre: float | None = None
+        self.low: float | None = None   # lowest close since the exit, drives the refill
+        self.stage = 0              # 0 = out of the ladder .. 4 = fully in
+        self.confirm = 0
+        self.started = False
+
+    def exit(self, close: float, assets: float) -> None:
+        self.cash, self.bands = assets, []
+        self.centre, self.low, self.stage, self.confirm = None, close, 0, 0
+
+    def build(self, close: float, ema: float, ema100: float, assets: float, lp_value: float) -> None:
+        share = (VIRTUAL_SHARE_WEAK if close < ema100 * WEAK_EMA_FACTOR
+                 else VIRTUAL_SHARE_STRONG if close > ema else VIRTUAL_SHARE_MID)
+        self.bands, self.cash, self.centre = build_virtual_lp(lp_value, close, share), assets - lp_value, close
+
+    def step(self, close: float, ema: float, ema_prev: float = float("nan"), ema100: float | None = None) -> None:
+        ema100 = ema if ema100 is None else ema100
+        lp = virtual_lp_value(self.bands, close) if self.bands else 0.0   # yesterday's ladder at today's close
+        assets = self.cash + lp
+        if not self.started:  # spec v2 section 3 start (see SPEC_START)
+            self.started, self.armed = True, (close >= ema if SPEC_START else close > ema)
+            if self.armed:
+                self.stage, lp = 4, assets
+                self.build(close, ema, ema100, assets, lp)
+            else:
+                self.low = close
+        else:
+            # 1 EMA exit: close under EMA and the EMA itself falling (NaN slope in the first days -> no exit)
+            if self.armed and close < ema and ema < ema_prev:
+                self.exit(close, assets)
+                self.armed, lp = False, 0.0
+            elif not self.armed and close > ema:            # 2 re-arm, no buy
+                self.armed = True
+            if self.stage > 0 and close < self.centre * LOWER_STOP:         # 3 lower stop
+                self.exit(close, assets)
+                lp = 0.0
+            elif self.stage > 0 and close > self.centre * UPPER_REBUILD:    # 4 upper rebuild, same size
+                self.build(close, ema, ema100, assets, lp)
+            if self.stage < 4:                              # 5 staged refill on the rebound from low
+                self.low = min(self.low, close)
+                self.confirm = self.confirm + 1 if close >= self.low * REFILL_STAGES[0][1] else 0
+                nxt = self.stage + 1   # at most one stage a day; a pullback keeps the stage, only an exit resets it
+                advance = (self.confirm >= REFILL_CONFIRM_DAYS if nxt == 1
+                           else close >= self.low * REFILL_STAGES[nxt - 1][1])
+                if advance:
+                    self.stage, lp = nxt, nxt / 4 * assets  # ladder rebuilt at the close, size = stage x assets
+                    self.build(close, ema, ema100, assets, lp)
+        self.assets = assets
+        self.deployed = lp / assets if F_BY_VALUE else self.stage / 4
+
+
+def signal_frame(btc_eth: pd.Series, eth_usd: pd.Series) -> pd.DataFrame:
+    """UTC daily closes -> G, R, EMA100(R), strong flag and the signal engine F.
+    `btc_eth` is the pool price (ETH per BTC), `eth_usd` the ETH/USDC price; both minute series that should
+    start EMA_WARMUP_DAYS before the window. BTC/USD = btc_eth x eth_usd, so G = eth_usd x sqrt(btc_eth)."""
+    d = pd.concat({"p": btc_eth.astype(float).resample("1D").last(),
+                   "e": eth_usd.astype(float).resample("1D").last()}, axis=1).dropna()
+    return signal_engine(d["e"] * d["p"] ** 0.5, 1.0 / d["p"])
+
+
+def binance_signal_frame(dsd: date, ded: date) -> pd.DataFrame:
+    """signal_engine on the Binance daily closes up to `ded`; the three files must cover the day before the window."""
+    c = {}
+    for sym in ("btcusdt", "ethusdt", "ethbtc"):
+        f = BINANCE_DIR / f"binance_{sym}_1d.csv"
+        c[sym] = pd.read_csv(f, parse_dates=["date"]).set_index("date")["close"].loc[:pd.Timestamp(ded)]
+        if c[sym].index[0] > pd.Timestamp(dsd) - timedelta(days=1) or c[sym].index[-1] < pd.Timestamp(ded):
+            raise ValueError(f"{f.name} covers {c[sym].index[0].date()}..{c[sym].index[-1].date()}, "
+                             f"needs {dsd - timedelta(days=1)}..{ded}")
+        if (c[sym].index[1:] - c[sym].index[:-1]).max() > timedelta(days=1):
+            raise ValueError(f"{f.name} has a gap in its daily closes")
+    d = pd.concat(c, axis=1).dropna()
+    return signal_engine((d["btcusdt"] * d["ethusdt"]) ** 0.5, d["ethbtc"])
+
+
+def signal_engine(g: pd.Series, r: pd.Series) -> pd.DataFrame:
+    """G = sqrt(BTC/USD x ETH/USD), R = ETH/BTC price (BTC per ETH); returns G, R, EMA100(R), strong flag, F."""
+    r_ema = r.ewm(span=STRENGTH_SPAN, adjust=False).mean()
+    emas = {n: g.ewm(span=n, adjust=False).mean() for n in EMA_SPANS}
+    prevs = {n: emas[n].shift(EMA_SLOPE_DAYS) for n in EMA_SPANS}
+    accounts = [VirtualAccount(n) for n in EMA_SPANS]
+    fractions = []
+    for i, (day, close) in enumerate(g.items()):
+        for a in accounts:
+            if i or not SPEC_START:   # the first close only seeds the EMAs, the accounts start the next day
+                a.step(float(close), float(emas[a.span][day]), float(prevs[a.span][day]), float(emas[100][day]))
+        fractions.append(sum(a.deployed for a in accounts) / len(accounts))
+    return pd.DataFrame({"G": g, "R": r, "R_ema": r_ema, "strong": r > r_ema, "F": fractions})   # spec v2: R > EMA100 is strong
+
+
+def allocation(f: Decimal, strong: bool) -> Tuple[Dict[str, Decimal], Decimal]:
+    """Spec sheet 2.5: (value share of LP / ETH kept out of LP / BTC / USDC, LP half width)."""
+    if strong:
+        return {"lp": f * (ONE - ETH_KEEP), "eth": f * ETH_KEEP, "btc": ZERO, "usdc": ONE - f}, RANGE_STRONG
+    return {"lp": f, "eth": ZERO, "btc": ONE - f, "usdc": ZERO}, RANGE_WEAK
+
+
+def range_ticks(current_tick: int, ratio: Decimal, spacing: int) -> Tuple[int, int]:
+    """Tick range covering price x (1 - ratio) ... x (1 + ratio) around the rounded current tick
+    (higher tick = higher BTC price, the WBTC/WETH orientation)."""
+    centre = round(current_tick / spacing) * spacing
+    up = round(math.log1p(float(ratio)) / LOG_TICK / spacing) * spacing
+    down = round(-math.log1p(-float(ratio)) / LOG_TICK / spacing) * spacing
+    return centre - down, centre + up
+
+
+def lp_quote_share(current_tick: int, lower_tick: int, upper_tick: int) -> Decimal:
+    """Share of an in-range position's value held in the quote token (ETH). Raw units cancel:
+    y = sqrt(p) - sqrt(pa) and x*p = p/sqrt(p) - p/sqrt(pb) are both in raw token1."""
+    sc, sa, sb = (1.0001 ** (t / 2) for t in (current_tick, lower_tick, upper_tick))
+    y, xp = sc - sa, sc * sc * (1 / sc - 1 / sb)
+    return Decimal(str(round(y / (y + xp), 12)))
+
+
+def swap_deltas(cur: List[Decimal], want: List[Decimal], prices: List[Decimal],
+                cost: Decimal = SWAP_COST) -> Tuple[List[Decimal], Decimal]:
+    """Net token changes moving `cur` to `want` (prices in ETH), and the cost in ETH. The cost is `cost` x the
+    minimum converted volume; buyers receive (1 - cost) of what they asked for, like a fee on the trade."""
+    sold = -sum(((w - c) * p for c, w, p in zip(cur, want, prices) if w < c), ZERO)
+    return [(w - c) * (ONE - cost) if w > c else w - c for c, w in zip(cur, want)], sold * cost
+
+
+def eth_depth(liquidity, price: Decimal, token0_decimal: int) -> Decimal:
+    """Virtual ETH reserve (in ETH) at the current price: the x*y=k pool a swap that stays inside this tick range sees.
+    ETH is token1 in both WBTC/WETH and USDC/WETH, `price` = ETH per token0, raw sqrt price
+    s = sqrt(price x 10^(18 - token0 decimals)), token1 reserve = L x s. Zero when the minute has no liquidity figure."""
+    if liquidity is None or pd.isna(liquidity) or liquidity <= 0:
+        return ZERO
+    sqrt_price = (price * Decimal(10) ** (18 - token0_decimal)).sqrt()
+    return Decimal(int(liquidity)) * sqrt_price / Decimal(10) ** 18
+
+
+class EthBtcDefenseStrategy(BaseRemixDaoStrategy):
+    """Base = BTC, quote = ETH, plus USDC as a third broker asset priced in ETH (see run_test)."""
+
+    def __init__(self, _utils: RemixDaoUtils, _params: TestParams, _gp: GlobalParams,
+                 usdc_prices: pd.Series, daily: pd.DataFrame | None, mode: str = MODE_SIGNAL):
+        super().__init__(_utils, _params, _gp)
+        if _utils.lp_market.pool_info.is_token0_quote:
+            raise ValueError("only the WBTC/WETH orientation (token0 = base) is supported")
+        if mode != MODE_PLAIN and daily is None:
+            raise ValueError(f"mode={mode} needs the signal_frame")
+        self.daily, self.mode, self.usdc_prices = daily, mode, usdc_prices
+        self.positions: list = []                 # at most one (lower_tick, upper_tick, ...) position
+        self.starting_tick: int | None = None
+        self.out_of_fund_date: datetime | None = None
+        self.reward_eth = ZERO                    # all fees ever collected, valued in ETH on the day they were collected
+        self.pending_reward_eth = ZERO            # the part not reinvested yet (compound resets it monthly; standard never)
+        self.swap_cost_eth = ZERO
+        self.slippage_eth = ZERO                  # part of swap_cost_eth that is depth slippage
+        self.usdc_liquidity: pd.Series | None = None   # WETH/USDC minute liquidity, set by run_test
+        self.rebuild_count = self.out_of_range_rebuilds = 0
+        self.lp_share_sum, self.lp_share_days = ZERO, 0
+        self.daily_log: List[dict] = []
+        self.rebuild_log: List[dict] = []
+        self.spreads: List[int] = []
+        # filled by calculate_final_result
+        self.total_fee = self.total_swap_fee = ZERO
+        self.total_base_swap_fee = self.total_quote_swap_fee = ZERO
+        self.final_total_net_value = self.final_lp_net_value = ZERO
+        self.total_invested_usdc = self.total_fee_usd = ZERO
+        self.total_net_value_usd = self.total_lp_value_usd = ZERO
+        self.init_quote_usd_price = self.final_quote_usd_price = ZERO
+        self.final_price = ZERO
+        self.fee_value_end = ZERO
+
+    def initialize(self):
+        self.triggers.append(AtTimeTrigger(time=self.params.cal_start_datetime, do=self.first_lp))
+        self.add_column(self.utils.market_key, "usdc_price", self.usdc_prices)
+        self.triggers.append(PeriodTrigger(time_delta=timedelta(days=1), do=self.daily_work))  # 00:00 UTC judgement
+        end = self.params.data_end_date
+        self.triggers.append(AtTimeTrigger(time=datetime(end.year, end.month, end.day, 23, 59, 0),
+                                           do=self.calculate_final_result))
+
+    # ---- state -------------------------------------------------------------------------------------------
+    def _lp_market(self) -> UniLpMarketV2:
+        return self.broker.markets[self.utils.market_key]
+
+    def _prices(self, row_data: Snapshot) -> Tuple[Decimal, Decimal]:
+        """(BTC price in ETH, USDC price in ETH)"""
+        return row_data.prices[self.gp.base_token.name], row_data.prices[USDC.name]
+
+    def _wallet(self) -> Tuple[Decimal, Decimal, Decimal]:
+        """Free (btc, eth, usdc): collected fees stay in the wallet but out of the strategy's capital."""
+        return (self.broker.get_token_balance(self.gp.base_token) - self.total_base_fee,
+                self.broker.get_token_balance(self.gp.quote_token) - self.total_quote_fee,
+                self.broker.get_token_balance(USDC))
+
+    def _lp_value(self) -> Decimal:
+        return self._lp_market().get_market_balance().net_value if self.positions else ZERO
+
+    def target(self, timestamp: datetime) -> Tuple[Dict[str, Decimal], Decimal, Decimal, bool]:
+        """(shares, half width, F, strong) judged on the last completed UTC day, like the 00:00 close."""
+        if self.mode == MODE_PLAIN:
+            return {"lp": ONE, "eth": ZERO, "btc": ZERO, "usdc": ZERO}, RANGE_STRONG, ONE, False
+        row = self.daily.loc[pd.Timestamp(timestamp - timedelta(days=1)).normalize()]
+        f, strong = Decimal(str(row["F"])), bool(row["strong"])
+        shares, ratio = allocation(f, strong)
+        return shares, ratio, f, strong
+
+    # ---- actions -----------------------------------------------------------------------------------------
+    def collect_fees(self, price: Decimal) -> None:
+        lp_market = self._lp_market()
+        for pos in list(self.positions):
+            base_fee, quote_fee = lp_market.collect_fee(pos, collect_to_user=True)
+            self.total_base_fee += base_fee
+            self.total_quote_fee += quote_fee
+            self.reward_eth += quote_fee + base_fee * price
+            self.pending_reward_eth += quote_fee + base_fee * price
+            if pos not in lp_market.positions:   # collect_fee drops an empty position
+                self.positions.remove(pos)
+
+    def rebuild(self, row_data: Snapshot, why: str) -> None:
+        lp_market = self._lp_market()
+        p, u = self._prices(row_data)
+        current_tick = lp_market.price_to_raw_tick(p)
+        self.collect_fees(p)
+        old = (self.positions[0][0], self.positions[0][1]) if self.positions else None
+        for pos in self.positions:
+            lp_market.remove_liquidity(pos, collect=True)
+        self.positions = []
+
+        shares, ratio, f, strong = self.target(row_data.timestamp)
+        btc, eth, usdc = self._wallet()
+        value = btc * p + eth + usdc * u
+        lp_value, lp_btc, lp_eth, tick_lo, tick_hi = shares["lp"] * value, ZERO, ZERO, None, None
+        if lp_value > ZERO:
+            tick_lo, tick_hi = range_ticks(current_tick, ratio, self.utils.params.tick_spacing)
+            w = lp_quote_share(current_tick, tick_lo, tick_hi)   # ETH / BTC halves that fill the range exactly
+            lp_eth, lp_btc = lp_value * w, lp_value * (ONE - w) / p
+        want = [shares["btc"] * value / p + lp_btc, shares["eth"] * value + lp_eth, shares["usdc"] * value / u]
+        deltas, cost = swap_deltas([btc, eth, usdc], want, [p, ONE, u])
+        for token, delta in zip((self.gp.base_token, self.gp.quote_token, USDC), deltas):
+            if delta > ZERO:
+                self.broker.add_to_balance(token, delta)
+            elif delta < ZERO:
+                self.broker.subtract_from_balance(token, -delta)
+        slippage = self.depth_slippage(lp_market, row_data, p, u, deltas)
+        if slippage > ZERO:   # paid in ETH out of the wallet
+            slippage = min(slippage, max(ZERO, self._wallet()[1]))
+            self.broker.subtract_from_balance(self.gp.quote_token, slippage)
+            self.slippage_eth += slippage
+            cost += slippage
+        self.swap_cost_eth += cost
+        self.total_quote_swap_fee += cost
+
+        if lp_value > ZERO:
+            free_btc, free_eth, _ = self._wallet()
+            position, used_base, used_quote, _ = lp_market.add_liquidity_by_tick(
+                tick_lo, tick_hi, min(lp_btc, free_btc), min(lp_eth, free_eth), tick=current_tick)
+            if used_base == ZERO and used_quote == ZERO:
+                lp_market.positions.pop(position, None)
+                self.out_of_fund_date = row_data.timestamp
+            else:
+                self.positions.append(position)
+                self.spreads.append(tick_hi - tick_lo)
+        self.rebuild_count += 1
+        self.rebuild_log.append({"time": row_data.timestamp, "why": why, "F": float(f), "strong": strong,
+                                 "btc_eth": float(p), "equity_eth": float(value), "old_range": old,
+                                 "new_range": (tick_lo, tick_hi), "swap_cost_eth": float(cost)})
+        print(f"[{self.mode}] {row_data.timestamp:%Y-%m-%d %H:%M} rebuild ({why}) F {float(f):.4f} "
+              f"{'strong' if strong else 'weak'} equity {float(value):.4f} ETH range +-{float(ratio):.0%}")
+
+    def depth_slippage(self, lp_market, row_data: Snapshot, p: Decimal, u: Decimal, deltas: List[Decimal]) -> Decimal:
+        """Depth slippage in ETH of the swaps in `deltas` (btc, eth, usdc): the BTC leg trades on WBTC/WETH, the USDC leg
+        on WETH/USDC, each volume in ETH. A minute without a liquidity figure charges nothing for that leg."""
+        if SLIPPAGE_MODEL != "depth":
+            return ZERO
+        usdc_liquidity = None if self.usdc_liquidity is None else self.usdc_liquidity.get(row_data.timestamp)
+        legs = ((abs(deltas[0]) * p, lp_market.market_status.data.currentLiquidity, p, self.gp.base_token.decimal),
+                (abs(deltas[2]) * u, usdc_liquidity, u, USDC.decimal))
+        total = ZERO
+        for volume, liquidity, price, decimal in legs:
+            depth = eth_depth(liquidity, price, decimal)
+            if volume > ZERO and depth > ZERO:
+                total += volume * volume / depth
+        return total
+
+    def first_lp(self, row_data: Snapshot) -> None:
+        if self._lp_market().positions:
+            raise RuntimeError("shouldn't have any position")
+        self.init_quote_usd_price = self.get_quote_usdc_price(row_data)
+        self.broker.add_to_balance(self.gp.quote_token, self.gp.init_quote)
+        self.total_invested_usdc = self.gp.init_quote * self.init_quote_usd_price
+        self.starting_tick = self._lp_market().price_to_raw_tick(self._prices(row_data)[0])
+        self.rebuild(row_data, "start")
+
+    def daily_work(self, row_data: Snapshot) -> None:
+        """Spec sheet 2.6: once a day, rebuild everything to the target when the book drifted or the LP ran out."""
+        if self.starting_tick is None or self.out_of_fund_date is not None:
+            return
+        try:
+            shares, _, f, strong = self.target(row_data.timestamp)
+        except KeyError:  # spec sheet: missing close -> do nothing that day
+            print(f"[{self.mode}] {row_data.timestamp:%Y-%m-%d} no daily close, skip")
+            return
+        p, u = self._prices(row_data)
+        self.collect_fees(p)
+        reinvest = self.mode == MODE_COMPOUND and row_data.timestamp.day == 1 and self.pending_reward_eth > ZERO
+        if reinvest:   # spec v2 section 5: pending fees join the capital on the 1st, then the book follows the target
+            self.total_base_fee = self.total_quote_fee = self.pending_reward_eth = ZERO
+        btc, eth, usdc = self._wallet()
+        lp_value = self._lp_value()
+        value = lp_value + btc * p + eth + usdc * u
+        if value <= ZERO:
+            return
+        cur = {"lp": lp_value / value, "eth": eth / value, "btc": btc * p / value, "usdc": usdc * u / value}
+        self.lp_share_sum += cur["lp"]
+        self.lp_share_days += 1
+        tick = self._lp_market().price_to_raw_tick(p)
+        out_of_range = bool(self.positions) and not (self.positions[0][0] <= tick < self.positions[0][1])
+        why = None
+        if out_of_range:
+            why = "out of range"
+        elif any(abs(cur[k] - shares[k]) >= FOLLOW_THRESHOLD for k in cur):
+            why = "drift >= 12.5%"
+        elif shares["lp"] == ZERO and self.positions:
+            why = "target LP 0"
+        elif shares["lp"] >= LP_FULL_TARGET and shares["lp"] - cur["lp"] > LP_SHORT_TOL:
+            why = "target LP 100%"
+        elif shares["usdc"] == ZERO and cur["usdc"] > USDC_DUST:
+            why = "target USDC 0"
+        elif reinvest:
+            why = "monthly reinvest"
+        self.daily_log.append({"date": row_data.timestamp.date(), "btc_eth": float(p), "F": float(f),
+                               "strong": strong, "equity_eth": float(value), **{f"cur_{k}": float(v) for k, v in cur.items()},
+                               "rebuild": why or ""})
+        if why:
+            if out_of_range:
+                self.out_of_range_rebuilds += 1
+            self.rebuild(row_data, why)
+
+    def calculate_final_result(self, row_data: Snapshot) -> None:
+        p, u = self._prices(row_data)
+        self.collect_fees(p)
+        lp_value = self._lp_value()
+        assets = (self.broker.get_token_balance(self.gp.base_token) * p + self.broker.get_token_balance(self.gp.quote_token)
+                  + self.broker.get_token_balance(USDC) * u)
+        self.final_price = p
+        self.final_lp_net_value = lp_value
+        self.final_total_net_value = lp_value + assets
+        self.fee_value_end = self.total_quote_fee + self.total_base_fee * p
+        self.total_fee = self.fee_value_end
+        self.total_swap_fee = self.total_quote_swap_fee
+        usd = self.final_quote_usd_price = self.get_quote_usdc_price(row_data)
+        self.total_fee_usd = self.total_fee * usd
+        self.total_net_value_usd = self.final_total_net_value * usd
+        self.total_lp_value_usd = lp_value * usd
+
+    def on_bar(self, row_data: Snapshot):
+        pass
+
+    def finalize(self):
+        name = self.params.report_name
+        pd.DataFrame(self.daily_log).to_csv(f"{self.params.folder}/daily_{name}.csv", index=False)
+        pd.DataFrame(self.rebuild_log).to_csv(f"{self.params.folder}/rebuilds_{name}.csv", index=False)
+
+
+def run_test(bull_params: RemixDAOParams, params: TestParams, gp: GlobalParams, processed_data: pd.DataFrame,
+             usdc_price_data: pd.DataFrame, daily: pd.DataFrame | None, mode: str) -> Dict[str, Decimal]:
+    usdc_prices = usdc_price_data["price"]
+    market_key = MarketInfo("lp")
+    actuator = Actuator()
+    broker = actuator.broker
+    market = UniLpMarketV2(market_key, UniV3Pool(gp.token0, gp.token1, gp.fee, gp.quote_token,
+                                                 tick_spacing=bull_params.tick_spacing))
+    broker.add_market(market)
+    for token in (gp.quote_token, gp.base_token, USDC):
+        broker.set_balance(token, 0)
+
+    utils = RemixDaoUtils(market, market_key, bull_params, bull_params, True)
+    strat = EthBtcDefenseStrategy(utils, params, gp, usdc_prices, daily, mode)
+    strat.usdc_liquidity = usdc_price_data["currentLiquidity"]
+    actuator.strategy = strat
+    market.data_path = f"../real-data/{gp.contract_address}"
+    data = copy.deepcopy(processed_data)
+    market.add_statistic_column(data)
+    market.data = data
+
+    prices, quote = market.get_price_from_data()
+    eth_usd = usdc_prices.astype(float).reindex(prices.index, method="ffill").bfill()
+    prices[USDC.name] = 1.0 / eth_usd    # USDC in ETH, so the actuator values the wallet in ETH
+    actuator.set_price((prices, quote))
+    actuator.run(False)
+
+    account = actuator.account_status_df
+    net_value = account["net_value"]
+    benchmark = account["price"][gp.base_token.name.upper()]
+    metrics = performance_metrics_for_dca(net_value, 0, benchmark=benchmark, total_fee=strat.total_fee)
+    final = strat.final_total_net_value
+    metrics["lp_net_value"] = strat.final_lp_net_value
+    metrics["total_net_value"] = final
+    metrics["total_fee"] = strat.total_fee
+    metrics["fee_to_total_net_value"] = strat.total_fee / final
+    metrics["total_base_swap_fee"], metrics["total_quote_swap_fee"] = ZERO, strat.total_quote_swap_fee
+    metrics["total_swap_fee"] = strat.total_swap_fee
+    metrics["action_count"] = Decimal(strat.rebuild_count)
+    metrics["spread_mean"] = Decimal(int(sum(strat.spreads) / len(strat.spreads))) if strat.spreads else Decimal(-1)
+    metrics["spread_median"] = Decimal(int(sorted(strat.spreads)[len(strat.spreads) // 2])) if strat.spreads else Decimal(-1)
+    metrics["benchmark_max_draw_down"] = max_draw_down(benchmark.apply(float))
+    metrics["total_fee_usd"] = strat.total_fee_usd
+    metrics["total_net_value_usd"] = strat.total_net_value_usd
+    metrics["lp_net_value_usd"] = strat.total_lp_value_usd
+    metrics["total_invested_usd"] = strat.total_invested_usdc
+    metrics["total_return_usd"] = Decimal(return_rate(float(strat.total_invested_usdc), float(strat.total_net_value_usd)))
+    metrics["quote_return_usd"] = Decimal(return_rate(float(usdc_prices.iloc[0]), float(usdc_prices.iloc[-1])))
+    metrics["rescale_count"] = Decimal(strat.rebuild_count)
+    metrics["out_of_range_count"] = Decimal(strat.out_of_range_rebuilds)
+    metrics["final_base_price"] = strat.final_price
+    metrics["out_of_fund_date"] = Decimal(strat.out_of_fund_date.timestamp()) if strat.out_of_fund_date else None
+    # spec sheet metrics: ETH count (x, start = 1 ETH), rewards valued at receipt vs at the end, BTC count, USD
+    init = gp.init_quote
+    p0 = account["price"][gp.base_token.name.upper()].iloc[0]
+    usd_series = net_value.apply(float) * eth_usd.reindex(net_value.index, method="ffill")
+    metrics["eth_ratio_end"] = final / init
+    # compound: reinvested fees are inside `final` at end prices, only the pending ones are re-valued at receipt
+    metrics["eth_ratio_receipt"] = (final - strat.fee_value_end + strat.pending_reward_eth) / init
+    metrics["reward_eth"] = strat.reward_eth
+    metrics["btc_ratio"] = (final / strat.final_price) / (init / p0)
+    metrics["usd_ratio"] = strat.total_net_value_usd / strat.total_invested_usdc
+    metrics["max_dd_usd"] = max_draw_down(usd_series)
+    metrics["swap_cost_eth"] = strat.swap_cost_eth
+    metrics["slippage_eth"] = strat.slippage_eth
+    metrics["lp_avg_share"] = strat.lp_share_sum / strat.lp_share_days if strat.lp_share_days else ZERO
+    return metrics
+
+
+def _run_one(bull, tp: TestParams, gp: GlobalParams, data, usdc_price_data, daily, mode) -> Tuple[str, Dict[str, Decimal]]:
+    """Pool worker. Top level so it pickles under spawn."""
+    return tp.report_name, run_test(bull, tp, gp, data, usdc_price_data, daily, mode)
+
+
+EXTRA_COLUMNS = ["eth_ratio_receipt", "eth_ratio_end", "reward_eth", "btc_ratio", "usd_ratio", "max_dd_usd",
+                 "swap_cost_eth", "slippage_eth", "lp_avg_share", "rescale_count", "out_of_range_count"]
+
+
+def process_for_date(csd: datetime, dsd: date, ded: date, modes: List[str] | None = None):
+    demeter.Formats.global_num_format = ".4g"
+    eth = TokenInfo(name="eth", decimal=18)
+    btc = TokenInfo(name="btc", decimal=8)
+    base_token, quote_token, init_quote = btc, eth, Decimal(1)   # 1 ETH start, spec sheet 4
+    token0, token1 = btc, eth
+    contract_address, fee, chain_name = "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0", 0.05, ChainType.ethereum.name  # wbtc/weth
+    contract_usdc = "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"                                                    # weth/usdc
+    modes = modes or [MODE_SIGNAL, MODE_COMPOUND]   # 標準 + 複利; add MODE_PLAIN for the spec sheet's 通常LP comparison
+    needs_signal = any(m != MODE_PLAIN for m in modes)
+    tick_spacing = int(fee * 200)   # 10
+
+    gp = GlobalParams(token0=token0, token1=token1, fee=fee, init_quote=init_quote, quote_token=quote_token,
+                      base_token=base_token, chain_name=chain_name, contract_address=contract_address,
+                      swap_fee=False, init_quote_usdc=ZERO)
+    bull = RemixDAOParams(tick_spread_upper=60, tick_spread_lower=60, tick_upper_boundary_offset=0,
+                          tick_lower_boundary_offset=0, rescale_tick_upper_boundary_offset=0,
+                          rescale_tick_lower_boundary_offset=0, init_tick_spread=120, tick_spacing=tick_spacing,
+                          tick_gap_lower=1, tick_gap_upper=1)
+    def load(pool: UniV3Pool, address: str, start: date, end: date) -> UniLpMarketV2:
+        m = UniLpMarketV2(MarketInfo("data"), pool)
+        m.data_path = f"../real-data/{address}"
+        time.sleep(random.uniform(1, 3))   # stagger parallel loads
+        m.load_data(chain_name, address, start, end)
+        return m
+
+    print(f"preload data {dsd:%Y%m%d} ~ {ded:%Y%m%d}")
+    market = load(UniV3Pool(token0, token1, fee, quote_token), contract_address, dsd, ded)
+    usdc_market = load(UniV3Pool(USDC, eth, fee, USDC), contract_usdc, dsd, ded)
+    jobs, folders = [], []
+    for source in SIGNAL_SOURCES:
+        # pool signal without slippage keeps the old folder name
+        tag = ("" if source == POOL_SIGNAL else f"-{source}") + (f"-slip{SLIPPAGE_MODEL}" if SLIPPAGE_MODEL else "")
+        folder = f"result/ethbtc-mglv2-wbtceth{tag}-{csd:%Y%m%d}-{ded:%Y%m%d}"
+        Path(folder).mkdir(parents=True, exist_ok=True)
+        folders.append(folder)
+        daily = None
+        if needs_signal and source == BINANCE_SIGNAL:
+            daily = binance_signal_frame(dsd, ded)
+        elif needs_signal:
+            warm_start, warm_end = max(dsd - timedelta(days=EMA_WARMUP_DAYS), DATA_FLOOR), dsd - timedelta(days=1)
+            print(f"signal warm-up {warm_start} ~ {warm_end}: {(warm_end - warm_start).days + 1} days")
+            warm = load(UniV3Pool(token0, token1, fee, quote_token), contract_address, warm_start, warm_end)
+            warm_usdc = load(UniV3Pool(USDC, eth, fee, USDC), contract_usdc, warm_start, warm_end)
+            daily = signal_frame(pd.concat([warm.data.price, market.data.price]),
+                                 pd.concat([warm_usdc.data.price, usdc_market.data.price]))
+        if daily is not None:
+            window = daily.loc[pd.Timestamp(dsd):]
+            print(f"[{source}] signal F over the window: mean {window['F'].mean():.3f}, days at 0: "
+                  f"{(window['F'] == 0).sum()}, days at 1: {(window['F'] == 1).sum()}, "
+                  f"strong days: {int(window['strong'].sum())}/{len(window)}")
+            daily.to_csv(f"{folder}/signal_frame.csv")
+        for mode in modes:
+            tp = TestParams(range_strategy=RangeStrategy.remix_dao, indicator_mult=1,
+                            report_name=f"{init_quote}{quote_token.name}_{mode}", cal_start_datetime=csd,
+                            data_start_date=dsd, data_end_date=ded, folder=folder,
+                            rescale_frequency=RescaleFrequency.daily)
+            jobs.append((bull, tp, gp, market.data, usdc_market.data, daily, mode))
+    with multiprocessing.Pool(min(len(jobs), 5)) as pool:
+        results = pool.starmap(_run_one, jobs)
+    per_source = len(modes)   # jobs are appended source by source, `modes` jobs each
+    for i, folder in enumerate(folders):
+        result = results[i * per_source:(i + 1) * per_source]
+        export_stable_apr_results(f"{folder}/apr_results.csv", result)
+        extra = pd.DataFrame({name: {k: float(m[k]) for k in EXTRA_COLUMNS} for name, m in result}).T
+        extra.to_csv(f"{folder}/eth_summary.csv")
+        print(folder)
+        print(extra.to_string())
+
+
+def _self_check():
+    # allocation: spec sheet 2.5 example, F = 50% strong -> LP 37.5 / ETH 12.5 / USDC 50
+    shares, ratio = allocation(Decimal("0.5"), True)
+    assert shares == {"lp": Decimal("0.375"), "eth": Decimal("0.125"), "btc": ZERO, "usdc": Decimal("0.5")}, shares
+    assert ratio == RANGE_STRONG
+    shares, ratio = allocation(Decimal("0.5"), False)
+    assert shares["lp"] == shares["btc"] == Decimal("0.5") and shares["usdc"] == ZERO and ratio == RANGE_WEAK
+    for f in (ZERO, Decimal("0.0625"), Decimal("1")):
+        for strong in (True, False):
+            assert sum(allocation(f, strong)[0].values()) == ONE
+    # range: price x0.9 / x1.1 is -1054 / +953 ticks, x0.8 / x1.2 is -2231 / +1823 (spacing 10 rounds them)
+    lo, hi = range_ticks(-8200, RANGE_STRONG, 10)
+    assert (lo, hi) == (-8200 - 1050, -8200 + 950), (lo, hi)
+    lo, hi = range_ticks(0, RANGE_WEAK, 10)
+    assert (lo, hi) == (-2230, 1820), (lo, hi)
+    # in-range value split: a +-10% range holds ~52% ETH, +-20% ~55% (the geometry, not a flat half)
+    assert abs(lp_quote_share(0, *range_ticks(0, RANGE_STRONG, 10)) - Decimal("0.5244")) < Decimal("0.002")
+    assert abs(lp_quote_share(0, *range_ticks(0, RANGE_WEAK, 10)) - Decimal("0.5478")) < Decimal("0.002")
+    # swaps: value is conserved except for the 0.1% on the minimum converted volume
+    cur, want, px = [Decimal(1), Decimal(0), Decimal(0)], [Decimal(0), Decimal(10), Decimal(40000)], [Decimal(30), ONE, Decimal("0.0005")]
+    assert sum(w * p for w, p in zip(want, px)) == Decimal(30), "targets must sum to the equity"
+    deltas, cost = swap_deltas(cur, want, px, cost=Decimal("0.001"))
+    after = sum((c + d) * p for c, d, p in zip(cur, deltas, px))
+    assert cost == Decimal("0.03") and abs(after - (Decimal(30) - cost)) < Decimal("1e-9"), (after, cost)
+    assert deltas[0] == Decimal(-1) and deltas[1] == Decimal("9.99"), deltas
+    # depth: WBTC/WETH 2024-01-02 00:00 (L 4.27e17, 18.79 ETH per BTC) ~185k ETH; WETH/USDC (L 1.49e19, $2351) ~308k ETH
+    assert Decimal("1.8e5") < eth_depth(426736045046051387, Decimal("18.7886"), 8) < Decimal("1.9e5")
+    assert Decimal("3.0e5") < eth_depth(14926724960586878708, ONE / Decimal("2351.28"), 6) < Decimal("3.2e5")
+    assert eth_depth(0, ONE, 6) == ZERO and eth_depth(float("nan"), ONE, 6) == ZERO and eth_depth(None, ONE, 6) == ZERO
+    # virtual account: EMA exit needs the falling-EMA condition; a close under a flat / rising EMA is no exit
+    acct = VirtualAccount(100)
+    acct.step(2000, 1900)                                   # armed, fully deployed
+    assert acct.armed and acct.deployed == 1.0
+    acct.step(1950, 1960, 1900)                             # close < EMA but EMA above 20 days ago -> stay
+    assert acct.deployed == 1.0, acct.deployed
+    acct.step(1950, 1960, 2000)                             # close < EMA and EMA falling -> exit
+    assert acct.deployed == 0.0 and not acct.armed and acct.low == 1950
+    for c in (2100, 2100, 2100):                            # re-arm, then 3 confirm days >= low x 1.05
+        acct.step(c, 1990, 2100)
+    assert acct.armed and acct.stage == 1 and acct.deployed == 0.25, acct.__dict__
+    acct.step(2200, 1990, 2100)                             # 2200 >= low x 1.0833 -> stage 2, one stage a day
+    assert acct.stage == 2 and acct.deployed == 0.5
+    # signal frame: G = ETH/USD x sqrt(BTC/ETH); rising R (BTC/ETH falling) -> strong, falling R -> weak
+    idx = pd.date_range("2024-01-01", periods=420, freq="D")
+    p_down = pd.Series([30.0 * (0.999 ** i) for i in range(420)], index=idx)
+    e = pd.Series([2000.0] * 420, index=idx)
+    fr = signal_frame(p_down, e)
+    assert abs(fr["G"].iloc[0] - 2000 * 30 ** 0.5) < 1e-6 and fr["strong"].iloc[-1], fr.tail(2)
+    fr = signal_frame(p_down.iloc[::-1].set_axis(idx), e)
+    assert not fr["strong"].iloc[-1], fr.tail(2)
+    # Binance route: same engine, G = sqrt(BTCUSDT x ETHUSDT), R = ETHBTC; a pool-consistent price set gives the same F
+    fr2 = signal_engine(e * p_down ** 0.5, 1.0 / p_down)
+    assert fr2["F"].equals(signal_frame(p_down, e)["F"])
+    # G falling steadily for a year: every account is out, so F ends at 0
+    fr = signal_frame(pd.Series([30.0] * 420, index=idx), pd.Series([3000.0 * (0.995 ** i) for i in range(420)], index=idx))
+    assert fr["F"].iloc[-1] == 0.0, fr["F"].tail(3).tolist()
+    # virtual ladder (spec v2 section 3): holds exactly the value it was built with at the centre, ETH side 25/50/70%
+    for share in (0.25, 0.5, 0.7):
+        bands = build_virtual_lp(1000.0, 2000.0, share)
+        assert len(bands) == 16 and abs(virtual_lp_value(bands, 2000.0) - 1000.0) < 1e-6, share
+    bands = build_virtual_lp(1000.0, 2000.0, 0.5)
+    assert virtual_lp_value(bands, 3000.0) > 1000.0 > virtual_lp_value(bands, 1500.0)   # sold above the centre, all G-asset below
+    # F by value drifts with the price after a build; the stage value would stay 1.0
+    acct = VirtualAccount(100)
+    acct.step(2000, 1900)
+    acct.cash = 100.0   # pretend part of the account sits in cash: deployed = ladder / (ladder + cash) < 1
+    acct.step(2000, 1900)
+    assert 0.0 < acct.deployed < 1.0, acct.deployed
+    # spec v2: R exactly on EMA100 is weak (strict >)
+    flat = signal_engine(pd.Series([2000.0] * 30, index=idx[:30]), pd.Series([0.05] * 30, index=idx[:30]))
+    assert not flat["strong"].any(), flat["strong"].tolist()
+
+
+if __name__ == "__main__":
+    _self_check()
+
+    # spec sheet 4 / 5.1 "加入日平均": 31 join days, Jan 1 +-15, each run for 365 days (start + 364 days); average the
+    # per-run eth_ratio_receipt from the 31 result folders by hand. One year at a time: 31 runs, each loads its own data.
+    # (v1 result, 2024: average 1.144 vs spec 1.19, same gap as the single start days, so the start day is not the cause.)
+    # To run it, use `date_ranges = _join_day_ranges`.
+    join_year = 2022
+    _join_day_ranges = [(d, d.date(), (d + timedelta(days=364)).date())
+                        for d in (datetime(join_year, 1, 1) + timedelta(days=k) for k in range(-15, 16))]
+    date_ranges: List[tuple[datetime, date, date]] = [
+        # (cal start, data start, data end)
+        # spec sheet 5.1: the "1/1 join" is priced at the 1/1 daily close (= 1/2 00:00 UTC), so start on 1/2 and run to
+        # 12/31 (365 days, also in the 2024 leap year); same one-day join shift as ethusdc v1
+        # the four single years (spec v2 標準 2.88 / 1.30 / 1.19 / 1.19, 複利 3.00 / 1.31 / 1.22 / 1.19)
+        (datetime(2022, 1, 2), date(2022, 1, 2), date(2022, 12, 31)),
+        (datetime(2023, 1, 2), date(2023, 1, 2), date(2023, 12, 31)),
+        (datetime(2024, 1, 2), date(2024, 1, 2), date(2024, 12, 31)),
+        (datetime(2025, 1, 2), date(2025, 1, 2), date(2025, 12, 31)),
+        # spec v2 section 6: 2022-2025 in one continuous run (標準 4.88 = 2.92 + 1.96, 複利 5.65), 1/2 start like the single years
+        # (datetime(2022, 1, 2), date(2022, 1, 2), date(2025, 12, 31)),
+        # start on 1/1 instead (spec sheet 5.1 literally: run 365 days, 2024 ends Dec 30)
+        # (datetime(2022, 1, 1), date(2022, 1, 1), date(2022, 12, 31)),
+        # (datetime(2023, 1, 1), date(2023, 1, 1), date(2023, 12, 31)),
+        # (datetime(2024, 1, 1), date(2024, 1, 1), date(2024, 12, 30)),
+        # (datetime(2025, 1, 1), date(2025, 1, 1), date(2025, 12, 31)),
+        # spec sheet 5.2: 4 years 2022-2025 in one run
+        # (datetime(2022, 1, 1), date(2022, 1, 1), date(2025, 12, 31)),
+    ]
+    # date_ranges = _join_day_ranges   # uncomment to run the 31 join days of join_year instead of the 1/2 single years
+    for dr in date_ranges:  # one after another: each range loads its own minute data, in parallel they would eat the RAM
+        process_for_date(*dr)
