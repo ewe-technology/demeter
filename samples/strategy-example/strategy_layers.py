@@ -236,10 +236,10 @@ def judge_l6a(split: dict[str, dict]) -> bool | None:
 def judge_l6b(settings: dict[str, dict[str, dict]]) -> dict:
     """The pre-registered L6b rule for one constant: `settings` maps "-" / "spec" / "+" to regime_split(); per regime with
     at least MIN_DAYS days in the spec run, the setting with the highest annualised return; stable = one setting wins
-    every judged regime."""
+    every judged regime; None when no regime is judged."""
     best = {g: max(settings, key=lambda k: settings[k][g]["annual"])
             for g in REGIMES if settings["spec"][g]["days"] >= MIN_DAYS}
-    return {"best": best, "stable": len(set(best.values())) == 1}
+    return {"best": best, "stable": len(set(best.values())) == 1 if best else None}
 
 
 def binance_close(pair: str) -> pd.Series:
@@ -290,10 +290,15 @@ def robust_report(pair: str, mode: str, folders: dict[str, str]) -> str:
         out.append(f"| {k} | {_pct(m['cagr'])} / {_pct(m['max_drawdown'])} / {m['calmar']:.2f} | "
                    + " | ".join(_pct(split[k][g]["annual"]) for g in REGIMES) + " |")
     out += ["", "| constant | best per regime | L6b |", "|---|---|---|"]
+    verdicts = []
     for name, keys in ROBUST.items():
         if all(k in split for k in keys):
             b = judge_l6b({("-", "spec", "+")[i]: split[k] for i, k in enumerate(keys)})
+            verdicts.append(b["stable"])
             out.append(f"| {name} | " + ", ".join(f"{g}: {w}" for g, w in b["best"].items()) + f" | {_word(b['stable'])} |")
+    # the pre-registered rule needs both constants stable; a constant with no judged regime leaves it not judged
+    both = None if len(verdicts) < len(ROBUST) or None in verdicts else all(verdicts)
+    out.append(f"| both constants | | {_word(both)} |")
     return "\n".join(out)
 
 
@@ -469,6 +474,8 @@ def _self_check(tmp: Path):
                    "spec": reg(bull=(300, 0.3), bear=(20, 0.1), range=(500, 0.2)),
                    "+": reg(bull=(300, 0.1), bear=(20, 0.05), range=(500, 0.15))})
     assert b == {"best": {"bull": "-", "range": "spec"}, "stable": False}, b   # bear has < 30 days in the spec run
+    short = reg(bull=(10, 0.3), bear=(29, 0.1), range=(0, np.nan))
+    assert judge_l6b({"-": short, "spec": short, "+": short}) == {"best": {}, "stable": None}
     # reports: the v3.2 run above (2024-01-01..2025-12-31, 3 values) on the real ETH/USD labels renders, too short to judge
     rep = regime_report({"r": (str(tmp / "v32"), "reinvest", "ethusdt")})
     assert rep.count("| r | ethusdt |") == 1 and rep.endswith("| not judged |"), rep
@@ -476,6 +483,7 @@ def _self_check(tmp: Path):
     assert "range: flat EMA" in rep and "L6a" not in rep, rep
     rep = robust_report("ethusdt", "reinvest", {k: str(tmp / "v32") for k in ("spec", "ema-", "ema+", "w-", "w+")})
     assert "| ema | " in rep and "| width | " in rep, rep
+    assert "| both constants | | not judged |" in rep, rep   # no regime has 30 days: no constant is judged
 
 
 def main(argv: list[str]) -> None:

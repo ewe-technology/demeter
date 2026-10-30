@@ -799,7 +799,8 @@ def _self_check():
 
 
 if __name__ == "__main__":
-    _self_check()
+    if not L6_TAG:   # the self-check asserts the spec spans and widths; an L6 variant changes them
+        _self_check()
 
     date_ranges: List[tuple[datetime, date, date, str]] = [
         # (cal start, data start, data end, pool). The "1/1 join" is priced at the 1/1 daily close (= 1/2 00:00 UTC), so
