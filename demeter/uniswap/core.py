@@ -164,7 +164,8 @@ class V3CoreLib(object):
                 return
             price_delta = abs(last_tick - state.closeTick)
             in_range_delta = range_list[2] - range_list[1]
-            weight_decimal = Decimal(in_range_delta) / Decimal(price_delta)
+            # int(): ticks may arrive as numpy.int64, which Decimal() rejects
+            weight_decimal = Decimal(int(in_range_delta)) / Decimal(int(price_delta))
             if weight_decimal > 1:  # alert for error
                 raise RuntimeError("weight must <=1")
             calc_amounts(weight_decimal)
