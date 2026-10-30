@@ -123,31 +123,36 @@ def significance(r: pd.Series) -> dict:
     return SV.method3_significance(r, SV.Settings(), np.random.default_rng(SV.Settings.seed))
 
 
-def sharpe_diff(r_earlier: pd.Series, r_later: pd.Series) -> dict:
-    """Is the later Sharpe below the earlier one? Two non-overlapping samples of daily returns, each Sharpe with the
-    asymptotic variance under non-normal returns that PSR also uses (Mertens 2002; Opdyke 2007): Var(SR) = D^2 / (T - 1),
-    D^2 = 1 - skew x SR + (kurt - 1) / 4 x SR^2. z = (SR_later - SR_earlier) / sqrt(Var_earlier + Var_later);
-    p_later_worse = Phi(z), the one-sided p of a later Sharpe this low if both periods share one true Sharpe."""
-    e, l = significance(r_earlier), significance(r_later)
-    se = np.sqrt(e["D"] ** 2 / (e["days"] - 1) + l["D"] ** 2 / (l["days"] - 1))
-    z = (l["sharpe_daily"] - e["sharpe_daily"]) / se
+def sharpe_diff(earlier: dict, later: dict) -> dict:
+    """Is the later Sharpe below the earlier one? Takes significance() of two non-overlapping samples of daily returns;
+    each Sharpe has the asymptotic variance under non-normal returns that PSR also uses (Mertens 2002; Opdyke 2007):
+    Var(SR) = D^2 / (T - 1), D^2 = 1 - skew x SR + (kurt - 1) / 4 x SR^2. z = (SR_later - SR_earlier) /
+    sqrt(Var_earlier + Var_later); p_later_worse = Phi(z), the one-sided p of a later Sharpe this low if both periods
+    share one true Sharpe. Independent returns are assumed (no autocorrelation term)."""
+    se = np.sqrt(earlier["D"] ** 2 / (earlier["days"] - 1) + later["D"] ** 2 / (later["days"] - 1))
+    z = (later["sharpe_daily"] - earlier["sharpe_daily"]) / se
     return {"z": float(z), "p_later_worse": float(norm.cdf(z))}
 
 
 def l1_l5_stats(nv: pd.Series) -> dict:
-    """Statistics beside the L1 / L5 reference rule: Sharpe and PSR(0) of each full calendar year (L1) and of the
-    earlier / later L5 windows, the Sharpe difference test between them, and Pardo's walk-forward efficiency
-    WFE = later CAGR / earlier CAGR (None when the run does not cover the L5 windows)."""
-    cut = lambda lo, hi: SV.daily_log_returns(nv[(nv.index >= lo) & (nv.index <= hi)])
-    years = [{"window": r["window"], **significance(cut(r["start"], r["end"]))}
-             for r in yearly_windows(nv) if r["kind"] == "year" and not r["partial"]
-             and len(cut(r["start"], r["end"])) >= MIN_DAYS]
-    out = {"years": years, "earlier": None, "later": None, "diff": None, "wfe": None}
+    """Statistics beside the L1 / L5 reference rule: Sharpe and PSR(0) of each full calendar year (L1), of the whole
+    span from ANCHOR (or the run start) to the run end, and of the earlier / later L5 windows, the Sharpe difference
+    test between them, and Pardo's walk-forward efficiency WFE = later CAGR / earlier CAGR. A window with fewer than
+    MIN_DAYS daily returns gets None; WFE is None when the earlier CAGR is <= 0 (the ratio's sign means nothing)."""
+    def sig(lo, hi):
+        r = SV.daily_log_returns(nv[(nv.index >= lo) & (nv.index <= hi)])
+        return significance(r) if len(r) >= MIN_DAYS else None
+    years = [{"window": w["window"], **s} for w in yearly_windows(nv) if w["kind"] == "year" and not w["partial"]
+             for s in [sig(w["start"], w["end"])] if s]
+    out = {"years": years, "full": sig(max(pd.Timestamp(ANCHOR), nv.index[0]), nv.index[-1]),
+           "earlier": None, "later": None, "diff": None, "wfe": None}
     j = judge_l1_l5(nv)
-    if j["l5_earlier"] is not None and min(len(cut(w["start"], w["end"])) for w in (j["l5_earlier"], j["l5_later"])) >= MIN_DAYS:
+    if j["l5_earlier"] is not None:
         e, l = j["l5_earlier"], j["l5_later"]
-        re, rl = cut(e["start"], e["end"]), cut(l["start"], l["end"])
-        out.update(earlier=significance(re), later=significance(rl), diff=sharpe_diff(re, rl), wfe=l["cagr"] / e["cagr"])
+        s_e, s_l = sig(e["start"], e["end"]), sig(l["start"], l["end"])
+        if s_e and s_l:
+            out.update(earlier=s_e, later=s_l, diff=sharpe_diff(s_e, s_l),
+                       wfe=l["cagr"] / e["cagr"] if e["cagr"] > 0 else None)
     return out
 
 
@@ -188,14 +193,16 @@ def yearly_report(runs: dict[str, tuple[str, str]]) -> str:
                    f"{cagr_dd_calmar(j['l5_earlier'])} | {cagr_dd_calmar(j['l5_later'])} | {word(j['l5_pass'])} |")
     out += ["", "Statistics: annual Sharpe / PSR(0) of daily log returns per full year; L5 earlier vs later Sharpe / PSR(0), "
             "Sharpe difference z and one-sided p (later worse), WFE = later CAGR / earlier CAGR", "",
-            "| run | full years | L5 earlier | L5 later | z / p (later worse) | WFE |", "|---|---|---|---|---|---|"]
-    sp = lambda m: f"{m['sharpe_annual']:.2f} / {m['psr']:.3f}"
+            "| run | full years | whole span from 2022 (or start) | L5 earlier | L5 later | z / p (later worse) | WFE |",
+            "|---|---|---|---|---|---|---|"]
+    sp = lambda m: f"{m['sharpe_annual']:.2f} / {m['psr']:.3f}" if m else ""
     for label, nv in data.items():
         st = l1_l5_stats(nv)
         yrs = "<br>".join(f"{y['window']}: {sp(y)}" for y in st["years"])
+        wfe = "" if st["wfe"] is None else f"{st['wfe']:.2f}"
         l5 = (f"{sp(st['earlier'])} | {sp(st['later'])} | {st['diff']['z']:+.2f} / {st['diff']['p_later_worse']:.3f} | "
-              f"{st['wfe']:.2f}") if st["diff"] else "| | |"
-        out.append(f"| {label} | {yrs} | {l5} |")
+              f"{wfe}") if st["diff"] else "| | |"
+        out.append(f"| {label} | {yrs} | {sp(st['full'])} | {l5} |")
     return "\n".join(out)
 
 
@@ -251,10 +258,10 @@ def _self_check(tmp: Path):
     assert j["l5_earlier"]["max_drawdown"] == 0 and j["l5_pass"] is None, j
     # Sharpe difference: equal samples -> z 0, p 0.5; a later sample that loses steadily -> p near 0; swapping flips z
     rng = np.random.default_rng(1)
-    a = pd.Series(rng.normal(0.001, 0.01, 500))
+    a = significance(pd.Series(rng.normal(0.001, 0.01, 500)))
     d = sharpe_diff(a, a)
     assert abs(d["z"]) < 1e-12 and abs(d["p_later_worse"] - 0.5) < 1e-12, d
-    b = pd.Series(rng.normal(-0.002, 0.01, 500))
+    b = significance(pd.Series(rng.normal(-0.002, 0.01, 500)))
     d, back = sharpe_diff(a, b), sharpe_diff(b, a)
     assert d["p_later_worse"] < 0.001 and abs(d["z"] + back["z"]) < 1e-12, d
     # L1 / L5 statistics of a daily net value: per full year and per L5 window; WFE = later CAGR / earlier CAGR
@@ -266,9 +273,13 @@ def _self_check(tmp: Path):
     j = judge_l1_l5(nv)
     assert abs(st["wfe"] - j["l5_later"]["cagr"] / j["l5_earlier"]["cagr"]) < 1e-12, st
     assert 0 <= st["later"]["psr"] <= 1 and 0 <= st["diff"]["p_later_worse"] <= 1, st
+    assert st["full"]["days"] == len(days) - 1, st["full"]   # 2022-01-01..2025-06-30: one return per day after the first
+    down = pd.Series(100 * np.exp(np.cumsum(rng.normal(-0.002, 0.01, len(days)))), index=days)
+    st = l1_l5_stats(down)   # losing 2022-23: earlier CAGR < 0 -> no WFE, the Sharpe test still runs
+    assert st["wfe"] is None and st["diff"] is not None, st
     # report: the v3.2 run above (2024-01-01..2025-12-31 23:59) -> one full year 2024 (-20%), one partial 2025 (+50%)
     rep = yearly_report({"r": (str(tmp / "v32"), "reinvest")})
-    assert "| r |  | | | |" in rep, rep   # 2 daily returns: too few for any statistic
+    assert "| r |  |  | | | | |" in rep, rep   # 2 daily returns: too few for any statistic
     assert "| r | -20.0% / -20.0% | +50.0% / 0.0% * |" in rep and "| r | 0 of 1 | not judged |" in rep, rep
 
 
