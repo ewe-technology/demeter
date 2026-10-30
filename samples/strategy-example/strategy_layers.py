@@ -57,12 +57,17 @@ def l0(nv: pd.Series) -> dict:
     return m
 
 
+# the pre-registered L1 / L5 rule (VALIDATION-2026-10-29-v3_2-v2_2.md): anchored windows and the earlier L5 window start
+# at ANCHOR, the later L5 window at L5_SPLIT; L1 counts the full years L1_YEARS (inclusive)
+ANCHOR, L5_SPLIT, L1_YEARS = "2022-01-01", "2024-01-01", (2022, 2025)
+
+
 def _window(nv: pd.Series, kind: str, label: str, lo: pd.Timestamp, hi: pd.Timestamp, partial: bool) -> dict:
     m = l0(nv[(nv.index >= lo) & (nv.index <= hi)])
     return {"kind": kind, "window": label, "partial": partial, "return": m["terminal"] / m["initial"] - 1, **m}
 
 
-def yearly_windows(nv: pd.Series, anchor: str = "2022-01-01") -> list[dict]:
+def yearly_windows(nv: pd.Series, anchor: str = ANCHOR) -> list[dict]:
     """L1 / L5 windows of a daily net value (VALIDATION-2026-10-29-v3_2-v2_2.md, L1 + L5 rule): one row per calendar
     year (its 1 January value, or the run start, to the next 1 January value, or the run end) and one per anchored
     window (from `anchor`, or the run start if later, to the end of each full year and to the run end). Each row carries
@@ -92,16 +97,20 @@ def judge_l1_l5(nv: pd.Series) -> dict:
     full years 2022-2025. L5: the later window 2024-01-01..run end has CAGR > 0 and Calmar >= 0.5 x the Calmar of
     2022-01-01..2023-12-31 (CAGR > 0 alone if that Calmar is <= 0). A pass is None when the run does not cover what the
     rule needs (it starts after 2022-01-01, or lacks a full year / the later window)."""
-    full = [r for r in yearly_windows(nv) if r["kind"] == "year" and not r["partial"] and 2022 <= int(r["window"]) <= 2025]
+    full = [r for r in yearly_windows(nv) if r["kind"] == "year" and not r["partial"]
+            and L1_YEARS[0] <= int(r["window"]) <= L1_YEARS[1]]
     up = sum(r["return"] > 0 for r in full)
-    out = {"l1_up_years": up, "l1_full_years": len(full), "l1_pass": up >= 3 if len(full) == 4 else None,
+    n = L1_YEARS[1] - L1_YEARS[0] + 1
+    out = {"l1_up_years": up, "l1_full_years": len(full), "l1_pass": up >= n - 1 if len(full) == n else None,
            "l5_earlier": None, "l5_later": None, "l5_pass": None}
-    split = pd.Timestamp("2024-01-01")
-    if nv.index[0] <= pd.Timestamp("2022-01-01") and nv.index[-1] > split:
-        early = _window(nv, "l5", "2022..2023", pd.Timestamp("2022-01-01"), split, False)
-        late = _window(nv, "l5", f"2024..{nv.index[-1]:%Y-%m-%d}", split, nv.index[-1], True)
-        out.update(l5_earlier=early, l5_later=late,
-                   l5_pass=late["cagr"] > 0 and (early["calmar"] <= 0 or late["calmar"] >= 0.5 * early["calmar"]))
+    start, split = pd.Timestamp(ANCHOR), pd.Timestamp(L5_SPLIT)
+    if nv.index[0] <= start and nv.index[-1] > split:
+        early = _window(nv, "l5", f"{start.year}..{split.year - 1}", start, split, False)
+        last = nv.index[-1]
+        late = _window(nv, "l5", f"{split.year}..{last:%Y-%m-%d}", split, last, last != pd.Timestamp(year=last.year, month=1, day=1))
+        out.update(l5_earlier=early, l5_later=late)
+        if early["calmar"] != float("inf"):   # no drawdown in the earlier window: the rule does not cover it
+            out["l5_pass"] = late["cagr"] > 0 and (early["calmar"] <= 0 or late["calmar"] >= 0.5 * early["calmar"])
     return out
 
 
@@ -118,8 +127,9 @@ def l0_table(runs: dict[str, tuple[str, str]]) -> str:
 def yearly_report(runs: dict[str, tuple[str, str]]) -> str:
     """Markdown for L1 + L5, one row per labelled run (result folder, mode): calendar years (return / max DD), anchored
     windows (CAGR / max DD / Calmar) and the L1 / L5 verdicts. `*` marks a partial window."""
-    pct = lambda x: f"{x * 100:+.1f}%".replace("+-", "-") if x else "0.0%"
+    pct = lambda x: "n/a" if x != x else (f"{x * 100:+.1f}%" if x else "0.0%")   # x != x: NaN (a zero-day window)
     star = lambda r: " *" if r["partial"] else ""
+    cagr_dd_calmar = lambda m: f"{pct(m['cagr'])} / {pct(m['max_drawdown'])} / {m['calmar']:.2f}" if m else ""
     data = {label: daily_net_value(folder, mode) for label, (folder, mode) in runs.items()}
     wins = {label: yearly_windows(nv) for label, nv in data.items()}
     years = sorted({r["window"] for w in wins.values() for r in w if r["kind"] == "year"})
@@ -130,16 +140,15 @@ def yearly_report(runs: dict[str, tuple[str, str]]) -> str:
         out.append(f"| {label} | " + " | ".join(cell.get(y, "") for y in years) + " |")
     out += ["", "Anchored windows: CAGR / max DD / Calmar (* partial)", "", "| run | windows |", "|---|---|"]
     for label, w in wins.items():
-        out.append(f"| {label} | " + "<br>".join(f"{r['window']}: {pct(r['cagr'])} / {pct(r['max_drawdown'])} / "
-                                                 f"{r['calmar']:.2f}{star(r)}" for r in w if r["kind"] == "anchored") + " |")
+        out.append(f"| {label} | " + "<br>".join(f"{r['window']}: {cagr_dd_calmar(r)}{star(r)}"
+                                                 for r in w if r["kind"] == "anchored") + " |")
     out += ["", "| run | L1 up years (2022-25) | L1 | L5 earlier 2022-23 CAGR / DD / Calmar | L5 later 2024.. | L5 |",
             "|---|---|---|---|---|---|"]
     word = lambda p: "not judged" if p is None else ("pass" if p else "fail")
     for label, nv in data.items():
         j = judge_l1_l5(nv)
-        fmt = lambda m: f"{pct(m['cagr'])} / {pct(m['max_drawdown'])} / {m['calmar']:.2f}" if m else ""
         out.append(f"| {label} | {j['l1_up_years']} of {j['l1_full_years']} | {word(j['l1_pass'])} | "
-                   f"{fmt(j['l5_earlier'])} | {fmt(j['l5_later'])} | {word(j['l5_pass'])} |")
+                   f"{cagr_dd_calmar(j['l5_earlier'])} | {cagr_dd_calmar(j['l5_later'])} | {word(j['l5_pass'])} |")
     return "\n".join(out)
 
 
@@ -190,6 +199,9 @@ def _self_check(tmp: Path):
     # a run that starts after 2022-01-01 is reported, not judged
     j = judge_l1_l5(nv[nv.index >= "2023-01-01"])
     assert j["l1_pass"] is None and j["l5_pass"] is None, j
+    # no drawdown in 2022-23: the earlier Calmar is infinite, which the rule does not cover -> not judged
+    j = judge_l1_l5(pd.Series([100.0, 120.0, 110.0], index=pd.to_datetime(["2022-01-01", "2024-01-01", "2025-01-01"])))
+    assert j["l5_earlier"]["max_drawdown"] == 0 and j["l5_pass"] is None, j
     # report: the v3.2 run above (2024-01-01..2025-12-31 23:59) -> one full year 2024 (-20%), one partial 2025 (+50%)
     rep = yearly_report({"r": (str(tmp / "v32"), "reinvest")})
     assert "| r | -20.0% / -20.0% | +50.0% / 0.0% * |" in rep and "| r | 0 of 1 | not judged |" in rep, rep
