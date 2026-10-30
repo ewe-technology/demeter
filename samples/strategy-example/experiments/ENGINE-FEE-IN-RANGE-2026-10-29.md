@@ -54,10 +54,26 @@ Fees by year, reinvest off: 2021 +2.4%, 2022 +1.1%, 2023 +1.0%, 2024 +2.0%, 2025
 +2.8 / +2.1 / +2.4 / +4.8 / +15.9 / +8.6%. The +2.44% (reinvest off) matches the audit's estimate (+2.49%). Reinvest
 gains more: compounding puts more capital in the ladder, and 2025 (many out-of-range bands) gains most.
 
+**3. Validation setting (2026-10-30): flat 0.1% swap cost, range break on the Binance close (QUAN-1215 default).**
+Run: `FLAT_SWAP_COST=1 [FEE_IN_RANGE_LIQUIDITY=1] python gamma_maker_defense_ethusdc_v3_2.py`; numbers:
+`experiments/fee_in_range_compare.py result/quan1213 "" swap10bp`. Swap cost is the same in both arms ($3,744 reinvest off),
+so the gap is the fee alone. Flag off reproduces `CODE-VS-SPEC-2026-10-30.md` ($222,744 / $297,167).
+
+| | reinvest off: flag off | on | reinvest on: flag off | on |
+|---|---|---|---|---|
+| fees (USD) | 96,892 | 99,324 (+2.51%) | 150,581 | 160,123 (+6.34%) |
+| end value | 222,744 | **225,176** (+1.09%) | 297,167 | **307,582** (+3.51%) |
+| max DD, UTC-0 daily % | −17.22% | −16.97% | −24.27% | −24.21% |
+
+These are the L0 numbers for v3.2 on `0x88e6`: flag on, flat 0.1%.
+
+## Decided
+
+- **Swap cost: flat 0.1% per rebalance swap** (Dino with Steven, 2026-10-30). The depth model read `currentLiquidity`,
+  which holds our own bands: with them it charged $3,189 (reinvest off; pool fee $1,437 + slippage $1,752), with the
+  pool's liquidity only $6,150 (fee $1,391 + slippage $4,759). The spec's flat 0.1% avoids the question; `FLAT_SWAP_COST=1`.
+- **Engine fix reviewed by Steven** and merged into `remix` (ewe-technology/demeter#6, with the `update_fee` int cast).
+
 ## Open
 
-- **Depth model counts our own liquidity.** With our liquidity removed from the depth, v3.2's swap cost (reinvest off)
-  is $6,150, not $3,189: the old model treated our own ladder (being taken down at the rebuild) as depth. The flag
-  halves the problem (out-of-range bands leave the depth). Decide whether the validation run's depth uses the pool's
-  liquidity only; it is a v3.2 cost-model choice, not part of this engine fix.
 - JIT liquidity (end-of-minute pool liquidity hides it): the fee share stays overstated by an unknown amount.

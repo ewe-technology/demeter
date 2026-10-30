@@ -181,6 +181,10 @@ SWAP_COST_RATE: Decimal | None = None
 # tick (see quote_depth); about 0.6 to 8 bp of a $70k swap over 2022-2025. It is on top of SWAP_COST_RATE, so with
 # the spec's 0.1% (which may already include slippage) it double counts: use SWAP_COST_RATE = None with it.
 SLIPPAGE_MODEL: str | None = "depth"
+# QUAN-1213 decision (Dino with Steven, 2026-10-30): validation charges the spec's flat 0.1% per rebalance swap, no depth
+# model (its depth read currentLiquidity, which includes our own bands). FLAT_SWAP_COST=1 sets it ("-swap10bp" in the folder).
+if os.environ.get("FLAT_SWAP_COST") == "1":
+    SWAP_COST_RATE, SLIPPAGE_MODEL = Decimal("0.001"), None
 LOWER_STOP, UPPER_REBUILD = 0.80, 1.20
 # spec v3 section 5: d = close / EMA100 - 1 judged on every UTC close; flag OFF -> ON at d >= DIVERGENCE_ON, ON -> OFF at
 # d < DIVERGENCE_OFF (hysteresis, between the two it keeps its state). ON: F' = 0, OFF: F' = F. Starts OFF with the EMA seed.

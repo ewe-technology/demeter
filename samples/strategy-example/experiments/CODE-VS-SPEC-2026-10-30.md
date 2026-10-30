@@ -25,7 +25,8 @@ the spec; keep, report = kept, number reported both ways; keep, documented = kep
 ## 1. ETH-USDC v3.2
 
 Known gaps decided in the ticket: (a) range break on the pool tick -> fix to the Binance close; (b) depth slippage
-instead of a flat 0.1% -> keep, also report flat 0.1%; (c) an inner band left without ETH by rounding is dropped -> keep
+instead of a flat 0.1% -> keep, also report flat 0.1% (2026-10-30: validation uses the flat 0.1%, see
+ENGINE-FEE-IN-RANGE-2026-10-29.md); (c) an inner band left without ETH by rounding is dropped -> keep
 (<= 0.84% of the book idle); (d) gas <= $0.2 claim condition not modelled (LOOKAHEAD-AUDIT section 3).
 
 | # | section | spec rule | code (file:line, what it does) | same / differs | action |
@@ -60,7 +61,7 @@ instead of a flat 0.1% -> keep, also report flat 0.1%; (c) an inner band left wi
 | 28 | 4 | Boundaries from price ratios then ticks (+1,823 / -2,231), not tick-symmetric; token order | Exact offsets `snap=False` L108-109, L513-514; self-check L1998-1999 | same | none |
 | 29 | 4 | Centre = pool price at execution; each boundary the nearest tick-spacing multiple | `ROUND_EACH_BOUNDARY` L209, `calculate_range` L765-767 | same | none |
 | 30 | 4 | All 16 bands placed | A band with zero liquidity after rounding is dropped (L1112-1114, L1256-1258) | differs (c) | keep, documented |
-| 31 | 4 | Backtest swap cost flat 0.1% per rebalance | `SWAP_COST_RATE=None` L175 + `SLIPPAGE_MODEL="depth"` L180 (pool fee 0.05% + depth) | differs (b) | keep, report (section 1.1) |
+| 31 | 4 | Backtest swap cost flat 0.1% per rebalance | `SWAP_COST_RATE=None` L175 + `SLIPPAGE_MODEL="depth"` L180 (pool fee 0.05% + depth) | differs (b) | keep, report (section 1.1); validation uses flat 0.1% (`FLAT_SWAP_COST=1`, decided 2026-10-30, QUAN-1213) |
 | 32 | 4 | Aggregator swap, 0.5% slippage tolerance, private RPC | Fills at the pool 00:00 price | not modelled | not modelled |
 | 33 | 4 | Anti-manipulation: pool vs Chainlink / TWAP within 0.3-0.5% before executing | Not in code | not modelled | not modelled |
 | 34 | 1/4 | Pool = Base ETH/USDC | Mainnet `0x88e6` 0.05%; Base `0x6c56` is the contract check (Dino, 2026-10-30) | differs (decided) | keep, documented |

@@ -2,7 +2,9 @@
 QUAN-1213: v3.2 with fee_in_range_liquidity off vs on (ENGINE-FEE-IN-RANGE-2026-10-29.md). Prints fees, end value,
 LP value, max DD (demeter's and UTC-0 daily %) and fees per year for reinvest off / on.
 
-    python experiments/fee_in_range_compare.py <result dir> [folder suffix, e.g. -rawdepth]
+    python experiments/fee_in_range_compare.py <result dir> [folder suffix, e.g. -rawdepth] [cost tag, default slipdepth]
+
+Cost tag "swap10bp" compares the FLAT_SWAP_COST=1 runs (the validation setting).
 """
 import glob
 import sys
@@ -11,8 +13,9 @@ import pandas as pd
 
 root = sys.argv[1]
 suffix = sys.argv[2] if len(sys.argv) > 2 else ""
-off = glob.glob(f"{root}/gamma*slipdepth{suffix}-100000-*")[0]
-on = glob.glob(f"{root}/gamma*slipdepth-feeinrange{suffix}-100000-*")[0]
+cost = sys.argv[3] if len(sys.argv) > 3 else "slipdepth"
+off = glob.glob(f"{root}/gamma*{cost}{suffix}-100000-*")[0]
+on = glob.glob(f"{root}/gamma*{cost}-feeinrange{suffix}-100000-*")[0]
 
 
 def summary(d):
