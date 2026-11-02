@@ -384,6 +384,8 @@ def shuffle_decisions(frame: pd.DataFrame, start: date, end: date, columns: tupl
     out = frame.copy()
     judged = (out.index >= pd.Timestamp(start) - timedelta(days=1)) & (out.index <= pd.Timestamp(end) - timedelta(days=1))
     values = frame.loc[judged, list(columns)]
+    if values.isna().any().any():   # NaN != NaN would count a change every day
+        raise ValueError("a judged decision is missing")
     n = len(values)
     changed = (values.iloc[1:].to_numpy() != values.iloc[:-1].to_numpy()).any(axis=1)
     old = np.r_[0, np.flatnonzero(changed) + 1]
@@ -888,6 +890,11 @@ def _self_check(tmp: Path):
     assert frame["F"].iloc[2] == 0.2   # input untouched
     assert shuffle_decisions(frame, date(2024, 1, 2), date(2024, 1, 9), ("F", "strong"), 1)["F"].tolist() == shuffled["F"].tolist()
     assert len({tuple(shuffle_decisions(frame, date(2024, 1, 2), date(2024, 1, 9), ("F",), d)["F"]) for d in range(1, 30)}) > 1
+    # A-B-A-B over 12 judged days: 3 changes, so exactly 4 levels in that order, whatever the draw
+    aba = pd.DataFrame({"F": [0.1] * 3 + [0.2] * 3 + [0.1] * 3 + [0.2] * 3}, index=pd.date_range("2024-01-01", periods=12, freq="D"))
+    for d in range(1, 20):
+        f = shuffle_decisions(aba, date(2024, 1, 2), date(2024, 1, 13), ("F",), d)["F"]
+        assert f.iloc[0] == 0.1 and int((f.diff().fillna(0) != 0).sum()) == 3, (d, f.tolist())
     # a change on every judged day leaves no other arrangement
     full = pd.DataFrame({"F": [0.1, 0.2, 0.3, 0.4]}, index=pd.date_range("2024-01-01", periods=4, freq="D"))
     assert shuffle_decisions(full, date(2024, 1, 2), date(2024, 1, 5), ("F",), 7)["F"].tolist() == [0.1, 0.2, 0.3, 0.4]

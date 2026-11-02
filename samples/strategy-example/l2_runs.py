@@ -53,8 +53,8 @@ def run_one(which: str, method: str, k: int) -> bool:
 if __name__ == "__main__":
     if len(sys.argv) < 2 or sys.argv[1] not in WINDOWS:
         sys.exit(__doc__)
-    if any(os.environ.get(v) for v in ("L6_EMA_SHIFT", "L6_WIDTH")):
-        sys.exit("an L6 variant would land in the spec's L2 folder and then count as finished")
+    if any(os.environ.get(v) for v in ("L6_EMA_SHIFT", "L6_WIDTH", "L2_SHIFT", "L2_SHUFFLE")):
+        sys.exit("an L6 or L2 switch in the environment would change every run of the batch")
     which, parallel = sys.argv[1], int(sys.argv[2]) if len(sys.argv) > 2 else 3
     method = sys.argv[3] if len(sys.argv) > 3 else "shift"
     (METHODS[method][2] / which).mkdir(parents=True, exist_ok=True)
