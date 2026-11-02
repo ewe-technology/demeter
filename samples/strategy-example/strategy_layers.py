@@ -23,7 +23,8 @@ deflated Sharpe ratio at the trial ledger's N and the break-even N (deflated_sha
 bootstrap's mean test, one-year paths and kill line (l3_bootstrap), judged by the pre-registered reference rules.
 
 L2 (decision test, our substitute for Maker's MCPT): the real price path with the strategy's decision series rotated in
-time (rotate_decisions, run by l2_runs.py), the real CAGR and Calmar against the shifted runs' (l2_row, l2_report).
+time (rotate_decisions, run by l2_runs.py), the real CAGR and Calmar against the shifted runs' (l2_row, l2_report). L2 shuffle:
+the same, with the change dates redrawn at random and the levels in their order (shuffle_decisions).
 
 Usage, from samples/strategy-example:
     python strategy_layers.py l0 <label>=<result folder>:<mode> ...      # mode: reinvest | noreinvest
@@ -32,6 +33,7 @@ Usage, from samples/strategy-example:
     python strategy_layers.py robust <pair> <mode> spec=<folder> ema-=<folder> ema+=<folder> w-=<folder> w+=<folder>
     python strategy_layers.py psr <N trials> <label>=<result folder>:<mode>[:reported] ...   # L8 + L4 + L3 tables
     python strategy_layers.py l2 <label>=<result folder>:<mode>:<shift folder>:<signal csv>:<column>[:reported] ...
+    python strategy_layers.py l2shuffle <same arguments>     # the same table for the shuffle's draws
 """
 from __future__ import annotations
 
@@ -361,6 +363,7 @@ def l3_bootstrap(nv: pd.Series) -> dict:
 
 
 L2_GUARD, L2_MIN_SHIFTS, L2_BAR = 30, 500, 0.05   # pre-registered, VALIDATION-2026-10-29-v3_2-v2_2.md L2
+L2_SEED, L2_DRAWS = 20261102, 500                 # pre-registered, same file, L2 shuffle
 
 
 def rotate_decisions(frame: pd.DataFrame, start: date, end: date, columns: tuple[str, ...], k: int) -> pd.DataFrame:
@@ -371,6 +374,24 @@ def rotate_decisions(frame: pd.DataFrame, start: date, end: date, columns: tuple
     judged = (out.index >= pd.Timestamp(start) - timedelta(days=1)) & (out.index <= pd.Timestamp(end) - timedelta(days=1))
     for c in columns:
         out.loc[judged, c] = np.roll(frame.loc[judged, c].to_numpy(), k)
+    return out
+
+
+def shuffle_decisions(frame: pd.DataFrame, start: date, end: date, columns: tuple[str, ...], draw: int) -> pd.DataFrame:
+    """L2 shuffle: a copy of a daily signal frame whose decision `columns`, read as one decision per day, change on as many
+    judged days (start - 1 .. end - 1) as before, but on random ones. The levels keep their order, so the count and the sizes of
+    the changes stay; the first day stays too. Holding times become random. Random stream: [L2_SEED, draw]."""
+    out = frame.copy()
+    judged = (out.index >= pd.Timestamp(start) - timedelta(days=1)) & (out.index <= pd.Timestamp(end) - timedelta(days=1))
+    values = frame.loc[judged, list(columns)]
+    n = len(values)
+    changed = (values.iloc[1:].to_numpy() != values.iloc[:-1].to_numpy()).any(axis=1)
+    old = np.r_[0, np.flatnonzero(changed) + 1]
+    rng = np.random.default_rng([L2_SEED, draw])
+    new = np.r_[0, np.sort(rng.choice(np.arange(1, n), size=len(old) - 1, replace=False))]
+    runs = np.diff(np.r_[new, n])
+    for c in columns:
+        out.loc[judged, c] = np.repeat(values[c].to_numpy()[old], runs)
     return out
 
 
@@ -430,8 +451,9 @@ def l2_row(nv: pd.Series, shifted: dict[int, pd.Series]) -> dict:
             "calmar_p": permutation_p(real["calmar"], calmar), "l2_pass": bool(cagr_p <= L2_BAR)}
 
 
-def l2_report(runs: dict[str, tuple[str, str, str, str, str, bool]]) -> str:
-    """L2 table. runs: label -> (real run folder, mode, shift folder from l2_runs.py, signal csv, decision column, judged)."""
+def l2_report(runs: dict[str, tuple[str, str, str, str, str, bool]], grid=l2_grid) -> str:
+    """L2 table. runs: label -> (real run folder, mode, shift folder from l2_runs.py, signal csv, decision column, judged).
+    grid: the shifts a finished batch holds, from the run's days."""
     out = ["| run | mode | shifts | CAGR | shifted CAGR 5% / median / 95% | p CAGR | Calmar | shifted median Calmar | p Calmar "
            "| memory days | independent alignments | rebuilds | shifted median rebuilds | reference p <= 0.05 |",
            "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
@@ -444,7 +466,7 @@ def l2_report(runs: dict[str, tuple[str, str, str, str, str, bool]]) -> str:
         decisions = pd.read_csv(signal, index_col=0, parse_dates=True)[column]
         decisions = decisions.loc[nv.index[0].normalize():nv.index[-1].normalize()]
         memory = decision_memory_days(decisions)
-        want = l2_grid(len(decisions))
+        want = grid(len(decisions))
         word = _word(r["l2_pass"]) if judged else "reported"
         if sorted(frames) != want:   # a p from an unfinished batch is not the pre-registered test
             word = f"partial, {len(frames)} of {len(want)}"
@@ -854,15 +876,30 @@ def _self_check(tmp: Path):
     r_row = [x for x in rep.split("\n") if x.startswith("| r |")]
     assert len(r_row) == 1 and "| 3 |" in r_row[0] and "| 85 | 4.7 |" in r_row[0] and "| 7 | 6 |" in r_row[0], rep
     assert r_row[0].endswith("| partial, 3 of 341 |"), rep   # 400 days: step 1, 30..370; three files are not the grid
+    # L2 shuffle: 01-01..01-08 are judged in a run 01-02..01-09; the three levels keep their order, and F and strong stay together
+    days = pd.date_range("2024-01-01", periods=10, freq="D")
+    frame = pd.DataFrame({"F": [0.1, 0.1, 0.2, 0.2, 0.2, 0.3, 0.3, 0.3, 0.9, 0.9], "strong": [True] * 2 + [False] * 3 + [True] * 5,
+                          "close": np.arange(10.0)}, index=days)
+    shuffled = shuffle_decisions(frame, date(2024, 1, 2), date(2024, 1, 9), ("F", "strong"), 1)
+    judged = shuffled.iloc[:8]
+    assert judged["F"].iloc[0] == 0.1 and judged["F"].drop_duplicates().tolist() == [0.1, 0.2, 0.3], shuffled["F"].tolist()
+    assert ((judged["F"] == 0.2) == ~judged["strong"]).all(), shuffled   # a pair of columns moves as one decision
+    assert shuffled["F"].iloc[8:].tolist() == [0.9, 0.9] and shuffled["close"].tolist() == frame["close"].tolist()
+    assert frame["F"].iloc[2] == 0.2   # input untouched
+    assert shuffle_decisions(frame, date(2024, 1, 2), date(2024, 1, 9), ("F", "strong"), 1)["F"].tolist() == shuffled["F"].tolist()
+    assert len({tuple(shuffle_decisions(frame, date(2024, 1, 2), date(2024, 1, 9), ("F",), d)["F"]) for d in range(1, 30)}) > 1
+    # a change on every judged day leaves no other arrangement
+    full = pd.DataFrame({"F": [0.1, 0.2, 0.3, 0.4]}, index=pd.date_range("2024-01-01", periods=4, freq="D"))
+    assert shuffle_decisions(full, date(2024, 1, 2), date(2024, 1, 5), ("F",), 7)["F"].tolist() == [0.1, 0.2, 0.3, 0.4]
     # the widest step with at least 500 shifts, including the case where a floor by 500 would give one step too few
     assert [len(l2_grid(d)) for d in (1944, 1764, 717)] == [629, 569, 658]
     assert l2_grid(2059)[1] - l2_grid(2059)[0] == 4 and len(l2_grid(2059)) == 500
 
 
 def main(argv: list[str]) -> None:
-    if not argv or argv[0] not in ("l0", "yearly", "regime", "robust", "psr", "l2"):
+    if not argv or argv[0] not in ("l0", "yearly", "regime", "robust", "psr", "l2", "l2shuffle"):
         sys.exit(__doc__)
-    if argv[0] == "l2":   # <label>=<real folder>:<mode>:<shift folder>:<signal csv>:<column>[:reported]
+    if argv[0] in ("l2", "l2shuffle"):   # <label>=<real folder>:<mode>:<shift folder>:<signal csv>:<column>[:reported]
         runs = {}
         for a in argv[1:]:
             label, spec = a.split("=", 1)
@@ -870,7 +907,7 @@ def main(argv: list[str]) -> None:
             if label in runs:   # the table is keyed by label: a repeat would silently drop a row
                 sys.exit(f"duplicate label: {label}")
             runs[label] = (*spec.removesuffix(":reported").split(":"), not reported)
-        print(l2_report(runs))
+        print(l2_report(runs) if argv[0] == "l2" else l2_report(runs, lambda days: list(range(1, L2_DRAWS + 1))))
         return
     if argv[0] == "psr":   # <label>=<folder>:<mode>[:reported]; ":reported" marks a run that is not judged
         runs = {}
