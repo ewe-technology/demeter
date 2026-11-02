@@ -856,6 +856,8 @@ def main(argv: list[str]) -> None:
         for a in argv[1:]:
             label, spec = a.split("=", 1)
             reported = spec.endswith(":reported")
+            if label in runs:   # the table is keyed by label: a repeat would silently drop a row
+                sys.exit(f"duplicate label: {label}")
             runs[label] = (*spec.removesuffix(":reported").split(":"), not reported)
         print(l2_report(runs))
         return
