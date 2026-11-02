@@ -380,6 +380,11 @@ def shift_grid(days: int, step: int, guard: int = L2_GUARD) -> list[int]:
     return list(range(guard, days - guard + 1, step))
 
 
+def l2_grid(days: int) -> list[int]:
+    """The pre-registered grid: shift_grid with the widest step that still gives at least L2_MIN_SHIFTS shifts."""
+    return shift_grid(days, max(1, (days - 2 * L2_GUARD) // (L2_MIN_SHIFTS - 1)))
+
+
 def permutation_p(real: float, shifted) -> float:
     """(1 + shifts at least as good as the real rule) / (1 + shifts), Phipson & Smyth (2010): never 0."""
     s = np.asarray(shifted, dtype=float)
@@ -439,7 +444,10 @@ def l2_report(runs: dict[str, tuple[str, str, str, str, str, bool]]) -> str:
         decisions = pd.read_csv(signal, index_col=0, parse_dates=True)[column]
         decisions = decisions.loc[nv.index[0].normalize():nv.index[-1].normalize()]
         memory = decision_memory_days(decisions)
+        want = l2_grid(len(decisions))
         word = _word(r["l2_pass"]) if judged else "reported"
+        if sorted(frames) != want:   # a p from an unfinished batch is not the pre-registered test
+            word = f"partial, {len(frames)} of {len(want)}"
         out.append(f"| {label} | {mode} | {r['shifts']} | {_pct(r['cagr'])} | {_pct(r['cagr_p5'])} / {_pct(r['cagr_median'])} / "
                    f"{_pct(r['cagr_p95'])} | {r['cagr_p']:.3f} | {r['calmar']:.2f} | {r['calmar_median']:.2f} | {r['calmar_p']:.3f} "
                    f"| {memory} | {len(decisions) / memory:.1f} | {rebuild_count(folder, mode)} | {rebuilds:.0f} | {word} |")
@@ -845,7 +853,10 @@ def _self_check(tmp: Path):
     rep = l2_report({"r": (str(l2_real), "reinvest", str(l2_dir), str(signal), "Fp", True)})
     r_row = [x for x in rep.split("\n") if x.startswith("| r |")]
     assert len(r_row) == 1 and "| 3 |" in r_row[0] and "| 85 | 4.7 |" in r_row[0] and "| 7 | 6 |" in r_row[0], rep
-    assert r_row[0].endswith("| fail |"), rep
+    assert r_row[0].endswith("| partial, 3 of 341 |"), rep   # 400 days: step 1, 30..370; three files are not the grid
+    # the widest step with at least 500 shifts, including the case where a floor by 500 would give one step too few
+    assert [len(l2_grid(d)) for d in (1944, 1764, 717)] == [629, 569, 658]
+    assert l2_grid(2059)[1] - l2_grid(2059)[0] == 4 and len(l2_grid(2059)) == 500
 
 
 def main(argv: list[str]) -> None:
