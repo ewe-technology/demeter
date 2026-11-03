@@ -313,11 +313,12 @@ was found in the stage 2 preconditions, before any scorecard; the second during 
 | 3 | v3.2 judged a range break on the pool tick; the spec says the Binance close | QUAN-1215 | break judged on the Binance close; the old pool-tick test kept behind a switch (`BREAK_ON_POOL_TICK=1`) | 1 of 16 breaks moves (2023-02-05 -> 02-08); daily max DD unchanged |
 | 4 | v3.2's spec claim condition (estimated gas <= $0.2) was not modelled. The tickets expected live rewards and reinvests to be smaller than the backtest's | QUAN-1214, QUAN-1209, QUAN-1215 | modelled in L0 (`CLAIM_GAS_CAP=1`) | 0 daily claims on mainnet; rebuilds and swap cost unchanged; end value rose +0.86% / +0.96% (on / off): the same ETH fees are sold at the rebuild-day price instead of each day's price. The spec's own numbers assume daily claims, which cannot happen on mainnet |
 | 5 | The fit note named `0xd0b5` as the Base contract's LP pool; it is the contract's 0.05% swap pool. The LP pool is `0x6c56` | QUAN-1209 comment 2026-10-30 | fit note corrected (taken from the script's docstring; the contract itself was not checked) | none; `0x6c56` was not run |
-| 6 | The v2.2 code rests on two assumptions the spec does not state: with no LP position, the LP part goes to the asset the book retreats to (the v3.2 rule); the reinvested LP part is added to the existing range without recentring | QUAN-1212 | flagged in the code for the spec owner to confirm | not confirmed in the tickets |
+| 6 | The v2.2 code rests on two assumptions the spec does not state: with no LP position, the LP part goes to the asset the book retreats to (the v3.2 rule); the reinvested LP part is added to the existing range without recentring | QUAN-1212 | flagged in the code; both assumptions confirmed correct by Dino on 2026-11-03 | none: the code already follows them |
 
 Also from QUAN-1215: v3.2 has 54 spec rules (44 same, 6 differ, 4 not modelled); v2.2 has 56, with no logic bug. Two
-items stay open for the spec owner: which price v2.2 uses for "out of range" (1 rebuild in 4 years differs on mainnet,
-none on Base) and v3.2's LP-share valuation price (no effect). The look-ahead audit (QUAN-1214) passed 10 of 10
+items were left for the spec owner: which price v2.2 uses for "out of range" (1 rebuild in 4 years differs on mainnet,
+none on Base) and v3.2's LP-share valuation price (no effect). Dino settled both on 2026-11-03: the pool price, as the
+code does, so no number changes. The look-ahead audit (QUAN-1214) passed 10 of 10
 truncation tests and its positive control failed 10 of 10; it did not cover the reinvest-off modes.
 
 **Scorecards (QUAN-1216)**

@@ -259,7 +259,8 @@ def reinvest_allocation(reward_usd: Decimal, f: Decimal, strong: bool, has_lp: b
     """Spec v2.2 section 5 month-end reinvest: value shares of the reward balance going to LP / ETH / BTC / USDC, or None
     when the balance is REINVEST_MIN_USD or less (carried to the next month). The split is the section 4 target
     allocation, so F = 0 puts it all in the retreat asset (BTC weak, USDC strong). Assumption (the spec is silent, v3.2's
-    rule for a missing ladder): with no LP position to add to, the LP part also goes to the retreat asset."""
+    rule for a missing ladder): with no LP position to add to, the LP part also goes to the retreat asset. Confirmed
+    correct by Dino, 2026-11-03."""
     if reward_usd <= REINVEST_MIN_USD:
         return None
     shares = allocation(f, strong)[0]
@@ -463,7 +464,8 @@ class EthBtcMglStrategy(BaseRemixDaoStrategy):
     def reinvest(self, row_data: Snapshot, f: Decimal, strong: bool) -> None:
         """Spec v2.2 section 5 auto reinvest: on the 1st after the judgement, the claim and any rebuild, add the whole reward
         balance (cbBTC) to the principal at the target LP / ETH / BTC / USDC shares for F and strength judged on D
-        (reinvest_allocation). The LP part is added to the existing range (no recentring). A balance of REINVEST_MIN_USD
+        (reinvest_allocation). The LP part is added to the existing range (no recentring; the spec is
+        silent, confirmed correct by Dino, 2026-11-03). A balance of REINVEST_MIN_USD
         or less stays in the reward balance until the next month."""
         p, u = self._prices(row_data)
         pending, value = self.reward_btc, self.reward_btc * p

@@ -221,12 +221,15 @@ New small differences in v2.2:
 - **Row 28.** "50/50 at the centre" cannot hold with price edges of ±10% / ±20%; the code follows the edges. Spec wording only.
 - Ties, all negligible: claim at >= $5 vs "> $5"; R = EMA100(R) counts weak; trigger 3 tests 99%, not target − 1%.
 
-## 3. Open for the spec owner (not blocking stage 3)
+## 3. Questions for the spec owner (settled 2026-11-03)
+
+Settled by Dino on 2026-11-03, after the question in #scrum-quant-amm: both use the pool price, as the code does. No
+code change, no rerun.
 
 1. v2.2 section 4: should "out of range" use the pool price (as now) or the Binance R close (as v3.2's section 4 says
-   for ETH-USDC)? One rebuild in four years differs on mainnet, none on Base.
+   for ETH-USDC)? One rebuild in four years differs on mainnet, none on Base. **Pool price.**
 2. v3.2 section 4: should the "current LP share" be valued at the Binance close or the pool price (N4)? No effect on the
-   2021-26 run.
+   2021-26 run. **Pool price.**
 
 ## 4. Reproduce
 
