@@ -34,6 +34,10 @@ Usage, from samples/strategy-example:
     python strategy_layers.py psr <N trials> <label>=<result folder>:<mode>[:reported] ...   # L8 + L4 + L3 tables
     python strategy_layers.py l2 <label>=<result folder>:<mode>:<shift folder>:<signal csv>:<column>[:reported] ...
     python strategy_layers.py l2shuffle <same arguments>     # the same table for the shuffle's draws
+    python strategy_layers.py alphabeta <usd|eth> <mode> real=<folder> <baseline>=<folder> ...   # alpha / beta table
+
+Alpha / beta (not a layer): the daily simple returns regressed on holding (Binance closes) and on baseline runs of the same
+script with the decisions held (fix_decisions: passive LP, constant F), Newey-West t (nw_ols, factor_row, alphabeta_report).
 """
 from __future__ import annotations
 
@@ -395,6 +399,119 @@ def shuffle_decisions(frame: pd.DataFrame, start: date, end: date, columns: tupl
     for c in columns:
         out.loc[judged, c] = np.repeat(values[c].to_numpy()[old], runs)
     return out
+
+
+def fix_decisions(frame: pd.DataFrame, start: date, end: date, values: dict[str, float | str]) -> pd.DataFrame:
+    """Alpha / beta baselines: a copy of a daily signal frame with each column of `values` held at one value on every judged
+    day (start - 1 .. end - 1); "mean" holds a column at its own mean over those days (the real run's average deployment)."""
+    out = frame.copy()
+    judged = (out.index >= pd.Timestamp(start) - timedelta(days=1)) & (out.index <= pd.Timestamp(end) - timedelta(days=1))
+    for c, v in values.items():
+        real = frame.loc[judged, c]
+        if real.isna().any():
+            raise ValueError(f"a judged {c} is missing")
+        out.loc[judged, c] = float(real.astype(float).mean()) if v == "mean" else v
+    return out
+
+
+NW_LAGS = 10   # pre-registered, VALIDATION-2026-10-29-v3_2-v2_2.md alpha / beta: Newey-West (Bartlett) lags
+YEAR_MIN_DAYS = 200
+
+
+def nw_ols(y: np.ndarray, x: np.ndarray, lags: int = NW_LAGS) -> tuple[np.ndarray, np.ndarray, float]:
+    """OLS of y on a constant and the columns of x (none: the mean alone), with Newey-West (1987) standard errors (Bartlett
+    weights, `lags` lags). Returns the coefficients (constant first), their t-statistics and R^2."""
+    X = np.column_stack([np.ones(len(y)), x.reshape(len(y), -1)])
+    b = np.linalg.lstsq(X, y, rcond=None)[0]
+    e = y - X @ b
+    u = X * e[:, None]
+    s = u.T @ u
+    for lag in range(1, lags + 1):
+        g = u[lag:].T @ u[:-lag]
+        s += (1 - lag / (lags + 1)) * (g + g.T)
+    inv = np.linalg.inv(X.T @ X)
+    se = np.sqrt(np.diag(inv @ s @ inv))
+    return b, b / se, (1 - e.var() / y.var()) if X.shape[1] > 1 else 0.0
+
+
+def daily_simple_returns(nv: pd.Series) -> pd.Series:
+    """Simple returns between consecutive 00:00 UTC values (the run's last, non-midnight value is dropped)."""
+    mid = nv[(nv.index.hour == 0) & (nv.index.minute == 0)]
+    return mid.pct_change().dropna()
+
+
+def held_price(pair: str) -> pd.Series:
+    """A Binance daily close re-indexed to the 00:00 at which it is final (day D's close at D + 1 00:00), so that its change
+    lines up with a run's 00:00-to-00:00 return."""
+    c = binance_close(pair)
+    c.index = c.index + pd.Timedelta(days=1)
+    return c
+
+
+def factor_row(r: pd.Series, factors: dict[str, pd.Series]) -> dict:
+    """Alpha / beta of the daily returns r against benchmark daily returns: alpha = 365 x intercept with its NW t, the betas,
+    R^2, the benchmarks' and the strategy's 365 x mean return. With one benchmark also the excess (r - benchmark, beta held
+    at 1) with its NW t, the up / down-day betas (benchmark > 0 / < 0) and calendar-year beta and alpha."""
+    d = pd.concat([r.rename("s"), *(f.rename(k) for k, f in factors.items())], axis=1, join="inner").dropna()
+    names = list(factors)
+    b, t, r2 = nw_ols(d["s"].to_numpy(), d[names].to_numpy())
+    row = {"days": len(d), "strategy": 365 * d["s"].mean(), "alpha": 365 * b[0], "alpha_t": t[0], "r2": r2,
+           "betas": dict(zip(names, b[1:])), "beta_t": dict(zip(names, t[1:])),
+           "bench": {k: 365 * d[k].mean() for k in names}}
+    if len(names) == 1:
+        f = d[names[0]]
+        eb, et, _ = nw_ols((d["s"] - f).to_numpy(), np.empty((len(d), 0)))
+        row["excess"], row["excess_t"] = 365 * eb[0], et[0]
+        row["beta_up"] = nw_ols(d.loc[f > 0, "s"].to_numpy(), f[f > 0].to_numpy())[0][1]
+        row["beta_down"] = nw_ols(d.loc[f < 0, "s"].to_numpy(), f[f < 0].to_numpy())[0][1]
+        row["years"] = {}
+        for year, g in d.groupby(d.index.year):
+            if len(g) > YEAR_MIN_DAYS:
+                yb, yt, _ = nw_ols(g["s"].to_numpy(), g[names[0]].to_numpy())
+                row["years"][year] = (yb[1], 365 * yb[0], yt[0])
+    return row
+
+
+def alphabeta_report(unit: str, mode: str, folders: dict[str, str]) -> str:
+    """The alpha / beta table of one strategy run (folders["real"]) against holding (Binance closes) and against the baseline
+    runs in `folders` (passive LP, constant F...). unit: usd (v3.2: USD, held = ETH) or eth (v2.2: ETH, held = BTC in ETH;
+    also in USD against ETH and against ETH + BTC)."""
+    nv = {k: daily_net_value(f, mode) for k, f in folders.items()}
+    r = daily_simple_returns(nv["real"])
+    eth = held_price("ethusdt").pct_change()
+    if unit == "usd":
+        held = {"hold ETH": {"ETH": eth}}
+        usd = {}
+    elif unit == "eth":
+        held = {"hold BTC (in ETH)": {"BTC": (1 / held_price("ethbtc")).pct_change()}}
+        nv_usd = nv["real"] * held_price("ethusdt").reindex(nv["real"].index.normalize()).to_numpy()
+        usd = {"in USD, hold ETH": {"ETH": eth},
+               "in USD, hold ETH + BTC": {"ETH": eth, "BTC": held_price("btcusdt").pct_change()}}
+    else:
+        raise ValueError(f"unit {unit!r}: want usd or eth")
+    lines = [f"{unit} {mode} (real {Path(folders['real']).name})", "",
+             "| benchmark | days | benchmark CAGR / max DD / Calmar | strategy mean | beta | alpha (t) | R^2 | excess (t) "
+             "| beta up / down |", "|---|---|---|---|---|---|---|---|---|"]
+    rows = [(name, r, f) for name, f in held.items()]
+    rows += [(name, r, {name: daily_simple_returns(nv[name])}) for name in folders if name != "real"]
+    rows += [(name, daily_simple_returns(nv_usd), f) for name, f in usd.items()]
+    years = []
+    for name, rs, f in rows:
+        x = factor_row(rs, f)
+        if name in folders:
+            m = l0(nv[name])
+            bench = f"{_pct(m['cagr'])} / {_pct(m['max_drawdown'])} / {m['calmar']:.2f}"
+        else:
+            bench = " + ".join(f"{_pct(v)} mean" for v in x["bench"].values())
+        beta = " + ".join(f"{k} {v:.2f} (t {x['beta_t'][k]:.1f})" for k, v in x["betas"].items())
+        excess = f"{_pct(x['excess'])} ({x['excess_t']:+.2f})" if "excess" in x else ""
+        updown = f"{x['beta_up']:.2f} / {x['beta_down']:.2f}" if "beta_up" in x else ""
+        lines.append(f"| {name} | {x['days']} | {bench} | {_pct(x['strategy'])} | {beta} | {_pct(x['alpha'])} "
+                     f"({x['alpha_t']:+.2f}) | {x['r2']:.2f} | {excess} | {updown} |")
+        if x.get("years"):
+            years.append(f"{name}: " + ", ".join(f"{y} beta {b:.2f} alpha {_pct(a)} (t {t:+.2f})"
+                                                 for y, (b, a, t) in x["years"].items()))
+    return "\n".join(lines + ["", "Calendar years (beta, alpha, t):", *years])
 
 
 def shift_grid(days: int, step: int, guard: int = L2_GUARD) -> list[int]:
@@ -901,11 +1018,29 @@ def _self_check(tmp: Path):
     # the widest step with at least 500 shifts, including the case where a floor by 500 would give one step too few
     assert [len(l2_grid(d)) for d in (1944, 1764, 717)] == [629, 569, 658]
     assert l2_grid(2059)[1] - l2_grid(2059)[0] == 4 and len(l2_grid(2059)) == 500
+    # alpha / beta: fix_decisions holds only the judged days; "mean" is the judged days' own mean
+    fx = fix_decisions(full, date(2024, 1, 2), date(2024, 1, 4), {"F": "mean"})
+    assert np.allclose(fx["F"].tolist(), [0.2, 0.2, 0.2, 0.4]), fx["F"].tolist()
+    assert fix_decisions(full, date(2024, 1, 2), date(2024, 1, 5), {"F": 1.0})["F"].tolist() == [1.0] * 4
+    # nw_ols recovers a known line; with no regressor it is the mean
+    rng = np.random.default_rng(0)
+    xs = rng.normal(0, 0.03, 5000)
+    ys = 0.001 + 0.5 * xs + rng.normal(0, 0.01, 5000)
+    cb, ct, cr2 = nw_ols(ys, xs)
+    assert abs(cb[0] - 0.001) < 3e-4 and abs(cb[1] - 0.5) < 0.02 and ct[0] > 3 and 0.65 < cr2 < 0.73, (cb, ct, cr2)   # R^2 = 0.25 x 9e-4 / (2.25e-4 + 1e-4) = 0.69
+    mb, _, mr2 = nw_ols(ys, np.empty((5000, 0)))
+    assert abs(mb[0] - ys.mean()) < 1e-12 and mr2 == 0.0
 
 
 def main(argv: list[str]) -> None:
-    if not argv or argv[0] not in ("l0", "yearly", "regime", "robust", "psr", "l2", "l2shuffle"):
+    if not argv or argv[0] not in ("l0", "yearly", "regime", "robust", "psr", "l2", "l2shuffle", "alphabeta"):
         sys.exit(__doc__)
+    if argv[0] == "alphabeta":   # <usd|eth> <mode> real=<folder> <baseline name>=<folder> ...
+        folders = dict(a.split("=", 1) for a in argv[3:])
+        if "real" not in folders:
+            sys.exit("alphabeta needs real=<folder>")
+        print(alphabeta_report(argv[1], argv[2], folders))
+        return
     if argv[0] in ("l2", "l2shuffle"):   # <label>=<real folder>:<mode>:<shift folder>:<signal csv>:<column>[:reported]
         runs = {}
         for a in argv[1:]:

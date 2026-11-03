@@ -226,8 +226,14 @@ if L6_WIDTH != 1:   # off: the spec floats untouched, bit for bit
 # around the run's judged days ("-l2sk" in the folder); prices, EMA share and range breaks stay real. Off = the spec.
 L2_SHIFT = int(os.environ.get("L2_SHIFT", "0"))
 L2_SHUFFLE = int(os.environ.get("L2_SHUFFLE", "0"))   # draw number: the same two columns, with random change dates ("-l2dk")
+# QUAN-1216 alpha / beta baselines (VALIDATION-2026-10-29-v3_2-v2_2.md, alpha / beta): BENCH_F=1 holds F' at 1 on every judged
+# day (passive LP), BENCH_F=mean at its own mean over those days (constant F); the divergence flag is held OFF in both
+# ("-bf1" / "-bfmean"). Prices, EMA share and range breaks stay real. Off = the spec.
+BENCH_F = os.environ.get("BENCH_F", "")
+if BENCH_F not in ("", "1", "mean"):
+    raise ValueError(f"BENCH_F={BENCH_F!r}: want 1 or mean")
 L6_TAG = (f"{f'-l6ema{L6_EMA_SHIFT:+d}' if L6_EMA_SHIFT else ''}{f'-l6w{L6_WIDTH}' if L6_WIDTH != 1 else ''}"
-          f"{f'-l2s{L2_SHIFT}' if L2_SHIFT else ''}{f'-l2d{L2_SHUFFLE}' if L2_SHUFFLE else ''}")
+          f"{f'-l2s{L2_SHIFT}' if L2_SHIFT else ''}{f'-l2d{L2_SHUFFLE}' if L2_SHUFFLE else ''}{f'-bf{BENCH_F}' if BENCH_F else ''}")
 # spec v3.1 section 3 rule 4: ETH share of a virtual ladder is 70% above the account's own EMA, else 50% (v3's 25% below
 # EMA100 x 0.95 is deleted). Assumption: refills and the initial build use the same rule (the spec only states it for the rebuild).
 # spec v3.1 section 4: the centre and all 16 boundaries are each the nearest tick spacing multiple, i.e. every boundary is
@@ -2024,6 +2030,9 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
             if L2_SHUFFLE:
                 from strategy_layers import shuffle_decisions
                 daily_ema = shuffle_decisions(daily_ema, dsd, ded, ("Fp", "diverged"), L2_SHUFFLE)
+            if BENCH_F:
+                from strategy_layers import fix_decisions
+                daily_ema = fix_decisions(daily_ema, dsd, ded, {"Fp": BENCH_F if BENCH_F == "mean" else 1.0, "diverged": 0})
             daily_emas[source] = daily_ema
             first, last = daily_ema.loc[pd.Timestamp(dsd) - timedelta(days=1)], daily_ema.iloc[-1]
             print(f"[{source}] ema{EMA_SPAN}: {len(daily_ema)} daily closes, day before window close {first['close']:.0f} ema {first['ema']:.0f} F {first['F']:.3f}, "

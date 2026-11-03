@@ -3,9 +3,12 @@ QUAN-1216 L6 robustness runs (experiments/VALIDATION-2026-10-29-v3_2-v2_2.md, L6
 switches on (flat 0.1% swap, fee in-range liquidity, v3.2 gas cap) and the variant from L6_EMA_SHIFT / L6_WIDTH in the
 environment. ../real-data must hold the pool's minute files as for L0 (0x4585 from holdout-data; 0x7aea from base-data,
 files renamed base-0x7aea...). Results go to result/<run folder> (tagged -l6ema+10 / -l6w1.1).
+The alpha / beta baselines run the same way with BENCH_F=1|mean (and BENCH_WEAK=1 on v2.2) in the environment (tagged -bf1 /
+-bfmean / -bweak).
 
 Usage, from samples/strategy-example:
     L6_WIDTH=1.1 python l6_runs.py v32|v22mainnet|v22base
+    BENCH_F=1 BENCH_WEAK=1 python l6_runs.py v22mainnet
 """
 import os
 import sys
