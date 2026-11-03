@@ -36,7 +36,7 @@ Usage, from samples/strategy-example:
     python strategy_layers.py l2shuffle <same arguments>     # the same table for the shuffle's draws
     python strategy_layers.py alphabeta <usd|eth> <mode> real=<folder> <baseline>=<folder> ...   # alpha / beta table
     python strategy_layers.py lvr <label>=<account parquet>:<base token> ...   # LVR split (ACCOUNT_LOG=1 runs)
-    python strategy_layers.py bridge <label>=<account parquet>:<base token> ...   # strategy alpha = timing + LP alpha
+    python strategy_layers.py bridge [--trend ema100|ret365] <label>=<account parquet>:<base token> ...   # strategy alpha = timing + LP alpha
 
 Alpha / beta (not a layer): the daily simple returns regressed on holding (Binance closes) and on baseline runs of the same
 script with the decisions held (fix_decisions: passive LP, constant F), Newey-West t (nw_ols, factor_row, alphabeta_report).
@@ -556,31 +556,55 @@ def lvr_report(runs: dict[str, tuple[str, str]]) -> str:
         "| run | year | days | fee | lvr | exec | hedged |", "|---|---|---|---|---|---|---|", *years])
 
 
-def alpha_bridge(account: pd.DataFrame, base: str) -> dict:
+def binance_in_unit(token: str, unit: str) -> pd.Series:
+    """A token's Binance daily close in the run's unit (ETH in USD; BTC and USDC in ETH)."""
+    pairs = {("ETH", "USDC"): lambda: binance_close("ethusdt"), ("BTC", "ETH"): lambda: 1 / binance_close("ethbtc"),
+             ("USDC", "ETH"): lambda: 1 / binance_close("ethusdt")}
+    return pairs[(token, unit)]()
+
+
+def trend_signal(close: pd.Series, rule: str) -> pd.Series:
+    """Long / flat time-series momentum on daily closes, 1 = long: "ema100" = close above its EMA100 (span 100, from the
+    first close), "ret365" = the 365-day return above 0 (Moskowitz, Ooi & Pedersen 2012). Value on day D uses closes up to D."""
+    if rule == "ema100":
+        return (close > close.ewm(span=100, adjust=False).mean()).astype(float)
+    if rule == "ret365":
+        return (close / close.shift(365) > 1).astype(float).where(close.shift(365).notna())
+    raise ValueError(rule)
+
+
+def alpha_bridge(account: pd.DataFrame, base: str, trend: str | None = None) -> dict:
     """The strategy's alpha against holding, split into timing alpha and LP alpha: the daily return r = beta + hedged
     (lvr_daily) and each of r, beta and hedged regressed on the same factors, the daily returns of every token with a
     price in the run's unit (pool prices, day end to day end). OLS is linear in y, so alpha(r) = alpha(beta) + alpha(hedged)
     exactly: alpha(beta) is the timing alpha (the rebalancing strategy's return beyond fixed betas to the tokens),
-    alpha(hedged) the LP alpha. Alphas are 365 x intercept with Newey-West t."""
+    alpha(hedged) the LP alpha. Alphas are 365 x intercept with Newey-West t. trend ("ema100" | "ret365") adds one
+    time-series momentum factor per token, TSMOM_k(D) = s_k(D - 1) x r_k(D), s_k = trend_signal on the token's Binance
+    close in the run's unit (the day before, so it is known at D 00:00)."""
     d = lvr_daily(lvr_split(account, base))
     tokens = [c.split("|")[1] for c in account.columns if c.startswith("tokens|")]
     close = account[[f"price|{k}" for k in tokens]].groupby(account.index.floor("D")).last()
     f = close.pct_change().reindex(d.index)
+    unit = next(c.split("|")[1] for c in f.columns if not f[c].std() > 0)
     f = f.loc[:, f.std() > 0]   # the unit token's own price is 1
+    if trend:
+        for c in list(f.columns):
+            s = trend_signal(binance_in_unit(c.split("|")[1], unit), trend).shift(1)
+            f[f"tsmom|{c.split('|')[1]}"] = f[c] * s.reindex(f.index)
     keep = f.notna().all(axis=1) & d.notna().all(axis=1)   # the first day has no factor return
     d, f = d[keep], f[keep]
-    out = {"factors": [c.split("|")[1] for c in f.columns], "days": len(d)}
+    out = {"factors": [c.split("|")[1] if c.startswith("price|") else c for c in f.columns], "days": len(d)}
     for name, col in (("strategy", "dnv"), ("timing", "beta"), ("lp", "hedged")):
         b, t, r2 = nw_ols(d[col].to_numpy(), f.to_numpy())
         out[name] = {"alpha": 365 * b[0], "t": t[0], "betas": list(b[1:]), "r2": r2}
     return out
 
 
-def bridge_report(runs: dict[str, tuple[str, str]]) -> str:
-    """alpha_bridge per run (label -> (account parquet, base token))."""
+def bridge_report(runs: dict[str, tuple[str, str]], trend: str | None = None) -> str:
+    """alpha_bridge per run (label -> (account parquet, base token)), with the trend factors when trend is given."""
     rows = []
     for label, (path, base) in runs.items():
-        o = alpha_bridge(pd.read_parquet(path), base)
+        o = alpha_bridge(pd.read_parquet(path), base, trend)
         s, tm, lp = o["strategy"], o["timing"], o["lp"]
         betas = ", ".join(f"{k} {b:.2f}" for k, b in zip(o["factors"], s["betas"]))
         rows.append(f"| {label} | {o['days']} | {betas} | {_pct(s['alpha'])} ({s['t']:.2f}) | "
@@ -1152,13 +1176,14 @@ def _self_check(tmp: Path):
 def main(argv: list[str]) -> None:
     if not argv or argv[0] not in ("l0", "yearly", "regime", "robust", "psr", "l2", "l2shuffle", "alphabeta", "lvr", "bridge"):
         sys.exit(__doc__)
-    if argv[0] in ("lvr", "bridge"):   # <label>=<account parquet>:<base token> ...
+    if argv[0] in ("lvr", "bridge"):   # [--trend ema100|ret365] <label>=<account parquet>:<base token> ...
+        trend = argv[2] if argv[1:2] == ["--trend"] else None
         runs = {}
-        for a in argv[1:]:
+        for a in argv[3 if trend else 1:]:
             label, rest = a.split("=", 1)
             path, base = rest.rsplit(":", 1)
             runs[label] = (path, base)
-        print(lvr_report(runs) if argv[0] == "lvr" else bridge_report(runs))
+        print(lvr_report(runs) if argv[0] == "lvr" else bridge_report(runs, trend))
         return
     if argv[0] == "alphabeta":   # <usd|eth> <mode> real=<folder> <baseline name>=<folder> ...
         folders = dict(a.split("=", 1) for a in argv[3:])
