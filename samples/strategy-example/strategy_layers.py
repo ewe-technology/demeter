@@ -36,6 +36,7 @@ Usage, from samples/strategy-example:
     python strategy_layers.py l2shuffle <same arguments>     # the same table for the shuffle's draws
     python strategy_layers.py alphabeta <usd|eth> <mode> real=<folder> <baseline>=<folder> ...   # alpha / beta table
     python strategy_layers.py lvr <label>=<account parquet>:<base token> ...   # LVR split (ACCOUNT_LOG=1 runs)
+    python strategy_layers.py bridge <label>=<account parquet>:<base token> ...   # strategy alpha = timing + LP alpha
 
 Alpha / beta (not a layer): the daily simple returns regressed on holding (Binance closes) and on baseline runs of the same
 script with the decisions held (fix_decisions: passive LP, constant F), Newey-West t (nw_ols, factor_row, alphabeta_report).
@@ -553,6 +554,37 @@ def lvr_report(runs: dict[str, tuple[str, str]]) -> str:
         "Hedge interval check, the whole run's sum in units of the start value:", "",
         "| run | hedged 1 min | hedged 1 h | hedged 1 day | net value change |", "|---|---|---|---|---|", *check, "",
         "| run | year | days | fee | lvr | exec | hedged |", "|---|---|---|---|---|---|---|", *years])
+
+
+def alpha_bridge(account: pd.DataFrame, base: str) -> dict:
+    """The strategy's alpha against holding, split into timing alpha and LP alpha: the daily return r = beta + hedged
+    (lvr_daily) and each of r, beta and hedged regressed on the same factors, the daily returns of every token with a
+    price in the run's unit (pool prices, day end to day end). OLS is linear in y, so alpha(r) = alpha(beta) + alpha(hedged)
+    exactly: alpha(beta) is the timing alpha (the rebalancing strategy's return beyond fixed betas to the tokens),
+    alpha(hedged) the LP alpha. Alphas are 365 x intercept with Newey-West t."""
+    d = lvr_daily(lvr_split(account, base))
+    tokens = [c.split("|")[1] for c in account.columns if c.startswith("tokens|")]
+    close = account[[f"price|{k}" for k in tokens]].groupby(account.index.floor("D")).last()
+    f = close.pct_change().loc[d.index]
+    f = f.loc[:, f.std() > 0]   # the unit token's own price is 1
+    out = {"factors": [c.split("|")[1] for c in f.columns], "days": len(d)}
+    for name, col in (("strategy", "dnv"), ("timing", "beta"), ("lp", "hedged")):
+        b, t, r2 = nw_ols(d[col].to_numpy(), f.to_numpy())
+        out[name] = {"alpha": 365 * b[0], "t": t[0], "betas": list(b[1:]), "r2": r2}
+    return out
+
+
+def bridge_report(runs: dict[str, tuple[str, str]]) -> str:
+    """alpha_bridge per run (label -> (account parquet, base token))."""
+    rows = []
+    for label, (path, base) in runs.items():
+        o = alpha_bridge(pd.read_parquet(path), base)
+        s, tm, lp = o["strategy"], o["timing"], o["lp"]
+        betas = ", ".join(f"{k} {b:.2f}" for k, b in zip(o["factors"], s["betas"]))
+        rows.append(f"| {label} | {o['days']} | {betas} | {_pct(s['alpha'])} ({s['t']:.2f}) | "
+                    f"{_pct(tm['alpha'])} ({tm['t']:.2f}) | {_pct(lp['alpha'])} ({lp['t']:.2f}) | {s['r2']:.2f} |")
+    return "\n".join(["| run | days | betas | strategy alpha (t) | = timing alpha (t) | + LP alpha (t) | R^2 |",
+                      "|---|---|---|---|---|---|---|", *rows])
 
 
 def alphabeta_report(unit: str, mode: str, folders: dict[str, str]) -> str:
@@ -1116,15 +1148,15 @@ def _self_check(tmp: Path):
 
 
 def main(argv: list[str]) -> None:
-    if not argv or argv[0] not in ("l0", "yearly", "regime", "robust", "psr", "l2", "l2shuffle", "alphabeta", "lvr"):
+    if not argv or argv[0] not in ("l0", "yearly", "regime", "robust", "psr", "l2", "l2shuffle", "alphabeta", "lvr", "bridge"):
         sys.exit(__doc__)
-    if argv[0] == "lvr":   # <label>=<account parquet>:<base token> ...
+    if argv[0] in ("lvr", "bridge"):   # <label>=<account parquet>:<base token> ...
         runs = {}
         for a in argv[1:]:
             label, rest = a.split("=", 1)
             path, base = rest.rsplit(":", 1)
             runs[label] = (path, base)
-        print(lvr_report(runs))
+        print(lvr_report(runs) if argv[0] == "lvr" else bridge_report(runs))
         return
     if argv[0] == "alphabeta":   # <usd|eth> <mode> real=<folder> <baseline name>=<folder> ...
         folders = dict(a.split("=", 1) for a in argv[3:])
