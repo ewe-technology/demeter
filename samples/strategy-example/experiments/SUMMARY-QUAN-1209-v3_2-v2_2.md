@@ -179,7 +179,7 @@ Over 2022..2026-08 both strategies reach PSR 0.95 (v3.2 0.963 / 0.965, v2.2 0.99
 
 **What this cannot show.** Four years carry little evidence: a coin flip gives 3 or more up years of 4 with
 probability 31%. No single v3.2 year reaches PSR 0.95; one year of daily returns cannot separate a Sharpe near 0.8
-from 0. The later years are pseudo-OOS only, because the spec was frozen after them; clean OOS starts 2026-11. The
+from 0. The later years are pseudo-OOS only, because the spec was frozen after them; clean OOS (from 2026-11) is not run, by decision. The
 L5 threshold (0.5 x Calmar) is the analyst's choice, and a longer window tends to show a deeper drawdown, which biases
 Calmar against the 2.7-year later window. WFE here measures decay only, since nothing is refitted.
 
@@ -366,8 +366,8 @@ Departures from the pre-registration that are not errors, listed so a reader can
 
 ### 4.2 Limitations shared by every layer
 
-- **No clean out-of-sample data.** Every year of pool data predates the 2026-10-27 spec freeze. Clean OOS starts with
-  2026-11; the plan is to refetch the pools monthly and rerun the frozen code.
+- **No clean out-of-sample data.** Every year of pool data predates the 2026-10-27 spec freeze. Clean OOS would start
+  with 2026-11; on 2026-11-03 it was decided not to run it (Dino).
 - **One price path per pool.** No layer tested the strategies on resampled or synthetic prices (the original L2
   design, permuted prices, needs a synthetic swap generator).
 - **Costs.** Gas is not charged (team ruling); JIT dilution of fees is not modelled; v2.2's gas claim condition is not
@@ -383,7 +383,7 @@ The ladder produced a full set of numbers for eight layers on both strategies an
 layers were not run. Against the reference rules, both strategies pass the decision tests (L2), yearly stability
 (L1) and whole-run PSR (L8), and both fail multiple testing (L4), the bootstrap (L3) and neighbour stability (L6b).
 L5 passes for v3.2 and fails for v2.2; L6a fails for v3.2 and passes for v2.2. These are references written before the results. The decision on whether either
-strategy is good enough, and whether to wait for clean out-of-sample months, belongs to the team.
+strategy is good enough belongs to the team; clean out-of-sample months will not be added (decision 2026-11-03).
 
 ## References
 

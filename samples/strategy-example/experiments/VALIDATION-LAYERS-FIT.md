@@ -49,7 +49,7 @@ QUAN-1209. In the Maker column, "differs" marks where this note departs from his
 Order follows Maker's advice; stage 3 starts only when the stage-2 preconditions pass (QUAN-1212..1215).
 
 1. L0 on both strategies with the fixed engine and stated costs.
-2. L1 + L5: the yearly table; clean OOS rows added monthly.
+2. L1 + L5: the yearly table; clean OOS rows added monthly (not run: Dino decided on 2026-11-03 that clean OOS is not done).
 3. L6 per-regime rows from the same runs, plus the one-step-either-side runs.
 4. L4 trial count beside every number; L3 and L8 from the same daily returns (no new backtests), reported, not gating.
 5. L2 decision-permutation (run it as well: every feasible layer gets its numbers, ruling below). Done twice: a circular shift of the decision series, then the table's "shuffle the dates of F changes" (500 draws). The first reason given for not running the shuffle was wrong (`VALIDATION-2026-10-29-v3_2-v2_2.md`, Deviations (L2), L2 shuffle).
