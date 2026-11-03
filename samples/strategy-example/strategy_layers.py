@@ -565,8 +565,10 @@ def alpha_bridge(account: pd.DataFrame, base: str) -> dict:
     d = lvr_daily(lvr_split(account, base))
     tokens = [c.split("|")[1] for c in account.columns if c.startswith("tokens|")]
     close = account[[f"price|{k}" for k in tokens]].groupby(account.index.floor("D")).last()
-    f = close.pct_change().loc[d.index]
+    f = close.pct_change().reindex(d.index)
     f = f.loc[:, f.std() > 0]   # the unit token's own price is 1
+    keep = f.notna().all(axis=1) & d.notna().all(axis=1)   # the first day has no factor return
+    d, f = d[keep], f[keep]
     out = {"factors": [c.split("|")[1] for c in f.columns], "days": len(d)}
     for name, col in (("strategy", "dnv"), ("timing", "beta"), ("lp", "hedged")):
         b, t, r2 = nw_ols(d[col].to_numpy(), f.to_numpy())
