@@ -58,8 +58,8 @@ Ruling 2026-10-30 (Dino): every layer reports its method, theory (with sources),
 Pass / fail rules are written down beforehand as references; the team, not the scorecard, decides whether a strategy
 is good.
 
-Scorecard rows for L7 and L9 say "not applicable" with the reason above. L10 is recorded as "pending" and opens its
-own ticket.
+Scorecard rows for L7 and L9 say "not applicable" with the reason above. L10 was first recorded as "pending" with
+its own ticket; Dino decided on 2026-11-03 that L10 is not done, so no ticket was opened.
 
 ## Open questions
 
