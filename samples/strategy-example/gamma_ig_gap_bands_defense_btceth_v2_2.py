@@ -89,6 +89,9 @@ if BENCH_F not in ("", "1", "mean"):
 L6_TAG = (f"{f'-l6ema{L6_EMA_SHIFT:+d}' if L6_EMA_SHIFT else ''}{f'-l6w{L6_WIDTH}' if L6_WIDTH != 1 else ''}"
           f"{f'-l2s{L2_SHIFT}' if L2_SHIFT else ''}{f'-l2d{L2_SHUFFLE}' if L2_SHUFFLE else ''}"
           f"{f'-bf{BENCH_F}' if BENCH_F else ''}{'-bweak' if BENCH_WEAK else ''}")
+# QUAN-1216 LVR split (VALIDATION-2026-10-29-v3_2-v2_2.md, LVR split): ACCOUNT_LOG=1 also writes the minute account status
+# (account_<report>.parquet, "-acct" in the folder). The run itself does not change.
+ACCOUNT_LOG = os.environ.get("ACCOUNT_LOG") == "1"
 EMA_SPANS = tuple(n + L6_EMA_SHIFT for n in EMA_SPANS)
 EMA_SLOPE_DAYS = 20                                     # exit also needs EMA_n < EMA_n 20 days ago
 LOWER_STOP, UPPER_REBUILD = 0.80, 1.20
@@ -613,6 +616,9 @@ def run_test(bull_params: RemixDAOParams, params: TestParams, gp: GlobalParams, 
     actuator.run(False)
 
     account = actuator.account_status_df
+    if ACCOUNT_LOG:
+        from strategy_layers import save_account_minutes
+        save_account_minutes(account, f"{params.folder}/account_{params.report_name}.parquet")
     net_value = account["net_value"]
     benchmark = account["price"][gp.base_token.name.upper()]
     metrics = performance_metrics_for_dca(net_value, 0, benchmark=benchmark, total_fee=strat.total_fee)
@@ -695,7 +701,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, pool_name: str = "base
                           rescale_tick_lower_boundary_offset=0, init_tick_spread=120, tick_spacing=tick_spacing,
                           tick_gap_lower=1, tick_gap_upper=1)
     fee_tag = "" if PERFORMANCE_FEE == ZERO else f"-perf{float(PERFORMANCE_FEE) * 100:g}"
-    folder = f"result/{pool_name}-ethbtc-mgl-v2_2{fee_tag}{L6_TAG}-{csd:%Y%m%d}-{ded:%Y%m%d}"
+    folder = f"result/{pool_name}-ethbtc-mgl-v2_2{fee_tag}{L6_TAG}{'-acct' if ACCOUNT_LOG else ''}-{csd:%Y%m%d}-{ded:%Y%m%d}"
     Path(folder).mkdir(parents=True, exist_ok=True)
 
     def load(pool: UniV3Pool, address: str, start: date, end: date, chain_name_str: str | None = None) -> UniLpMarketV2:

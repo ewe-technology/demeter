@@ -234,6 +234,9 @@ if BENCH_F not in ("", "1", "mean"):
     raise ValueError(f"BENCH_F={BENCH_F!r}: want 1 or mean")
 L6_TAG = (f"{f'-l6ema{L6_EMA_SHIFT:+d}' if L6_EMA_SHIFT else ''}{f'-l6w{L6_WIDTH}' if L6_WIDTH != 1 else ''}"
           f"{f'-l2s{L2_SHIFT}' if L2_SHIFT else ''}{f'-l2d{L2_SHUFFLE}' if L2_SHUFFLE else ''}{f'-bf{BENCH_F}' if BENCH_F else ''}")
+# QUAN-1216 LVR split (VALIDATION-2026-10-29-v3_2-v2_2.md, LVR split): ACCOUNT_LOG=1 also writes the minute account status
+# (account_<report>.parquet, "-acct" in the folder). The run itself does not change.
+ACCOUNT_LOG = os.environ.get("ACCOUNT_LOG") == "1"
 # spec v3.1 section 3 rule 4: ETH share of a virtual ladder is 70% above the account's own EMA, else 50% (v3's 25% below
 # EMA100 x 0.95 is deleted). Assumption: refills and the initial build use the same rule (the spec only states it for the rebuild).
 # spec v3.1 section 4: the centre and all 16 boundaries are each the nearest tick spacing multiple, i.e. every boundary is
@@ -1567,6 +1570,9 @@ def run_test(bull_params: RemixDAOParams, bear_params: RemixDAOParams, params: T
         # minute net value for drawdown checks; result_*.csv only holds rebuild events
         pd.DataFrame({"net_value": actuator.account_status_df["net_value"], "price": benchmark_series}).to_csv(
             f"{params.folder}/netvalue_{params.report_name}.csv")
+        if ACCOUNT_LOG:
+            from strategy_layers import save_account_minutes
+            save_account_minutes(actuator.account_status_df, f"{params.folder}/account_{params.report_name}.parquet")
         metrics: dict[str, Decimal] = performance_metrics_for_dca(
             actuator.account_status_df["net_value"], 0, benchmark=benchmark_series,
             total_fee=strat.total_fee,
@@ -1781,7 +1787,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, id: str, flip_param_da
                       f"{'-breaktick' if BREAK_ON_POOL_TICK else ''}"
                       f"{'-gascap' if CLAIM_GAS_CAP else ''}"
                       f"{'' if F_BY_VALUE else '-fstage'}"
-                      f"{'' if SPEC_START else '-v1start'}{L6_TAG}")
+                      f"{'' if SPEC_START else '-v1start'}{L6_TAG}{'-acct' if ACCOUNT_LOG else ''}")
     _dca_add_if_non_empty = False
     _dca_timing = DcaTiming.none
     _dca_addon_price_percent = ZERO  # Decimal(0.5)

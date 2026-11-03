@@ -35,9 +35,13 @@ Usage, from samples/strategy-example:
     python strategy_layers.py l2 <label>=<result folder>:<mode>:<shift folder>:<signal csv>:<column>[:reported] ...
     python strategy_layers.py l2shuffle <same arguments>     # the same table for the shuffle's draws
     python strategy_layers.py alphabeta <usd|eth> <mode> real=<folder> <baseline>=<folder> ...   # alpha / beta table
+    python strategy_layers.py lvr <label>=<account parquet>:<base token> ...   # LVR split (ACCOUNT_LOG=1 runs)
 
 Alpha / beta (not a layer): the daily simple returns regressed on holding (Binance closes) and on baseline runs of the same
 script with the decisions held (fix_decisions: passive LP, constant F), Newey-West t (nw_ols, factor_row, alphabeta_report).
+
+LVR split (not a layer): the minute account status of an ACCOUNT_LOG=1 run (save_account_minutes) split into the rebalancing
+strategy on the book's own holdings, fees, loss-versus-rebalancing and execution steps (lvr_split, lvr_daily, lvr_report).
 """
 from __future__ import annotations
 
@@ -470,6 +474,85 @@ def factor_row(r: pd.Series, factors: dict[str, pd.Series]) -> dict:
                 yb, yt, _ = nw_ols(g["s"].to_numpy(), g[names[0]].to_numpy())
                 row["years"][year] = (yb[1], 365 * yb[0], yt[0])
     return row
+
+
+def save_account_minutes(account: pd.DataFrame, path: str | Path) -> None:
+    """LVR split: the actuator's minute account status (net value, wallet tokens, LP amounts and uncollected fees, prices) as
+    float64 parquet, columns "<l1>|<l2>" ("net_value", "tokens|ETH", "lp|base_in_position", "price|ETH", ...)."""
+    flat = pd.DataFrame({("|".join(c) if c[1] else c[0]): account[c].astype(float) for c in account.columns}, index=account.index)
+    flat.to_parquet(path)
+
+
+def lvr_split(account: pd.DataFrame, base: str, every: str | None = None) -> pd.DataFrame:
+    """Milionis et al. (2022) split of the book's net value change per step (rows of a save_account_minutes frame, one
+    minute, or `every` = "1h" / "1D" for a coarser hedge): beta = sum_k X_k(t-1) x dP_k, the rebalancing strategy on the
+    book's own holdings X_k (wallet + LP principal + uncollected fees) of every token k with a price in the run's unit;
+    hedged = dNV - beta. On minute steps where no wallet balance changes (quiet), hedged = fee - lvr exactly:
+    fee = d(uncollected value) - uncollected base x dP, lvr = LP principal base x dP - d(principal value) (>= 0 for a
+    concave payoff). Steps where the strategy acts (a wallet balance changes) go to `exec`: swap costs, rebuilds, claims,
+    and that minute's own fee - lvr. The LP market is the one with a "|base_in_position" column; base = its base token."""
+    lp = next(c.split("|")[0] for c in account.columns if c.endswith("|base_in_position"))
+    tokens = [c.split("|")[1] for c in account.columns if c.startswith("tokens|")]
+    price = {k: account[f"price|{k}"] for k in tokens}
+    hold = {k: account[f"tokens|{k}"] for k in tokens}
+    hold[base] = hold[base] + account[f"{lp}|base_in_position"] + account[f"{lp}|base_uncollected"]
+    if every:
+        account = account.resample(every, label="left", closed="left").first().dropna(subset=["net_value"])
+        price = {k: p.reindex(account.index) for k, p in price.items()}
+        hold = {k: h.reindex(account.index) for k, h in hold.items()}
+    beta = sum(hold[k].shift() * price[k].diff() for k in tokens)
+    out = pd.DataFrame({"nv0": account["net_value"].shift(), "dnv": account["net_value"].diff(), "beta": beta})
+    out["hedged"] = out["dnv"] - out["beta"]
+    if not every:
+        pb = price[base]
+        principal = account[f"{lp}|liquidity_value"]
+        uncollected = account[f"{lp}|net_value"] - principal
+        fee = uncollected.diff() - account[f"{lp}|base_uncollected"].shift() * pb.diff()
+        lvr = account[f"{lp}|base_in_position"].shift() * pb.diff() - principal.diff()
+        quiet = pd.concat([account[f"tokens|{k}"].diff() == 0 for k in tokens], axis=1).all(axis=1)
+        out["fee"], out["lvr"] = fee.where(quiet, 0.0), lvr.where(quiet, 0.0)
+        out["exec"] = out["hedged"].where(~quiet, 0.0)
+        out["quiet"] = quiet
+    return out.iloc[1:]
+
+
+def lvr_daily(split: pd.DataFrame) -> pd.DataFrame:
+    """The split summed per UTC day, each part as a share of the day's first net value (a daily return)."""
+    parts = [c for c in ("dnv", "beta", "hedged", "fee", "lvr", "exec") if c in split]
+    g = split.groupby(split.index.floor("D"))
+    return g[parts].sum().div(g["nv0"].first(), axis=0)
+
+
+def lvr_report(runs: dict[str, tuple[str, str]]) -> str:
+    """LVR split table per run (label -> (account parquet, base token)): each part as 365 x the mean daily share (adds up
+    like the alpha / beta table), hedged with its Newey-West t, the hedge-interval check (1 min / 1 h / 1 day), the share
+    of quiet minutes and the calendar-year fee and lvr."""
+    rows, years, check = [], [], []
+    for label, (path, base) in runs.items():
+        acc = pd.read_parquet(path)
+        split = lvr_split(acc, base)
+        d = lvr_daily(split)
+        b, t, _ = nw_ols(d["hedged"].to_numpy(), np.empty((len(d), 0)))
+        ratio = split["fee"].sum() / split["lvr"].sum()
+        rows.append(f"| {label} | {len(d)} | {_pct(365 * d['dnv'].mean())} | {_pct(365 * d['beta'].mean())} | "
+                    f"{_pct(365 * d['hedged'].mean())} ({t[0]:.2f}) | {_pct(365 * d['fee'].mean())} | "
+                    f"{_pct(365 * d['lvr'].mean())} | {ratio:.2f} | {_pct(365 * d['exec'].mean())} | "
+                    f"{split['quiet'].mean():.4f} |")
+        hedged = {"1 min": split["hedged"].sum()}
+        for every, name in (("1h", "1 h"), ("1D", "1 day")):
+            hedged[name] = lvr_split(acc, base, every)["hedged"].sum()
+        nv0 = acc["net_value"].iloc[0]
+        check.append(f"| {label} | " + " | ".join(f"{v / nv0:+.4f}" for v in hedged.values()) +
+                     f" | {split['dnv'].sum() / nv0:+.4f} |")
+        for year, g in d.groupby(d.index.year):
+            years.append(f"| {label} | {year} | {len(g)} | {_pct(365 * g['fee'].mean())} | {_pct(365 * g['lvr'].mean())} | "
+                         f"{_pct(365 * g['exec'].mean())} | {_pct(365 * g['hedged'].mean())} |")
+    return "\n".join([
+        "| run | days | net value change | beta (rebalancing) | hedged = fee - lvr + exec (NW t) | fee | lvr | fee / lvr | "
+        "exec | quiet minutes |", "|---|---|---|---|---|---|---|---|---|---|", *rows, "",
+        "Hedge interval check, the whole run's sum in units of the start value:", "",
+        "| run | hedged 1 min | hedged 1 h | hedged 1 day | net value change |", "|---|---|---|---|---|", *check, "",
+        "| run | year | days | fee | lvr | exec | hedged |", "|---|---|---|---|---|---|---|", *years])
 
 
 def alphabeta_report(unit: str, mode: str, folders: dict[str, str]) -> str:
@@ -1033,8 +1116,16 @@ def _self_check(tmp: Path):
 
 
 def main(argv: list[str]) -> None:
-    if not argv or argv[0] not in ("l0", "yearly", "regime", "robust", "psr", "l2", "l2shuffle", "alphabeta"):
+    if not argv or argv[0] not in ("l0", "yearly", "regime", "robust", "psr", "l2", "l2shuffle", "alphabeta", "lvr"):
         sys.exit(__doc__)
+    if argv[0] == "lvr":   # <label>=<account parquet>:<base token> ...
+        runs = {}
+        for a in argv[1:]:
+            label, rest = a.split("=", 1)
+            path, base = rest.rsplit(":", 1)
+            runs[label] = (path, base)
+        print(lvr_report(runs))
+        return
     if argv[0] == "alphabeta":   # <usd|eth> <mode> real=<folder> <baseline name>=<folder> ...
         folders = dict(a.split("=", 1) for a in argv[3:])
         if "real" not in folders:
