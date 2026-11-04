@@ -3,12 +3,14 @@ QUAN-1216 L6 robustness runs (experiments/VALIDATION-2026-10-29-v3_2-v2_2.md, L6
 switches on (flat 0.1% swap, fee in-range liquidity, v3.2 gas cap) and the variant from L6_EMA_SHIFT / L6_WIDTH in the
 environment. ../real-data must hold the pool's minute files as for L0 (0x4585 from holdout-data; 0x7aea from base-data,
 files renamed base-0x7aea...). Results go to result/<run folder> (tagged -l6ema+10 / -l6w1.1).
-The alpha / beta baselines run the same way with BENCH_F=1|mean (and BENCH_WEAK=1 on v2.2) in the environment (tagged -bf1 /
+The alpha / beta baselines run the same way with BENCH_F=1|mean|<x> (and BENCH_WEAK=1 on v2.2) in the environment (tagged -bf1 /
 -bfmean / -bweak). ACCOUNT_LOG=1 adds the minute account status for the LVR split (tagged -acct).
+RUN_END=YYYY-MM-DD moves the last day (default 2026-08-31, L0's); the forward window runs to 2026-11-03.
 
 Usage, from samples/strategy-example:
     L6_WIDTH=1.1 python l6_runs.py v32|v22mainnet|v22base
     BENCH_F=1 BENCH_WEAK=1 python l6_runs.py v22mainnet
+    RUN_END=2026-11-03 python l6_runs.py v32
 """
 import os
 import sys
@@ -17,17 +19,18 @@ from datetime import date, datetime
 os.environ.setdefault("FLAT_SWAP_COST", "1")
 os.environ.setdefault("FEE_IN_RANGE_LIQUIDITY", "1")
 os.environ.setdefault("CLAIM_GAS_CAP", "1")
+END = date.fromisoformat(os.environ.get("RUN_END", "2026-08-31"))
 
 if __name__ == "__main__":   # the scripts start worker processes (spawn re-imports this file)
     which = sys.argv[1] if len(sys.argv) > 1 else ""
     if which == "v32":
         import gamma_maker_defense_ethusdc_v3_2 as m
-        m.process_for_date(datetime(2021, 5, 6), date(2021, 5, 6), date(2026, 8, 31), "", [])
+        m.process_for_date(datetime(2021, 5, 6), date(2021, 5, 6), END, "", [])
     elif which == "v22mainnet":
         import gamma_ig_gap_bands_defense_btceth_v2_2 as m
-        m.process_for_date(datetime(2021, 11, 2), date(2021, 11, 2), date(2026, 8, 31), "mainnet")
+        m.process_for_date(datetime(2021, 11, 2), date(2021, 11, 2), END, "mainnet")
     elif which == "v22base":
         import gamma_ig_gap_bands_defense_btceth_v2_2 as m
-        m.process_for_date(datetime(2024, 9, 14), date(2024, 9, 14), date(2026, 8, 31), "base")
+        m.process_for_date(datetime(2024, 9, 14), date(2024, 9, 14), END, "base")
     else:
         sys.exit(__doc__)
