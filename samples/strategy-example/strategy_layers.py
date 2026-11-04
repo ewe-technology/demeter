@@ -29,8 +29,9 @@ the same, with the change dates redrawn at random and the levels in their order 
 Usage, from samples/strategy-example:
     python strategy_layers.py l0 <label>=<result folder>:<mode> ...      # mode: reinvest | noreinvest
     python strategy_layers.py yearly <label>=<result folder>:<mode> ...  # L1 + L5 tables
-    python strategy_layers.py regime [--parts] <label>=<result folder>:<mode>:<pair> ...   # pair: ethusdt | ethbtc
-    python strategy_layers.py robust <pair> <mode> spec=<folder> ema-=<folder> ema+=<folder> w-=<folder> w+=<folder>
+    python strategy_layers.py regime [--parts] [--lag1] <label>=<result folder>:<mode>:<pair> ...   # pair: ethusdt | ethbtc
+    python strategy_layers.py robust [--lag1] <pair> <mode> spec=<folder> ema-=<folder> ema+=<folder> w-=<folder> w+=<folder>
+    python strategy_layers.py review <label>=<result folder>:<mode> ...   # 2026-11-04 review: L3 block sweep, PSR net of a hurdle
     python strategy_layers.py psr <N trials> <label>=<result folder>:<mode>[:reported] ...   # L8 + L4 + L3 tables
     python strategy_layers.py l2 <label>=<result folder>:<mode>:<shift folder>:<signal csv>:<column>[:reported] ...
     python strategy_layers.py l2shuffle <same arguments>     # the same table for the shuffle's draws
@@ -223,14 +224,18 @@ def range_parts(close: pd.Series) -> pd.Series:
     return label
 
 
-def regime_split(nv: pd.Series, labels: pd.Series, price: pd.Series, groups: tuple[str, ...] = REGIMES) -> dict[str, dict]:
+def regime_split(nv: pd.Series, labels: pd.Series, price: pd.Series, groups: tuple[str, ...] = REGIMES,
+                 lag: int = 0) -> dict[str, dict]:
     """Per regime (each label in `groups`), the daily log returns of a daily net value whose return from day D's value to the next one takes
-    the label of day D's close (`labels` and `price` indexed by day D): days, share of the labelled days, episodes (runs
+    the label of day D - lag's close (`labels` and `price` indexed by day D): days, share of the labelled days, episodes (runs
     of consecutive days with that label), chained return, annualised return exp(mean x 365) - 1, annualised Sharpe, max
-    drawdown of the chained days, and the price's chained / annualised change close(D) / close(D - 1) on the same days."""
+    drawdown of the chained days, and the price's chained / annualised change close(D) / close(D - 1) on the same days.
+    lag 0 is the pre-registered split: the label comes from the close at the end of the return it labels, so a day whose
+    own move crosses a threshold is sorted by that move. lag 1 (review 2026-11-04) uses day D - 1's close, known at
+    00:00 of day D, when the return starts."""
     r = np.log(nv.values[1:] / nv.values[:-1])
     day = nv.index[:-1].normalize()
-    lab = labels.reindex(day).to_numpy()
+    lab = labels.shift(lag, freq="D").reindex(day).to_numpy()
     p = np.log(price / price.shift(1)).reindex(day).to_numpy()
     known = pd.notna(lab)
     out = {}
@@ -369,6 +374,48 @@ def l3_bootstrap(nv: pd.Series) -> dict:
     return {"one_minus_p": one_minus_p, "kill_line": kill, **mc, "worst_year": worst_year_return(nv),
             "max_drawdown": float((nv / nv.cummax() - 1).min()),
             "l3_pass": one_minus_p[BOOT_BLOCKS[0]] >= PSR_BAR and mc["loss_probability"] <= LOSS_BAR}
+
+
+# review 2026-11-04 (not pre-registered): the one-year loss probability at longer mean blocks, and PSR net of a hurdle rate
+SWEEP_BLOCKS = (20.0, 90.0, 180.0, 365.0)
+HURDLES = (0.0, 0.02, 0.03, 0.04, 0.05)
+
+
+def l3_block_sweep(nv: pd.Series, blocks: tuple[float, ...] = SWEEP_BLOCKS) -> dict:
+    """strategy_validation's one-year paths (method 5) at each mean block, each with its own stream seeded Settings.seed
+    (so block 90 is close to, not equal to, l3_bootstrap's, which draws after the mean tests); beside them every real
+    rolling 365-day window of the run: how many, the share that lose and their 5th percentile."""
+    r = SV.daily_log_returns(nv)
+    seed = SV.Settings().seed
+    paths = {b: SV.method5_monte_carlo(r, SV.Settings(mc_block=b), np.random.default_rng(seed)) for b in blocks}
+    d = nv.resample("1D").last().dropna()
+    roll = (d / d.shift(365, freq="D").reindex(d.index) - 1).dropna()
+    return {"paths": paths, "real_windows": len(roll), "real_loss_share": float((roll < 0).mean()),
+            "real_p5": float(roll.quantile(0.05))}
+
+
+def psr_hurdle(nv: pd.Series, rate: float) -> float:
+    """PSR(0) of the daily log returns less ln(1 + rate) / 365: the probability that the Sharpe over a yearly hurdle
+    `rate` (a risk-free rate in USD, a staking yield in ETH) is above 0."""
+    return significance(SV.daily_log_returns(nv) - np.log1p(rate) / 365)["psr"]
+
+
+def review_report(runs: dict[str, tuple[str, str]]) -> str:
+    """Markdown for the 2026-11-04 review, one row per labelled run (result folder, mode): l3_block_sweep's loss
+    probability / P5 one-year return per block beside the real windows, and psr_hurdle at each rate in HURDLES."""
+    l3 = ["L3 one-year paths by mean block: loss probability / P5 one-year return", "",
+          "| run | " + " | ".join(f"block {b:g}" for b in SWEEP_BLOCKS) + " | real 365-day windows: n / share losing / P5 |",
+          "|---|" + "---|" * (len(SWEEP_BLOCKS) + 1)]
+    l8 = ["PSR(0) net of a yearly hurdle", "", "| run | " + " | ".join(f"{h:.0%}" for h in HURDLES) + " |",
+          "|---|" + "---|" * len(HURDLES)]
+    for label, (folder, mode) in runs.items():
+        nv = daily_net_value(folder, mode)
+        w = l3_block_sweep(nv)
+        l3.append(f"| {label} | " + " | ".join(f"{w['paths'][b]['loss_probability'] * 100:.1f}% / {_pct(w['paths'][b]['return_p5'])}"
+                                              for b in SWEEP_BLOCKS)
+                  + f" | {w['real_windows']} / {w['real_loss_share'] * 100:.1f}% / {_pct(w['real_p5'])} |")
+        l8.append(f"| {label} | " + " | ".join(f"{psr_hurdle(nv, h):.3f}" for h in HURDLES) + " |")
+    return "\n".join(l3 + [""] + l8)
 
 
 L2_GUARD, L2_MIN_SHIFTS, L2_BAR = 30, 500, 0.05   # pre-registered, VALIDATION-2026-10-29-v3_2-v2_2.md L2
@@ -750,17 +797,17 @@ def _word(p: bool | None) -> str:
     return "not judged" if p is None else ("pass" if p else "fail")
 
 
-def regime_report(runs: dict[str, tuple[str, str, str]], parts: bool = False) -> str:
+def regime_report(runs: dict[str, tuple[str, str, str]], parts: bool = False, lag: int = 0) -> str:
     """Markdown for L6a, one row per labelled run (result folder, mode, Binance pair that labels it): per regime days
     (share) / episodes, annualised return, Sharpe, max DD of the chained days and the pair's annualised change.
-    parts=True: the range days split by range_parts (post-hoc, no L6a verdict)."""
+    parts=True: the range days split by range_parts (post-hoc, no L6a verdict). lag: regime_split's."""
     groups = ("bull", "bear") + RANGE_PARTS if parts else REGIMES
     out = ["Per regime: days (share) / episodes; annualised return; Sharpe; max DD of the chained days; pair annualised",
            "", "| run | pair | " + " | ".join(groups) + (" |" if parts else " | L6a |"),
            "|---|---|" + "---|" * (len(groups) + (0 if parts else 1))]
     for label, (folder, mode, pair) in runs.items():
         close = binance_close(pair)
-        s = regime_split(daily_net_value(folder, mode), (range_parts if parts else regime_labels)(close), close, groups)
+        s = regime_split(daily_net_value(folder, mode), (range_parts if parts else regime_labels)(close), close, groups, lag)
         cell = lambda g: (f"{s[g]['days']} ({s[g]['share'] * 100:.0f}%) / {s[g]['episodes']}; {_pct(s[g]['annual'])}; "
                           f"{s[g]['sharpe']:.2f}; {_pct(s[g]['max_drawdown'])}; {_pct(s[g]['price_annual'])}")
         out.append(f"| {label} | {pair} | " + " | ".join(cell(g) for g in groups)
@@ -771,13 +818,14 @@ def regime_report(runs: dict[str, tuple[str, str, str]], parts: bool = False) ->
 ROBUST = {"ema": ("ema-", "spec", "ema+"), "width": ("w-", "spec", "w+")}
 
 
-def robust_report(pair: str, mode: str, folders: dict[str, str]) -> str:
+def robust_report(pair: str, mode: str, folders: dict[str, str], lag: int = 0) -> str:
     """Markdown for L6b on one pool: per setting (spec, ema-, ema+, w-, w+) the full-run CAGR / max DD / Calmar and the
-    annualised return per regime, then per constant the best setting per regime and whether it is stable."""
+    annualised return per regime, then per constant the best setting per regime and whether it is stable. lag:
+    regime_split's."""
     close = binance_close(pair)
     labels = regime_labels(close)
     nv = {k: daily_net_value(f, mode) for k, f in folders.items()}
-    split = {k: regime_split(v, labels, close) for k, v in nv.items()}
+    split = {k: regime_split(v, labels, close, lag=lag) for k, v in nv.items()}
     out = [f"| setting | CAGR / max DD / Calmar | " + " | ".join(REGIMES) + " |", "|---|---|" + "---|" * len(REGIMES)]
     for k in folders:
         m = l0(nv[k])
@@ -995,6 +1043,9 @@ def _self_check(tmp: Path):
     price = pd.Series([10.0, 20.0, 10.0, 10.0, 20.0], index=pd.date_range("2023-12-31", periods=5))   # closes of D - 1..D
     s = regime_split(nv, labels, price)
     assert (s["bull"]["days"], s["bull"]["episodes"], s["bear"]["days"], s["bear"]["episodes"]) == (2, 2, 2, 1), s
+    # lag 1: each return takes the label of the close before it starts; the first has none, -10% bull, 0 and +10% bear
+    s1 = regime_split(nv, labels, price, lag=1)
+    assert (s1["bull"]["days"], s1["bear"]["days"]) == (1, 2) and abs(s1["bull"]["chained"] + 0.1) < 1e-12, s1
     assert abs(s["bull"]["chained"] - 0.21) < 1e-12 and s["bull"]["max_drawdown"] == 0, s["bull"]
     assert abs(s["bear"]["chained"] + 0.10) < 1e-12 and abs(s["bear"]["max_drawdown"] + 0.10) < 1e-12, s["bear"]
     assert abs(s["bull"]["price_chained"] - 3.0) < 1e-12 and abs(s["bear"]["price_chained"] + 0.5) < 1e-12, s
@@ -1174,8 +1225,12 @@ def _self_check(tmp: Path):
 
 
 def main(argv: list[str]) -> None:
-    if not argv or argv[0] not in ("l0", "yearly", "regime", "robust", "psr", "l2", "l2shuffle", "alphabeta", "lvr", "bridge"):
+    if not argv or argv[0] not in ("l0", "yearly", "regime", "robust", "psr", "l2", "l2shuffle", "alphabeta", "lvr", "bridge",
+                                   "review"):
         sys.exit(__doc__)
+    lag = 0
+    if argv[0] in ("regime", "robust") and "--lag1" in argv:   # label each return by the close before it starts
+        argv, lag = [a for a in argv if a != "--lag1"], 1
     if argv[0] in ("lvr", "bridge"):   # [--trend ema100|ret365] <label>=<account parquet>:<base token> ...
         trend = argv[2] if argv[1:2] == ["--trend"] else None
         runs = {}
@@ -1211,7 +1266,7 @@ def main(argv: list[str]) -> None:
         print(psr_report(runs, int(argv[1])))
         return
     if argv[0] == "robust":
-        print(robust_report(argv[1], argv[2], dict(a.split("=", 1) for a in argv[3:])))
+        print(robust_report(argv[1], argv[2], dict(a.split("=", 1) for a in argv[3:]), lag))
         return
     if argv[0] == "regime":
         parts = argv[1:2] == ["--parts"]
@@ -1220,14 +1275,14 @@ def main(argv: list[str]) -> None:
             label, spec = a.split("=", 1)
             folder, mode, pair = spec.rsplit(":", 2)
             runs[label] = (folder, mode, pair)
-        print(regime_report(runs, parts))
+        print(regime_report(runs, parts, lag))
         return
     runs = {}
     for a in argv[1:]:
         label, spec = a.split("=", 1)
         folder, mode = spec.rsplit(":", 1)
         runs[label] = (folder, mode)
-    print(l0_table(runs) if argv[0] == "l0" else yearly_report(runs))
+    print(l0_table(runs) if argv[0] == "l0" else review_report(runs) if argv[0] == "review" else yearly_report(runs))
 
 
 if __name__ == "__main__":

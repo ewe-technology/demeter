@@ -49,9 +49,11 @@ def stats(r: pd.Series) -> dict:
 
 
 def rolling_percentile(r_bt: pd.Series, n: int, x: float) -> float:
-    """x as a percentile of the compounded returns of every n-day rolling window of the backtest series."""
+    """x as a mid-rank percentile of the compounded returns of every n-day rolling window of the backtest series: the
+    share below x plus half the share equal to it (review 2026-11-04; v3.2 has many windows at exactly 0, all USDC)."""
     roll = np.exp(np.log1p(r_bt).rolling(n).sum().dropna()) - 1
-    return float((roll < x).mean())
+    tie = np.isclose(roll, x, rtol=0.0, atol=1e-12)
+    return float(((roll < x) & ~tie).mean() + 0.5 * tie.mean())
 
 
 def mean_f(root: Path, key: str, folder: str, a: pd.Timestamp, b: pd.Timestamp) -> float:
@@ -85,7 +87,9 @@ def report(root: Path, key: str) -> list[str]:
         common = old.index.intersection(new.index)
         common = common[(common.hour == 0) & (common.minute == 0)]
         same = bool((old.loc[common] == new.loc[common]).all())
-        a = old.index[-1].ceil("D")                 # first 00:00 after L0's last value: the forward window starts there
+        # the forward window starts at the first 00:00 after L0's last day: v3.2's L0 ends 08-31 23:59, v2.2's daily file at
+        # 08-31 00:00 though its run covered that day (review 2026-11-04: the return from 08-31 belonged to L0's run)
+        a = old.index[-1].floor("D") + pd.Timedelta(days=1)
         r = returns(new)
         rf = returns(SL.daily_net_value(root / "quan1216_oos" / fixed, mode))
         if not rf.index.equals(r.index):
