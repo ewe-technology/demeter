@@ -82,10 +82,12 @@ L2_SHUFFLE = int(os.environ.get("L2_SHUFFLE", "0"))   # draw number: the same tw
 # QUAN-1216 alpha / beta baselines (VALIDATION-2026-10-29-v3_2-v2_2.md, alpha / beta): BENCH_F=1 holds F at 1 on every judged
 # day, BENCH_F=mean at its own mean over those days; BENCH_WEAK=1 holds the strong flag False (weak side: +-20% LP, BTC as
 # the rest). Passive LP = BENCH_F=1 BENCH_WEAK=1 ("-bf1-bweak"). Prices and range breaks stay real. Off = the spec.
+# BENCH_F=<x> in (0, 1] holds F at a value fixed before the run (fixed F = 0.5, "-bf0.5": QuantStats benchmarks section).
 BENCH_F = os.environ.get("BENCH_F", "")
 BENCH_WEAK = os.environ.get("BENCH_WEAK", "0") == "1"
-if BENCH_F not in ("", "1", "mean"):
-    raise ValueError(f"BENCH_F={BENCH_F!r}: want 1 or mean")
+BENCH_F_VALUE = BENCH_F if BENCH_F in ("", "mean") else float(BENCH_F)
+if BENCH_F_VALUE not in ("", "mean") and not 0 < BENCH_F_VALUE <= 1:
+    raise ValueError(f"BENCH_F={BENCH_F!r}: want mean or a number in (0, 1]")
 L6_TAG = (f"{f'-l6ema{L6_EMA_SHIFT:+d}' if L6_EMA_SHIFT else ''}{f'-l6w{L6_WIDTH}' if L6_WIDTH != 1 else ''}"
           f"{f'-l2s{L2_SHIFT}' if L2_SHIFT else ''}{f'-l2d{L2_SHUFFLE}' if L2_SHUFFLE else ''}"
           f"{f'-bf{BENCH_F}' if BENCH_F else ''}{'-bweak' if BENCH_WEAK else ''}")
@@ -725,7 +727,7 @@ def process_for_date(csd: datetime, dsd: date, ded: date, pool_name: str = "base
             daily = shuffle_decisions(daily, dsd, ded, ("F", "strong"), L2_SHUFFLE)
         if BENCH_F or BENCH_WEAK:
             from strategy_layers import fix_decisions
-            fixed = {"F": BENCH_F if BENCH_F == "mean" else 1.0} if BENCH_F else {}
+            fixed = {"F": BENCH_F_VALUE} if BENCH_F else {}
             daily = fix_decisions(daily, dsd, ded, {**fixed, **({"strong": False} if BENCH_WEAK else {})})
         window = daily.loc[pd.Timestamp(dsd):]
         print(f"signal F over the window: mean {window['F'].mean():.3f}, days at 0: {(window['F'] == 0).sum()}, "
