@@ -113,12 +113,44 @@ DROP_ROWS = {
     "Treynor Ratio": "cumulative return / beta, not annualised",
 }
 # Charts nobody verified, or that mislead (heatmap prints 0.00 for months outside the data)
-DROP_CHARTS = ["vol_returns", "monthly_dist", "daily_returns", "rolling_beta", "rolling_vol", "rolling_sharpe",
-               "rolling_sortino", "monthly_heatmap", "returns_dist"]
+DROP_CHARTS = ["vol_returns", "monthly_dist", "daily_returns", "rolling_beta", "rolling_vol", "rolling_sortino",
+               "monthly_heatmap", "returns_dist"]
+# Rolling Sharpe, back on 2026-11-04 (Dino: "加回去"): quantstats' rolling_sharpe checked equal (0 difference) to
+# mean / std x sqrt(365) over a 183-day window on all four exports; redrawn here because the report's own chart leaves out
+# the benchmark (hold) line
+RS_WINDOW = 183
 
 
 def _pct(x: float) -> str:
     return f"{100 * x:+.1f}%"
+
+
+def rolling_sharpe_svg(df: pd.DataFrame, bname: str) -> str:
+    """The rolling Sharpe chart (RS_WINDOW days, annualised x sqrt(365), rf 0) of the strategy, hold and the two return
+    benchmarks, as an inline SVG; the median of each line is in its legend label."""
+    import io
+    import matplotlib.pyplot as plt
+    import quantstats as qs
+    series = {"Strategy": df["strategy"], bname: df["bench"], "50/50 HODL": df["hodl"], "Fixed F 0.5": df["fixf"]}
+    style = {"Strategy": ("#348dc1", 1.6), bname: ("#fedd78", 1.2), "50/50 HODL": ("#ff9b74", 1.0), "Fixed F 0.5": ("#3bb273", 1.0)}
+    fig, ax = plt.subplots(figsize=(8, 3.6))
+    for name, r in series.items():
+        rs = qs.stats.rolling_sharpe(r, 0.0, RS_WINDOW, True, 365).dropna()
+        color, lw = style[name]
+        ax.plot(rs.index, rs.values, color=color, lw=lw, label=f"{name} (median {rs.median():.2f})")
+    ax.axhline(0, color="#000", lw=0.8)
+    ax.set_title(f"Rolling Sharpe ({RS_WINDOW} days, annualised x sqrt(365), rf 0)", fontsize=12, fontweight="bold",
+                 color="#000", loc="left")
+    ax.legend(fontsize=8, loc="upper center", bbox_to_anchor=(0.5, -0.12), frameon=False, ncol=2)
+    ax.grid(alpha=0.3)
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
+    fig.tight_layout()
+    buf = io.StringIO()
+    fig.savefig(buf, format="svg")
+    plt.close(fig)
+    svg = buf.getvalue()
+    return svg[svg.find("<svg"):]
 
 
 def alpha_table(soup, a: dict, bname: str):
@@ -153,7 +185,7 @@ def alpha_table(soup, a: dict, bname: str):
     return div
 
 
-def clean(path: Path, alpha: dict, bname: str, pair: str) -> None:
+def clean(path: Path, alpha: dict, bname: str, pair: str, rs_svg: str) -> None:
     from bs4 import BeautifulSoup
     soup = BeautifulSoup(path.read_text(encoding="utf-8"), "html.parser")
     right = soup.find("div", id="right")
@@ -190,6 +222,9 @@ def clean(path: Path, alpha: dict, bname: str, pair: str) -> None:
         div = soup.find("div", id=cid)
         if div:
             div.decompose()
+    rs = soup.find("div", id="rolling_sharpe")
+    rs.clear()
+    rs.append(BeautifulSoup(rs_svg, "html.parser"))
     right.insert(right.contents.index(metrics) + 1 if metrics in right.contents else 0, alpha_table(soup, alpha, bname))
     note = soup.new_tag("p")
     note["style"] = "font-size:12px;color:#666;margin:6px 0 0"
@@ -198,7 +233,7 @@ def clean(path: Path, alpha: dict, bname: str, pair: str) -> None:
                    "at 0.5 on every day (v3.2 divergence off, v2.2 weak side), prices, fees, range breaks and costs real. "
                    "Cleaned 2026-11-04: rows, columns and charts that a four-agent check found wrong or misleading for these "
                    "runs are removed (" + "; ".join(sorted(DROP_ROWS)) + "; EOY Multiplier; charts: "
-                   + ", ".join(DROP_CHARTS) + "). Returns are labelled by the 00:00 UTC at which each day ends; v3.2 adds the "
+                   + ", ".join(DROP_CHARTS) + f"). Rolling Sharpe ({RS_WINDOW} days) redrawn with the hold line. Returns are labelled by the 00:00 UTC at which each day ends; v3.2 adds the "
                    "run's 2026-08-31 23:59 end value as its last return. Gas not charged.")
     soup.find("h4").insert_after(note)
     if soup.title:
@@ -221,7 +256,7 @@ def html(src: Path, dst: Path) -> None:
             qs.reports.html(returns, benchmark=df["bench"].rename(bname), rf=0.0, periods_per_year=365, compounded=True,
                             match_dates=False, title=f"{title}, {mode}", benchmark_title=bname, output=str(out),
                             download_filename=out.name)
-            clean(out, alpha, bname, pair)
+            clean(out, alpha, bname, pair, rolling_sharpe_svg(df, bname))
             print(key, mode, out.name)
 
 
