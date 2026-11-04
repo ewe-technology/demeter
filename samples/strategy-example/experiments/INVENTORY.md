@@ -15,9 +15,9 @@ All of these are **in-sample** for v6 research now: a new pre-registration needs
 
 | Pool | Chain | Pair, fee | Data from | Folder | Used as |
 |---|---|---|---|---|---|
-| `0x88e6a0c2...` | Ethereum | WETH/USDC 0.05% | 2021-05-06, ends **2026-09-30** (09-18..30 via `fetch_uni_minute.py`, 2026-10-21) | `real-data` | v6 dev pool |
+| `0x88e6a0c2...` | Ethereum | WETH/USDC 0.05% | 2021-05-06, ends **2026-11-03** (09-18..30 via `fetch_uni_minute.py`, 2026-10-21; 10-01..11-03 the same way, 2026-11-04, the refetched 09-29 / 09-30 equal byte for byte) | `real-data` | v6 dev pool |
 | `0x99ac8ca7...` | Ethereum | WBTC/USDC 0.3% | 2021-11-02 | `holdout-data` | dev (WBTC) |
-| `0x4585fe77...` | Ethereum | WBTC/WETH 0.05% | 2021-11-02, ends **2026-09-30** (09-18..30 via `fetch_uni_minute.py`, 2026-10-21; the refetched 09-16 / 09-17 matched the local files cell for cell) | `holdout-data` | EXP-001/009/010 holdout; MGL v2 / EXP-176..182 |
+| `0x4585fe77...` | Ethereum | WBTC/WETH 0.05% | 2021-11-02, ends **2026-09-30** (09-18..30 via `fetch_uni_minute.py`, 2026-10-21; the refetched 09-16 / 09-17 matched the local files cell for cell; 10-01..11-03 the same way, 2026-11-04, the refetched 09-30 equal byte for byte) | `holdout-data` | EXP-001/009/010 holdout; MGL v2 / EXP-176..182 |
 | `0xd0b53d92...` | Base | WETH/USDC 0.05% | 2023-12-01 | `base-data` | EXP-004 holdout, later reruns |
 | `0xfbb6eed8...` | Base | USDC/cbBTC 0.05% | 2024-10-01 | `base-data` | EXP-011 |
 | `0x6c561b44...` | Base | WETH/USDC 0.3% | 2024-01-01 | `base-data` | EXP-015 |
@@ -27,7 +27,7 @@ All of these are **in-sample** for v6 research now: a new pre-registration needs
 | `0xc6962004...` | Arbitrum | WETH/USDC 0.05% | 2023-06-09, ends **2025-07-23** | `holdout-data` | EXP-022/023 holdout |
 | `0x8ad599c3...` | Ethereum | USDC/WETH 0.3% | 2021-05-05 (RPC, `fetch_uni_minute.py`, 2026-10-05) | `holdout-data` | EXP-117 LP pool (fee/LVR 1.70 vs `88e6` 0.75) |
 | `0x5ab53ee1...` | Ethereum | AAVE/WETH 0.3% | 2021-06-01, ends **2023-12-31** | `holdout-data` | EXP-022/023 holdout |
-| `0x7aea2e8a...` | Base | WETH/cbBTC 0.05% (token0 WETH) | 2024-09-13, ends **2026-09-30** (S3, 2026-10-06) | `base-data` | BTC/ETH full-history check 2026-10-06 |
+| `0x7aea2e8a...` | Base | WETH/cbBTC 0.05% (token0 WETH) | 2024-09-13, ends **2026-11-03** (S3 to 09-30, 2026-10-06; 10-01..11-03 via `fetch_uni_minute.py` on Base, 2026-11-04: the refetched 09-30 has the S3 file's values, plus 23:58 / 23:59 that the S3 file lacks, ticks as integers) | `base-data` | BTC/ETH full-history check 2026-10-06 |
 | `0x2f5e87c9...` | Arbitrum | WBTC/WETH 0.05% | 2023-01-01, ends **2026-01-13** (S3, 2026-10-06) | `holdout-data` | BTC/ETH full-history check 2026-10-06 |
 | `0xcbcdf962...` | Ethereum | WBTC/WETH **0.3%** | 2021-05-04, ends **2024-10-01** (S3, 2026-10-06; low volume) | `holdout-data` | **too thin for a 2 BTC book**: v6's net value is −29% on day 1 (price-impact ledger > capital), result invalid (2026-10-06) |
 | `0x3416cf6c...` | Ethereum | USDC/USDT 0.01% | 2021-11-15 (S3 to 2025-11-30, RPC 2025-12-01..2026-09-17) | `stable-data` | EXP-052 stable LP (not a v6 pool) |
@@ -37,7 +37,8 @@ All of these are **in-sample** for v6 research now: a new pre-registration needs
 
 | File | Content | Range |
 |---|---|---|
-| `gas_ethereum_hourly.csv`, `data/gas_price.csv` | Ethereum gas price (gas is reported, not charged) | see file |
+| `gas_ethereum_hourly.csv`, `data/gas_price.csv` | Ethereum gas price (gas is reported, not charged); `gas_ethereum_hourly.csv` extended with `fetch_gas.py` 2026-11-04 (first new sample equal to the last old one) | `gas_ethereum_hourly.csv` 2021-05-06 to 2026-11-03 |
+| `strategy-example/binance_{btcusdt,ethusdt,ethbtc}_1d.csv` | Binance spot daily closes (v3.2 / v2.2 signal engines; hold benchmarks); extended 2026-11-04, the overlap 09-20..30 equal to the committed rows | 2017-08-17 to 2026-11-03 |
 | `eth_usd_hourly.csv` | ETH/USD hourly, used for gas in USD and EMA warm-up | 2021-05-06 to 2026-09-17 |
 | `stable_lp_daily.csv` | EXP-052: daily net return of $1 LP'd in USDC/USDT ±0.1% (`make_stable_lp_series.py`) | 2021-05-05 to 2026-09-17 |
 | `deribit_dvol_daily.csv` | Deribit DVOL (30-day implied vol index), ETH and BTC, daily close (`fetch_deribit_dvol.py`); EXP-082 | 2021-03-24 to 2026-10-01 |
