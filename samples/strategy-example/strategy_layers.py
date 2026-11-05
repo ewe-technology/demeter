@@ -29,7 +29,7 @@ the same, with the change dates redrawn at random and the levels in their order 
 Usage, from samples/strategy-example:
     python strategy_layers.py l0 <label>=<result folder>:<mode> ...      # mode: reinvest | noreinvest
     python strategy_layers.py yearly <label>=<result folder>:<mode> ...  # L1 + L5 tables
-    python strategy_layers.py regime [--parts] [--lag1] <label>=<result folder>:<mode>:<pair> ...   # pair: ethusdt | ethbtc
+    python strategy_layers.py regime [--parts] [--lag1|--lag2] [--er <days>] <label>=<result folder>:<mode>:<pair> ...   # pair: ethusdt | ethbtc
     python strategy_layers.py robust [--lag1] <pair> <mode> spec=<folder> ema-=<folder> ema+=<folder> w-=<folder> w+=<folder>
     python strategy_layers.py review <label>=<result folder>:<mode> ...   # 2026-11-04 review: L3 block sweep, PSR net of a hurdle
     python strategy_layers.py psr <N trials> <label>=<result folder>:<mode>[:reported] ...   # L8 + L4 + L3 tables
@@ -221,6 +221,24 @@ def range_parts(close: pd.Series) -> pd.Series:
     label[rng & (slope.abs() < SLOPE_MIN)] = RANGE_PARTS[0]
     label[rng & (slope >= SLOPE_MIN)] = RANGE_PARTS[1]
     label[rng & (slope <= -SLOPE_MIN)] = RANGE_PARTS[2]
+    return label
+
+
+# L6 by rolling efficiency ratio (pre-registered 2026-11-05, VALIDATION-2026-10-29-v3_2-v2_2.md): window in daily closes, the
+# expanding-median threshold needs ER_MIN values first
+ER_WINDOW, ER_MIN = 90, 365
+ER_CLASSES = ("trend", "chop")
+
+
+def er_labels(close: pd.Series, window: int = ER_WINDOW) -> pd.Series:
+    """trend / chop per daily close (index = day D): Kaufman's ER(D) = |ln c(D) - ln c(D - window)| / sum of |daily log
+    changes| over the window's `window` days; trend when ER(D) >= the median of all ER values up to and including D, chop
+    below. NaN until ER_MIN ER values exist, and on a window with no move at all."""
+    x = np.log(close)
+    er = (x - x.shift(window)).abs() / x.diff().abs().rolling(window).sum()
+    thr = er.expanding(min_periods=ER_MIN).median()
+    label = pd.Series(np.where(er >= thr, "trend", "chop"), index=close.index, dtype=object)
+    label[thr.isna() | er.isna()] = np.nan
     return label
 
 
@@ -797,17 +815,20 @@ def _word(p: bool | None) -> str:
     return "not judged" if p is None else ("pass" if p else "fail")
 
 
-def regime_report(runs: dict[str, tuple[str, str, str]], parts: bool = False, lag: int = 0) -> str:
+def regime_report(runs: dict[str, tuple[str, str, str]], parts: bool = False, lag: int = 0, er: int | None = None) -> str:
     """Markdown for L6a, one row per labelled run (result folder, mode, Binance pair that labels it): per regime days
     (share) / episodes, annualised return, Sharpe, max DD of the chained days and the pair's annualised change.
-    parts=True: the range days split by range_parts (post-hoc, no L6a verdict). lag: regime_split's."""
-    groups = ("bull", "bear") + RANGE_PARTS if parts else REGIMES
-    out = ["Per regime: days (share) / episodes; annualised return; Sharpe; max DD of the chained days; pair annualised",
-           "", "| run | pair | " + " | ".join(groups) + (" |" if parts else " | L6a |"),
+    parts=True: the range days split by range_parts (post-hoc, no L6a verdict). lag: regime_split's. er: the trend / chop
+    split of er_labels over that many days instead, judged by the same rule (L6c)."""
+    groups = ER_CLASSES if er else ("bull", "bear") + RANGE_PARTS if parts else REGIMES
+    rule = "L6c" if er else "L6a"
+    out = ["Per class: days (share) / episodes; annualised return; Sharpe; max DD of the chained days; pair annualised",
+           "", "| run | pair | " + " | ".join(groups) + (" |" if parts else f" | {rule} |"),
            "|---|---|" + "---|" * (len(groups) + (0 if parts else 1))]
     for label, (folder, mode, pair) in runs.items():
         close = binance_close(pair)
-        s = regime_split(daily_net_value(folder, mode), (range_parts if parts else regime_labels)(close), close, groups, lag)
+        labels = er_labels(close, er) if er else (range_parts if parts else regime_labels)(close)
+        s = regime_split(daily_net_value(folder, mode), labels, close, groups, lag)
         cell = lambda g: (f"{s[g]['days']} ({s[g]['share'] * 100:.0f}%) / {s[g]['episodes']}; {_pct(s[g]['annual'])}; "
                           f"{s[g]['sharpe']:.2f}; {_pct(s[g]['max_drawdown'])}; {_pct(s[g]['price_annual'])}")
         out.append(f"| {label} | {pair} | " + " | ".join(cell(g) for g in groups)
@@ -1046,6 +1067,15 @@ def _self_check(tmp: Path):
     # lag 1: each return takes the label of the close before it starts; the first has none, -10% bull, 0 and +10% bear
     s1 = regime_split(nv, labels, price, lag=1)
     assert (s1["bull"]["days"], s1["bear"]["days"]) == (1, 2) and abs(s1["bull"]["chained"] + 0.1) < 1e-12, s1
+    # ER labels: a straight rise has ER 1 (trend); after it, a zigzag around a flat level has ER near 0 (chop); nothing is
+    # labelled before ER_MIN ER values exist; the threshold uses no later value (labels up to D unchanged by later data)
+    n = ER_MIN + ER_WINDOW + 200
+    path = np.r_[np.linspace(0, 1, ER_MIN + ER_WINDOW + 100), 1 + 0.02 * np.tile([0, 1], 50)]
+    lab = er_labels(pd.Series(100 * np.exp(path), index=pd.date_range("2018-01-01", periods=n)))
+    assert lab.iloc[:ER_MIN + ER_WINDOW - 1].isna().all() and lab.iloc[ER_MIN + ER_WINDOW - 1] == "trend", lab.dropna().head()
+    assert (lab.iloc[-50:] == "chop").all(), lab.iloc[-50:].value_counts()
+    cut = pd.Series(100 * np.exp(path[:-60]), index=pd.date_range("2018-01-01", periods=n - 60))
+    assert er_labels(cut).equals(lab.iloc[:n - 60]), "ER labels must not depend on later closes"
     assert abs(s["bull"]["chained"] - 0.21) < 1e-12 and s["bull"]["max_drawdown"] == 0, s["bull"]
     assert abs(s["bear"]["chained"] + 0.10) < 1e-12 and abs(s["bear"]["max_drawdown"] + 0.10) < 1e-12, s["bear"]
     assert abs(s["bull"]["price_chained"] - 3.0) < 1e-12 and abs(s["bear"]["price_chained"] + 0.5) < 1e-12, s
@@ -1229,8 +1259,13 @@ def main(argv: list[str]) -> None:
                                    "review"):
         sys.exit(__doc__)
     lag = 0
-    if argv[0] in ("regime", "robust") and "--lag1" in argv:   # label each return by the close before it starts
-        argv, lag = [a for a in argv if a != "--lag1"], 1
+    for k in (1, 2):   # --lag1: label each return by the close before it starts; --lag2: one more day (fragility check)
+        if argv[0] in ("regime", "robust") and f"--lag{k}" in argv:
+            argv, lag = [a for a in argv if a != f"--lag{k}"], k
+    er = None
+    if argv[0] == "regime" and "--er" in argv:   # --er <days>: the trend / chop split by rolling efficiency ratio
+        i = argv.index("--er")
+        er, argv = int(argv[i + 1]), argv[:i] + argv[i + 2:]
     if argv[0] in ("lvr", "bridge"):   # [--trend ema100|ret365] <label>=<account parquet>:<base token> ...
         trend = argv[2] if argv[1:2] == ["--trend"] else None
         runs = {}
@@ -1275,7 +1310,7 @@ def main(argv: list[str]) -> None:
             label, spec = a.split("=", 1)
             folder, mode, pair = spec.rsplit(":", 2)
             runs[label] = (folder, mode, pair)
-        print(regime_report(runs, parts, lag))
+        print(regime_report(runs, parts, lag, er))
         return
     runs = {}
     for a in argv[1:]:
