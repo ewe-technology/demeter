@@ -97,6 +97,37 @@ def spot_value(root: Path, key: str, mode: str) -> pd.Series:
     return spot_path(target, prices, trade)
 
 
+# Price and F context chart (Dino, 2026-11-05): the pair the strategy trades and the F it held, beside its net value
+CONTEXT_PAIR = {"v32": ("ethusdt", "ETH/USD"), "v22": ("ethbtc", "ETH/BTC")}
+
+
+def context_frame(root: Path, key: str, mode: str, r: pd.Series) -> pd.DataFrame:
+    """Per return day of `r` (labelled by its end) plus its start: the traded pair's close at the label (CONTEXT_PAIR, a 23:59
+    end takes that day's close) and the F in force during the return, i.e. decided on the close before the return's start
+    (v3.2 F', v2.2 F and its strong side). The start row has no F."""
+    import strategy_layers as SL
+    held = SL.held_price(CONTEXT_PAIR[key][0])
+    stamps = pd.DatetimeIndex([r.index[0] - pd.Timedelta(days=1)]).append(r.index)
+    at = [t.normalize() + pd.Timedelta(days=1) if (t.hour or t.minute) else t for t in stamps]
+    starts = pd.DatetimeIndex([pd.NaT]).append(stamps[:-1])
+    decided = [s.normalize() - pd.Timedelta(days=1) if pd.notna(s) else pd.NaT for s in starts]
+    if key == "v32":
+        sig = pd.read_csv(root / SPOT_SIGNAL[key], parse_dates=["date"]).set_index("date")
+        f, strong = sig["Fp"], None
+    else:
+        d = pd.read_csv(root / L0[key] / f"daily_1ETH_{mode}.csv", parse_dates=["date"]).set_index("date")
+        f, strong = d["F"], d["strong"]
+    before = pd.Series([pd.notna(x) and x < f.index[0] for x in decided], index=stamps)   # still in cash, nothing decided
+    out = pd.DataFrame({"price": held.reindex(at).to_numpy(), "F": f.reindex(decided).to_numpy()}, index=stamps)
+    out.loc[before, "F"] = 0.0
+    if strong is not None:
+        out["strong"] = strong.reindex(decided).to_numpy()
+        out.loc[before, "strong"] = False
+    if out["price"].isna().any() or out["F"].iloc[1:].isna().any():
+        raise ValueError(f"{key} {mode}: missing price or F in the context frame")
+    return out
+
+
 def export(root: Path, out: Path) -> None:
     import strategy_layers as SL
     out.mkdir(parents=True, exist_ok=True)
@@ -121,6 +152,7 @@ def export(root: Path, out: Path) -> None:
             if df.isna().any().any():
                 raise ValueError(f"{key} {mode}: missing returns\n{df[df.isna().any(axis=1)]}")
             df.to_csv(out / f"{key}_{mode}.csv")
+            context_frame(root, key, mode, r).to_csv(out / f"{key}_{mode}_context.csv")
             # alpha as the alpha / beta section: 00:00-to-00:00 returns (daily_simple_returns), hold from held_price
             rs = SL.daily_simple_returns(nv)
             hold = p.pct_change()
@@ -245,7 +277,51 @@ def alpha_table(soup, a: dict, bname: str):
     return div
 
 
-def clean(path: Path, alpha: dict, bname: str, pair: str, rs_svg: str) -> None:
+def context_svg(df: pd.DataFrame, ctx: pd.DataFrame, key: str, unit: str) -> str:
+    """Two panels: the strategy's net value and the traded pair (both 1 at the start, log scale), then the F in force each day
+    (v2.2: strong-side days shaded), as an inline SVG."""
+    import io
+    import matplotlib.pyplot as plt
+    pair = CONTEXT_PAIR[key][1]
+    nv = pd.concat([pd.Series({ctx.index[0]: 1.0}), (1 + df["strategy"]).cumprod()])
+    px = ctx["price"] / ctx["price"].iloc[0]
+    fig, (a1, a2) = plt.subplots(2, 1, figsize=(8, 4.6), sharex=True, gridspec_kw={"height_ratios": [3, 1.3]})
+    a1.plot(nv.index, nv.values, color="#348dc1", lw=1.6, label=f"Strategy ({unit}) x{nv.iloc[-1]:.2f}")
+    a1.plot(px.index, px.values, color="#fedd78", lw=1.2, label=f"{pair} x{px.iloc[-1]:.2f}")
+    from matplotlib.patches import Patch
+    from matplotlib.ticker import FixedLocator, FuncFormatter, NullFormatter
+    a1.set_yscale("log")
+    lo, hi = min(nv.min(), px.min()), max(nv.max(), px.max())
+    a1.yaxis.set_major_locator(FixedLocator([t for t in (0.2, 0.3, 0.5, 0.7, 1, 1.5, 2, 3, 5, 7, 10) if lo / 1.2 <= t <= hi * 1.2]))
+    a1.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
+    a1.yaxis.set_minor_formatter(NullFormatter())
+    a1.axhline(1, color="#000", lw=0.6)
+    a1.set_title(f"Strategy against {pair}, and the F it held", fontsize=12, fontweight="bold", color="#000", loc="left")
+    handles, _ = a1.get_legend_handles_labels()
+    f = ctx["F"].iloc[1:]
+    a2.fill_between(f.index, 0, f.values, step="pre", color="#348dc1", alpha=0.35, lw=0)
+    a2.step(f.index, f.values, where="pre", color="#348dc1", lw=0.8)
+    if "strong" in ctx:
+        st = ctx["strong"].iloc[1:].astype(str) == "True"
+        a2.fill_between(st.index, 0, 1, where=st.values, step="pre", color="#ff9b74", alpha=0.3, lw=0,
+                        transform=a2.get_xaxis_transform())
+        handles.append(Patch(color="#ff9b74", alpha=0.3, label="strong side (F panel)"))
+    a1.legend(handles=handles, fontsize=8, loc="upper left", frameon=False)
+    a2.set_ylim(0, 1.05)
+    a2.set_ylabel("F", fontsize=9)
+    for ax in (a1, a2):
+        ax.grid(alpha=0.3)
+        for side in ("top", "right"):
+            ax.spines[side].set_visible(False)
+    fig.tight_layout()
+    buf = io.StringIO()
+    fig.savefig(buf, format="svg")
+    plt.close(fig)
+    svg = buf.getvalue()
+    return svg[svg.find("<svg"):]
+
+
+def clean(path: Path, alpha: dict, bname: str, pair: str, rs_svg: str, ctx_svg: str) -> None:
     from bs4 import BeautifulSoup
     soup = BeautifulSoup(path.read_text(encoding="utf-8"), "html.parser")
     right = soup.find("div", id="right")
@@ -285,6 +361,11 @@ def clean(path: Path, alpha: dict, bname: str, pair: str, rs_svg: str) -> None:
     rs = soup.find("div", id="rolling_sharpe")
     rs.clear()
     rs.append(BeautifulSoup(rs_svg, "html.parser"))
+    left = soup.find("div", id="left")
+    ctx = soup.new_tag("div")
+    ctx["id"] = "price_context"
+    ctx.append(BeautifulSoup(ctx_svg, "html.parser"))
+    left.insert(0, ctx)
     right.insert(right.contents.index(metrics) + 1 if metrics in right.contents else 0, alpha_table(soup, alpha, bname))
     note = soup.new_tag("p")
     note["style"] = "font-size:12px;color:#666;margin:6px 0 0"
@@ -296,7 +377,8 @@ def clean(path: Path, alpha: dict, bname: str, pair: str, rs_svg: str) -> None:
                    "as 50/50 ETH / BTC). "
                    "Cleaned 2026-11-04: rows, columns and charts that a four-agent check found wrong or misleading for these "
                    "runs are removed (" + "; ".join(sorted(DROP_ROWS)) + "; EOY Multiplier; charts: "
-                   + ", ".join(DROP_CHARTS) + f"). Rolling Sharpe ({RS_WINDOW} days) redrawn with the hold line. Returns are labelled by the 00:00 UTC at which each day ends; v3.2 adds the "
+                   + ", ".join(DROP_CHARTS) + f"). Rolling Sharpe ({RS_WINDOW} days) redrawn with the hold line. The first chart (added 2026-11-05) shows the "
+                   "strategy against the pair it trades and the F in force each day (decided on the close before). Returns are labelled by the 00:00 UTC at which each day ends; v3.2 adds the "
                    "run's 2026-08-31 23:59 end value as its last return. Gas not charged.")
     soup.find("h4").insert_after(note)
     if soup.title:
@@ -319,7 +401,9 @@ def html(src: Path, dst: Path) -> None:
             qs.reports.html(returns, benchmark=df["bench"].rename(bname), rf=0.0, periods_per_year=365, compounded=True,
                             match_dates=False, title=f"{title}, {mode}", benchmark_title=bname, output=str(out),
                             download_filename=out.name)
-            clean(out, alpha, bname, pair, rolling_sharpe_svg(df, bname))
+            ctx = pd.read_csv(src / f"{key}_{mode}_context.csv", index_col=0, parse_dates=True)
+            unit = "USD" if key == "v32" else "ETH"
+            clean(out, alpha, bname, pair, rolling_sharpe_svg(df, bname), context_svg(df, ctx, key, unit))
             print(key, mode, out.name)
 
 
