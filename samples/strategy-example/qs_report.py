@@ -1,7 +1,7 @@
 """
 QUAN-1216 QuantStats reports of v3.2 / v2.2 against three benchmarks (experiments/VALIDATION-2026-10-29-v3_2-v2_2.md,
-"Benchmarks in the QuantStats reports"): hold (the benchmark column), 50/50 HODL and fixed F = 0.5 (return columns beside the
-strategy). The export and the cleaning are the checked 2026-11-04 reports' own steps; this file adds the two benchmarks and
+"Benchmarks in the QuantStats reports"): hold (the benchmark column), 50/50 HODL, fixed F = 0.5 and, from 2026-11-05, Spot F
+(the strategy's decisions as spot on a CLOB) (return columns beside the strategy). The export and the cleaning are the checked 2026-11-04 reports' own steps; this file adds the two benchmarks and
 an alpha table.
 
 Two steps, two environments (strategy_layers needs the repo's venv, the report needs quantstats 0.0.86):
@@ -14,6 +14,7 @@ import sys
 import warnings
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 L0 = {
@@ -28,7 +29,13 @@ FIXED = {
 }
 PAIR = {"v32": ("ethusdt", False), "v22": ("ethbtc", True)}   # hold price; True: invert (BTC per ETH -> ETH per BTC)
 MODES = ("reinvest", "noreinvest")
-COLS = {"strategy": "Strategy", "hodl": "50/50 HODL", "fixf": "Fixed F 0.5"}
+COLS = {"strategy": "Strategy", "hodl": "50/50 HODL", "fixf": "Fixed F 0.5", "spot": "Spot F (CLOB)"}
+# Spot F (Dino, 2026-11-05): the strategy's own F decisions as spot only on a CLOB, Binance daily closes, SPOT_COST of the
+# value traded on every change of the target (Binance spot taker 0.1%), no fees earned, no intraday stops. v3.2: ETH weight
+# F' x the LP's ETH share (0.7 above EMA100, 0.5 below), the rest USDC; v2.2: the book's LP share as 50/50 ETH / BTC, its ETH,
+# BTC and USDC shares as held at each exec, traded on rebuilds and F / side changes
+SPOT_COST = 0.001
+SPOT_SIGNAL = {"v32": "signal_daily_v3.2_bn_20210506_20260831.csv"}
 META = {
     "v32": ("ETH-USDC MGL v3.2, mainnet 0x88e6, USD", "Hold ETH (USD)", "ETH + USDC"),
     "v22": ("ETH-cbBTC MGL v2.2, mainnet 0x4585, in ETH", "Hold BTC (in ETH)", "ETH + BTC"),
@@ -43,6 +50,51 @@ def _aligned(p: pd.Series, r: pd.Series, last: pd.Timestamp) -> pd.Series:
     if last.hour or last.minute:
         b.iloc[-1] = pb.loc[last.normalize() + pd.Timedelta(days=1)]
     return b
+
+
+def spot_path(target: pd.DataFrame, prices: pd.DataFrame, trade: pd.Series) -> pd.Series:
+    """The spot book's value at each 00:00 (start 1): a decision of day D (columns = assets, weights summing to 1) is traded
+    at day D's close and recorded at D + 1 00:00; between trades the weights drift with `prices` (asset values in the unit,
+    by close date; the unit itself at 1). The 00:00 of day D0 (the first decision) holds the start capital in the unit."""
+    w, v, out = None, 1.0, {}
+    days = list(target.index)
+    out[days[0]] = 1.0
+    for i, d in enumerate(days):
+        if w is not None:
+            g = (prices.loc[d] / prices.loc[days[i - 1]]).to_numpy()
+            grow = float((w * g).sum())
+            v *= grow
+            w = w * g / grow
+        t = target.loc[d].to_numpy(dtype=float)
+        if w is None or trade.loc[d]:
+            held = w if w is not None else (target.columns == "unit").astype(float)
+            v *= 1 - SPOT_COST * float(np.abs(t - held).sum()) / 2
+            w = t
+        out[d + pd.Timedelta(days=1)] = v
+    return pd.Series(out)
+
+
+def spot_value(root: Path, key: str, mode: str) -> pd.Series:
+    """spot_path of v3.2 (USD) or v2.2 (ETH, `mode`'s daily file) from its L0 decisions (SPOT_* above)."""
+    import strategy_layers as SL
+    if key == "v32":
+        sig = pd.read_csv(root / SPOT_SIGNAL[key], parse_dates=["date"]).set_index("date")
+        sig = sig.loc[pd.Timestamp("2021-05-05"):pd.Timestamp("2026-08-31")]
+        eth = sig["Fp"] * np.where(sig["close"] > sig["ema"], 0.7, 0.5)
+        target = pd.DataFrame({"eth": eth, "unit": 1 - eth})
+        prices = pd.DataFrame({"eth": SL.binance_close("ethusdt").reindex(sig.index), "unit": 1.0})
+        trade = target.diff().abs().sum(axis=1) > 1e-12
+    else:
+        d = pd.read_csv(root / L0[key] / f"daily_1ETH_{mode}.csv", parse_dates=["date"]).set_index("date")
+        target = pd.DataFrame({"btc": d["cur_btc"] + 0.5 * d["cur_lp"], "usdc": d["cur_usdc"],
+                               "unit": d["cur_eth"] + 0.5 * d["cur_lp"]})
+        target = target.div(target.sum(axis=1), axis=0)
+        prices = pd.DataFrame({"btc": 1 / SL.binance_close("ethbtc"), "usdc": 1 / SL.binance_close("ethusdt"),
+                               "unit": 1.0}).reindex(d.index)
+        trade = d["rebuild"].notna() | (d["F"].diff() != 0) | (d["strong"] != d["strong"].shift())
+    if prices.isna().any().any():
+        raise ValueError(f"{key}: missing closes for the spot book")
+    return spot_path(target, prices, trade)
 
 
 def export(root: Path, out: Path) -> None:
@@ -64,7 +116,8 @@ def export(root: Path, out: Path) -> None:
             rf = nvf.pct_change().dropna()
             if not rf.index.equals(r.index):
                 raise ValueError(f"{key} {mode}: fixed-F days differ from the strategy's")
-            df = pd.DataFrame({"strategy": r, "bench": b, "hodl": hodl, "fixf": rf})
+            spot = spot_value(root, key, mode)
+            df = pd.DataFrame({"strategy": r, "bench": b, "hodl": hodl, "fixf": rf, "spot": _aligned(spot, r, last)})
             if df.isna().any().any():
                 raise ValueError(f"{key} {mode}: missing returns\n{df[df.isna().any(axis=1)]}")
             df.to_csv(out / f"{key}_{mode}.csv")
@@ -72,7 +125,8 @@ def export(root: Path, out: Path) -> None:
             rs = SL.daily_simple_returns(nv)
             hold = p.pct_change()
             rows = {"hold": SL.factor_row(rs, {"hold": hold}),
-                    "fixf": SL.factor_row(rs, {"fixf": SL.daily_simple_returns(nvf)})}
+                    "fixf": SL.factor_row(rs, {"fixf": SL.daily_simple_returns(nvf)}),
+                    "spot": SL.factor_row(rs, {"spot": spot.pct_change().dropna()})}
             keep = ("days", "alpha", "alpha_t", "r2", "betas", "excess", "excess_t", "beta_up", "beta_down")
             json.dump({k: {f: v[f] for f in keep} for k, v in rows.items()}, open(out / f"{key}_{mode}_alpha.json", "w"),
                       indent=1, default=float)
@@ -131,8 +185,10 @@ def rolling_sharpe_svg(df: pd.DataFrame, bname: str) -> str:
     import io
     import matplotlib.pyplot as plt
     import quantstats as qs
-    series = {"Strategy": df["strategy"], bname: df["bench"], "50/50 HODL": df["hodl"], "Fixed F 0.5": df["fixf"]}
-    style = {"Strategy": ("#348dc1", 1.6), bname: ("#fedd78", 1.2), "50/50 HODL": ("#ff9b74", 1.0), "Fixed F 0.5": ("#3bb273", 1.0)}
+    series = {"Strategy": df["strategy"], bname: df["bench"], "50/50 HODL": df["hodl"], "Fixed F 0.5": df["fixf"],
+              "Spot F (CLOB)": df["spot"]}
+    style = {"Strategy": ("#348dc1", 1.6), bname: ("#fedd78", 1.2), "50/50 HODL": ("#ff9b74", 1.0), "Fixed F 0.5": ("#3bb273", 1.0),
+             "Spot F (CLOB)": ("#7b4ea3", 1.2)}
     fig, ax = plt.subplots(figsize=(8, 3.6))
     for name, r in series.items():
         rs = qs.stats.rolling_sharpe(r, 0.0, RS_WINDOW, True, 365).dropna()
@@ -155,13 +211,16 @@ def rolling_sharpe_svg(df: pd.DataFrame, bname: str) -> str:
 
 def alpha_table(soup, a: dict, bname: str):
     """The alpha table (Newey-West t, 10 lags): against hold, and the excess over fixed F = 0.5 (the timing gain)."""
-    h, f = a["hold"], a["fixf"]
+    h, f, sp = a["hold"], a["fixf"], a["spot"]
     rows = [("benchmark", "beta", "alpha / excess a year (t)", "R^2", "beta up / down"),
             (f"{bname}: regression", f"{h['betas']['hold']:.2f}", f"alpha {_pct(h['alpha'])} ({h['alpha_t']:.2f})",
              f"{h['r2']:.2f}", f"{h['beta_up']:.2f} / {h['beta_down']:.2f}"),
             ("Fixed F 0.5: strategy − benchmark", "1 (held)", f"excess {_pct(f['excess'])} ({f['excess_t']:.2f})", "", ""),
             ("Fixed F 0.5: regression", f"{f['betas']['fixf']:.2f}", f"alpha {_pct(f['alpha'])} ({f['alpha_t']:.2f})",
-             f"{f['r2']:.2f}", f"{f['beta_up']:.2f} / {f['beta_down']:.2f}")]
+             f"{f['r2']:.2f}", f"{f['beta_up']:.2f} / {f['beta_down']:.2f}"),
+            ("Spot F (CLOB): strategy − benchmark", "1 (held)", f"excess {_pct(sp['excess'])} ({sp['excess_t']:.2f})", "", ""),
+            ("Spot F (CLOB): regression", f"{sp['betas']['spot']:.2f}", f"alpha {_pct(sp['alpha'])} ({sp['alpha_t']:.2f})",
+             f"{sp['r2']:.2f}", f"{sp['beta_up']:.2f} / {sp['beta_down']:.2f}")]
     div = soup.new_tag("div")
     div["id"] = "alpha_bench"
     title = soup.new_tag("h3")
@@ -180,6 +239,7 @@ def alpha_table(soup, a: dict, bname: str):
     note["style"] = "font-size:12px;color:#666"
     note.string = (f"{a['hold']['days']} days of 00:00-to-00:00 returns; alpha and excess = 365 x the daily mean, t is "
                    "Newey-West (10 lags). Excess over fixed F 0.5 = the timing gain over the same LP held at F = 0.5. "
+                   "Excess over Spot F = what the LP adds to the same decisions held as spot on a CLOB. "
                    "50/50 HODL has no alpha row: its daily return is close to 0.5 x the hold return.")
     div.append(note)
     return div
@@ -230,14 +290,17 @@ def clean(path: Path, alpha: dict, bname: str, pair: str, rs_svg: str) -> None:
     note["style"] = "font-size:12px;color:#666;margin:6px 0 0"
     note.string = (f"Benchmarks (QUAN-1216, pre-registered 2026-11-04): {bname} (benchmark column); 50/50 HODL = half "
                    f"{pair} at the close before the first return, never rebalanced; Fixed F 0.5 = the same script with F held "
-                   "at 0.5 on every day (v3.2 divergence off, v2.2 weak side), prices, fees, range breaks and costs real. "
+                   "at 0.5 on every day (v3.2 divergence off, v2.2 weak side), prices, fees, range breaks and costs real; "
+                   "Spot F (CLOB, added 2026-11-05) = the strategy's own decisions as spot on Binance daily closes, 0.1% on "
+                   "every trade, no LP fees, no intraday stops (v3.2: ETH = F' x 0.7 / 0.5, the rest USDC; v2.2: the LP share "
+                   "as 50/50 ETH / BTC). "
                    "Cleaned 2026-11-04: rows, columns and charts that a four-agent check found wrong or misleading for these "
                    "runs are removed (" + "; ".join(sorted(DROP_ROWS)) + "; EOY Multiplier; charts: "
                    + ", ".join(DROP_CHARTS) + f"). Rolling Sharpe ({RS_WINDOW} days) redrawn with the hold line. Returns are labelled by the 00:00 UTC at which each day ends; v3.2 adds the "
                    "run's 2026-08-31 23:59 end value as its last return. Gas not charged.")
     soup.find("h4").insert_after(note)
     if soup.title:
-        soup.title.string = path.stem.replace("_", " ") + " | QuantStats (cleaned, three benchmarks)"
+        soup.title.string = path.stem.replace("_", " ") + " | QuantStats (cleaned, four benchmarks)"
     path.write_text(str(soup), encoding="utf-8")
 
 
