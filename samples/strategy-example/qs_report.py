@@ -278,42 +278,65 @@ def alpha_table(soup, a: dict, bname: str):
 
 
 def context_svg(df: pd.DataFrame, ctx: pd.DataFrame, key: str, unit: str) -> str:
-    """Two panels: the strategy's net value and the traded pair (both 1 at the start, log scale), then the F in force each day
-    (v2.2: strong-side days shaded), as an inline SVG."""
+    """Two panels: the strategy's net value (left axis, x of its start) and the traded pair's own price (right axis, the pair's
+    units), both on log scales tied so the two lines start at the same point; then the F in force each day (v2.2: strong-side
+    days shaded), as an inline SVG."""
     import io
     import matplotlib.pyplot as plt
+    from matplotlib.patches import Patch
+    from matplotlib.ticker import FixedLocator, FuncFormatter, NullFormatter, NullLocator
     pair = CONTEXT_PAIR[key][1]
     nv = pd.concat([pd.Series({ctx.index[0]: 1.0}), (1 + df["strategy"]).cumprod()])
-    px = ctx["price"] / ctx["price"].iloc[0]
+    price = ctx["price"]
+    p0 = float(price.iloc[0])
     fig, (a1, a2) = plt.subplots(2, 1, figsize=(8, 4.6), sharex=True, gridspec_kw={"height_ratios": [3, 1.3]})
-    a1.plot(nv.index, nv.values, color="#348dc1", lw=1.6, label=f"Strategy ({unit}) x{nv.iloc[-1]:.2f}")
-    a1.plot(px.index, px.values, color="#fedd78", lw=1.2, label=f"{pair} x{px.iloc[-1]:.2f}")
-    from matplotlib.patches import Patch
-    from matplotlib.ticker import FixedLocator, FuncFormatter, NullFormatter
-    a1.set_yscale("log")
-    lo, hi = min(nv.min(), px.min()), max(nv.max(), px.max())
-    a1.yaxis.set_major_locator(FixedLocator([t for t in (0.2, 0.3, 0.5, 0.7, 1, 1.5, 2, 3, 5, 7, 10) if lo / 1.2 <= t <= hi * 1.2]))
-    a1.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
-    a1.yaxis.set_minor_formatter(NullFormatter())
+    a1.plot(nv.index, nv.values, color="#348dc1", lw=1.6, label=f"Strategy ({unit}, left axis) x{nv.iloc[-1]:.2f}")
+    a1r = a1.twinx()
+    fmt = (lambda v: f"\\${v:,.0f}") if key == "v32" else (lambda v: f"{v:.3g}")   # \$: not matplotlib mathtext
+    a1r.plot(price.index, price.values, color="#d9480f", lw=1.3,
+             label=f"{pair} (right axis) {fmt(p0)} → {fmt(float(price.iloc[-1]))}")
+    for ax in (a1, a1r):
+        ax.set_yscale("log")
+        ax.yaxis.set_minor_locator(NullLocator())
+        ax.yaxis.set_minor_formatter(NullFormatter())
+    lo = min(nv.min(), price.min() / p0) / 1.15
+    hi = max(nv.max(), price.max() / p0) * 1.15
+    a1.set_ylim(lo, hi)
+    a1r.set_ylim(lo * p0, hi * p0)          # same log scale: a move of x on one axis is x on the other
+    steps = (1, 1.5, 2, 3, 4, 5, 7)
+
+    def ticks(a, b):
+        out = []
+        for e in range(int(np.floor(np.log10(a))) - 1, int(np.ceil(np.log10(b))) + 1):
+            out += [m * 10.0 ** e for m in steps if a <= m * 10.0 ** e <= b]
+        return out
+    a1.yaxis.set_major_locator(FixedLocator(ticks(lo, hi)))
+    a1.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"x{v:g}"))
+    a1r.yaxis.set_major_locator(FixedLocator(ticks(lo * p0, hi * p0)))
+    a1r.yaxis.set_major_formatter(FuncFormatter(lambda v, _: fmt(v)))
+    a1r.yaxis.set_minor_locator(NullLocator())
+    a1r.tick_params(axis="y", colors="#d9480f", labelsize=8)
+    a1.tick_params(axis="y", colors="#348dc1", labelsize=8)
     a1.axhline(1, color="#000", lw=0.6)
-    a1.set_title(f"Strategy against {pair}, and the F it held", fontsize=12, fontweight="bold", color="#000", loc="left")
-    handles, _ = a1.get_legend_handles_labels()
+    handles = a1.get_legend_handles_labels()[0] + a1r.get_legend_handles_labels()[0]
     f = ctx["F"].iloc[1:]
     a2.fill_between(f.index, 0, f.values, step="pre", color="#348dc1", alpha=0.35, lw=0)
     a2.step(f.index, f.values, where="pre", color="#348dc1", lw=0.8)
     if "strong" in ctx:
         st = ctx["strong"].iloc[1:].astype(str) == "True"
-        a2.fill_between(st.index, 0, 1, where=st.values, step="pre", color="#ff9b74", alpha=0.3, lw=0,
+        a2.fill_between(st.index, 0, 1, where=st.values, step="pre", color="#9775fa", alpha=0.25, lw=0,
                         transform=a2.get_xaxis_transform())
-        handles.append(Patch(color="#ff9b74", alpha=0.3, label="strong side (F panel)"))
-    a1.legend(handles=handles, fontsize=8, loc="upper left", frameon=False)
+        handles.append(Patch(color="#9775fa", alpha=0.25, label="strong side (F panel)"))
+    fig.suptitle(f"Strategy against {pair}, and the F it held", x=0.01, y=0.995, ha="left", fontsize=12, fontweight="bold")
+    fig.legend(handles=handles, loc="upper left", bbox_to_anchor=(0.01, 0.94), ncol=len(handles), fontsize=8, frameon=False)
     a2.set_ylim(0, 1.05)
     a2.set_ylabel("F", fontsize=9)
     for ax in (a1, a2):
         ax.grid(alpha=0.3)
-        for side in ("top", "right"):
-            ax.spines[side].set_visible(False)
-    fig.tight_layout()
+        ax.spines["top"].set_visible(False)
+    a2.spines["right"].set_visible(False)
+    a1r.spines["top"].set_visible(False)
+    fig.tight_layout(rect=(0, 0, 1, 0.92))
     buf = io.StringIO()
     fig.savefig(buf, format="svg")
     plt.close(fig)
